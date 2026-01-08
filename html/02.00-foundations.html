@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Foundations &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Foundations</span>
+            </div>
+            <div>
+                &lsaquo; <a href="01.01-prerequisites.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.01-project-setup.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2</div>
+        <h1>Chapter 2: Foundations</h1>
+
+<p>In this chapter, we'll lay the groundwork for our SnippetBox application. We'll start from scratch and build up the fundamental pieces of a Phoenix web application.</p>
+
+<h2>What We'll Cover</h2>
+
+<p>By the end of this chapter, you'll understand:</p>
+
+<ul>
+<li>How to create a new Phoenix project</li>
+<li>The structure of a Phoenix application</li>
+<li>How routing works in Phoenix</li>
+<li>How to create controllers and actions</li>
+<li>How to render HTML templates</li>
+<li>How to serve static files (CSS, JavaScript, images)</li>
+<li>The request/response lifecycle in Phoenix</li>
+</ul>
+
+<h2>The Phoenix Request Lifecycle</h2>
+
+<p>Before we dive into code, let's understand how Phoenix processes a web request:</p>
+
+<figure class="code"><pre><code>Browser Request
+<p>    ↓</p>
+<p>Endpoint (connection handling, parsing)</p>
+<p>    ↓</p>
+<p>Router (pattern matching on path)</p>
+<p>    ↓</p>
+<p>Pipeline (plugs for auth, logging, etc.)</p>
+<p>    ↓</p>
+<p>Controller Action (business logic)</p>
+<p>    ↓</p>
+<p>View (data preparation)</p>
+<p>    ↓</p>
+<p>Template (HTML rendering)</p>
+<p>    ↓</p>
+<p>Response sent to Browser</p>
+</code></pre></figure>
+
+<p>This is similar to the MVC pattern you might know from Rails, Django, or Laravel, but with some functional programming twists.</p>
+
+<h2>Comparing to Other Frameworks</h2>
+
+<p>If you're coming from another framework, here's how Phoenix concepts map:</p>
+
+<p>| Phoenix | Rails | Django | Laravel | Express |</p>
+<p>|---------|-------|--------|---------|---------|</p>
+<p>| Router | routes.rb | urls.py | routes/web.php | app.get() |</p>
+<p>| Controller | Controller | View | Controller | Route handler |</p>
+<p>| View | View Helper | Template Context | View | - |</p>
+<p>| Template (EEx) | ERB | Django Template | Blade | EJS/Pug |</p>
+<p>| Context | Model | Model/Manager | Model | - |</p>
+<p>| Plug | Middleware | Middleware | Middleware | Middleware |</p>
+
+<h2>Key Differences from OOP Frameworks</h2>
+
+<p>As we build our application, you'll notice some differences from traditional OOP frameworks:</p>
+
+<strong>1. Immutability</strong>
+<figure class="code"><pre><code># Data is never modified in place
+<p>conn = put_status(conn, 200)</p>
+<h1>This creates a NEW conn with updated status</h1>
+<h1>The original conn is unchanged</h1>
+</code></pre></figure>
+
+<strong>2. Pattern Matching</strong>
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  # Pattern match on params in function head</p>
+<p>end</p>
+</code></pre></figure>
+
+<strong>3. Pipe Operator</strong>
+<figure class="code"><pre><code>conn
+<p>|> put_status(200)</p>
+<p>|> put_resp_header("content-type", "application/json")</p>
+<p>|> send_resp("{}")</p>
+</code></pre></figure>
+
+<strong>4. No Classes or Objects</strong>
+<figure class="code"><pre><code># Instead of methods on objects, we use modules with functions
+<h1>SnippetController.show(conn, params)  # Not this</h1>
+<h1>show(conn, params)                     # But this</h1>
+</code></pre></figure>
+
+<p>Don't worry if these concepts feel unfamiliar - we'll introduce them gradually as we build the application.</p>
+
+<h2>What We're Building</h2>
+
+<p>In this chapter, we'll build the foundation of SnippetBox:</p>
+
+<ul>
+<li>A home page listing snippets</li>
+<li>A page to view a single snippet</li>
+<li>A page to create a new snippet</li>
+<li>Proper routing between these pages</li>
+<li>Basic HTML templates with a consistent layout</li>
+<li>Static CSS styling</li>
+</ul>
+
+<p>This won't yet connect to a database - that comes in Chapter 4. For now, we'll use placeholder data to focus on understanding Phoenix fundamentals.</p>
+
+<h2>A Note on Functional Programming</h2>
+
+<p>Throughout this chapter, you'll encounter functional programming concepts that might be new:</p>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Functions as Data Transformers</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In functional programming, we think of functions as data transformers. Instead of:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Imperative (Python)
+<p>user.update_email("new@example.com")  # Mutates user object</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>We do:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Functional (Elixir)
+<p>updated_user = User.update_email(user, "new@example.com")  # Returns new user</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The original <code>user</code> is never modified. This eliminates a whole class of bugs related to shared mutable state.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixirschool.com/en/lessons/basics/functions">Elixir School - Functions</a></li>
+<li><a href="https://joyofelixir.com/8-working-with-lists/">Joy of Elixir - Functions</a></li>
+</ul>
+</blockquote>
+
+<p>Ready to start building? Let's create our Phoenix application in the next section.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="01.01-prerequisites.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.01-project-setup.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

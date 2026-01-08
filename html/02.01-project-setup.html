@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Project Setup &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Project Setup</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.00-foundations.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.02-web-application-basics.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.1</div>
+        <h1>Chapter 2.1: Project Setup and Creating a Phoenix Application</h1>
+
+<p>Before we write any code, we need to create our Phoenix project. In this chapter, we'll use the Phoenix generator to scaffold our application and understand the generated structure.</p>
+
+<h2>Creating the Project</h2>
+
+<p>Open your terminal and navigate to where you want to create your project. I'll create mine in <code>$HOME/code</code>, but you can choose any location.</p>
+
+<figure class="code"><pre><code>$ cd $HOME/code
+<p>$ mix phx.new snippetbox</p>
+</code></pre></figure>
+
+<p>The Phoenix generator will ask you a few questions:</p>
+
+<figure class="code"><pre><code>Fetch and install dependencies? [Yn]
+</code></pre></figure>
+
+<p>Type <code>Y</code> and press Enter. Phoenix will:</p>
+
+<ol>
+<li>Create the project directory structure</li>
+<li>Generate configuration files</li>
+<li>Install dependencies</li>
+<li>Set up a git repository (if git is available)</li>
+</ol>
+
+<p>You should see output like this:</p>
+
+<figure class="code"><pre><code>* creating snippetbox/config/config.exs
+<ul>
+<li>creating snippetbox/config/dev.exs</li>
+<li>creating snippetbox/config/prod.exs</li>
+<li>creating snippetbox/config/runtime.exs</li>
+<li>creating snippetbox/config/test.exs</li>
+<li>creating snippetbox/lib/snippetbox/application.ex</li>
+<li>creating snippetbox/lib/snippetbox.ex</li>
+<li>creating snippetbox/lib/snippetbox_web/controllers/error_json.ex</li>
+<li>creating snippetbox/lib/snippetbox_web/endpoint.ex</li>
+</ul>
+<p>...</p>
+
+<p>We are almost there! The following steps are missing:</p>
+
+<p>    $ cd snippetbox</p>
+
+<p>Then configure your database in config/dev.exs and run:</p>
+
+<p>    $ mix ecto.create</p>
+
+<p>Start your Phoenix app with:</p>
+
+<p>    $ mix phx.server</p>
+
+<p>You can also run your app inside IEx (Interactive Elixir) as:</p>
+
+<p>    $ iex -S mix phx.server</p>
+</code></pre></figure>
+
+<h2>Understanding the Project Structure</h2>
+
+<p>Let's explore what Phoenix generated. Change into the project directory:</p>
+
+<figure class="code"><pre><code>$ cd snippetbox
+<p>$ ls -la</p>
+</code></pre></figure>
+
+<p>You'll see:</p>
+
+<figure class="code"><pre><code>snippetbox/
+<p>├── .formatter.exs        # Code formatting configuration</p>
+<p>├── .gitignore           # Git ignore rules</p>
+<p>├── README.md            # Project readme</p>
+<p>├── mix.exs              # Project definition and dependencies</p>
+<p>├── mix.lock             # Dependency lock file</p>
+<p>├── assets/              # Frontend assets (JS, CSS)</p>
+<p>├── config/              # Application configuration</p>
+<p>├── lib/                 # Application source code</p>
+<p>│   ├── snippetbox/      # Core business logic</p>
+<p>│   └── snippetbox_web/  # Web layer (controllers, views, templates)</p>
+<p>├── priv/                # Static assets and database files</p>
+<p>└── test/                # Test files</p>
+</code></pre></figure>
+
+<p>Let's examine the key directories:</p>
+
+<h3>config/</h3>
+
+<p>Configuration for different environments:</p>
+
+<figure class="code"><pre><code>config/
+<p>├── config.exs        # Shared configuration</p>
+<p>├── dev.exs          # Development environment</p>
+<p>├── prod.exs         # Production environment</p>
+<p>├── runtime.exs      # Runtime configuration</p>
+<p>└── test.exs         # Test environment</p>
+</code></pre></figure>
+
+<h3>lib/</h3>
+
+<p>Your application code lives here, split into two main directories:</p>
+
+<strong>lib/snippetbox/</strong> - Your core application (business logic, contexts)
+<figure class="code"><pre><code>lib/snippetbox/
+<p>├── application.ex   # Application supervisor</p>
+<p>└── repo.ex          # Database repository</p>
+</code></pre></figure>
+
+<strong>lib/snippetbox_web/</strong> - Your web interface layer
+<figure class="code"><pre><code>lib/snippetbox_web/
+<p>├── controllers/     # Request handlers</p>
+<p>├── components/      # Reusable UI components</p>
+<p>├── endpoint.ex      # HTTP endpoint configuration</p>
+<p>├── router.ex        # URL routing</p>
+<p>└── telemetry.ex     # Monitoring and metrics</p>
+</code></pre></figure>
+
+<h3>priv/</h3>
+
+<p>Files that need to be in production but aren't source code:</p>
+
+<figure class="code"><pre><code>priv/
+<p>├── gettext/         # Internationalization</p>
+<p>├── repo/            # Database migrations and seeds</p>
+<p>└── static/          # Compiled static assets</p>
+</code></pre></figure>
+
+<h3>assets/</h3>
+
+<p>Frontend assets (before compilation):</p>
+
+<figure class="code"><pre><code>assets/
+<p>├── css/             # Stylesheets</p>
+<p>├── js/              # JavaScript</p>
+<p>└── vendor/          # Third-party JS libraries</p>
+</code></pre></figure>
+
+<h2>Understanding mix.exs</h2>
+
+<p>Open <code>mix.exs</code> in your editor. This file defines your project:</p>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.MixProject do</p>
+<p>  use Mix.Project</p>
+
+<p>  def project do</p>
+<p>    [</p>
+<p>      app: :snippetbox,</p>
+<p>      version: "0.1.0",</p>
+<p>      elixir: "~> 1.14",</p>
+<p>      elixirc_paths: elixirc_paths(Mix.env()),</p>
+<p>      start_permanent: Mix.env() == :prod,</p>
+<p>      aliases: aliases(),</p>
+<p>      deps: deps()</p>
+<p>    ]</p>
+<p>  end</p>
+
+<p>  # Configuration for the OTP application.</p>
+<p>  def application do</p>
+<p>    [</p>
+<p>      mod: {Snippetbox.Application, []},</p>
+<p>      extra_applications: [:logger, :runtime_tools]</p>
+<p>    ]</p>
+<p>  end</p>
+
+<p>  # Specifies which paths to compile per environment.</p>
+<p>  defp elixirc_paths(:test), do: ["lib", "test/support"]</p>
+<p>  defp elixirc_paths(_), do: ["lib"]</p>
+
+<p>  # Specifies your project dependencies.</p>
+<p>  defp deps do</p>
+<p>    [</p>
+<p>      {:phoenix, "~> 1.7.10"},</p>
+<p>      {:phoenix_ecto, "~> 4.4"},</p>
+<p>      {:ecto_sql, "~> 3.10"},</p>
+<p>      {:postgrex, ">= 0.0.0"},</p>
+<p>      {:phoenix_html, "~> 4.0"},</p>
+<p>      {:phoenix_live_reload, "~> 1.2", only: :dev},</p>
+<p>      {:phoenix_live_view, "~> 0.20.1"},</p>
+<p>      {:floki, ">= 0.30.0", only: :test},</p>
+<p>      {:phoenix_live_dashboard, "~> 0.8.2"},</p>
+<p>      {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},</p>
+<p>      {:tailwind, "~> 0.2", runtime: Mix.env() == :dev},</p>
+<p>      {:telemetry_metrics, "~> 0.6"},</p>
+<p>      {:telemetry_poller, "~> 1.0"},</p>
+<p>      {:gettext, "~> 0.20"},</p>
+<p>      {:jason, "~> 1.2"},</p>
+<p>      {:dns_cluster, "~> 0.1.1"},</p>
+<p>      {:bandit, "~> 1.0"}</p>
+<p>    ]</p>
+<p>  end</p>
+
+<p>  # Aliases are shortcuts or tasks specific to the current project.</p>
+<p>  defp aliases do</p>
+<p>    [</p>
+<p>      setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],</p>
+<p>      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],</p>
+<p>      "ecto.reset": ["ecto.drop", "ecto.setup"],</p>
+<p>      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],</p>
+<p>      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],</p>
+<p>      "assets.build": ["tailwind snippetbox", "esbuild snippetbox"],</p>
+<p>      "assets.deploy": [</p>
+<p>        "tailwind snippetbox --minify",</p>
+<p>        "esbuild snippetbox --minify",</p>
+<p>        "phx.digest"</p>
+<p>      ]</p>
+<p>    ]</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<div class="note">
+<strong>Note</strong>: The <code>mix.exs</code> file is similar to <code>package.json</code> in Node.js, <code>requirements.txt</code> in Python, <code>composer.json</code> in PHP, or <code>Gemfile</code> in Ruby. It defines your application and its dependencies.
+</div>
+
+<h2>Configuring the Database</h2>
+
+<p>Before we can run our application, we need to configure the database connection. Open <code>config/dev.exs</code>:</p>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Configure your database</h1>
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  hostname: "localhost",</p>
+<p>  database: "snippetbox_dev",</p>
+<p>  stacktrace: true,</p>
+<p>  show_sensitive_data_on_connection_error: true,</p>
+<p>  pool_size: 10</p>
+</code></pre></figure>
+
+<p>Adjust the <code>username</code> and <code>password</code> to match your PostgreSQL setup. The default is:</p>
+<ul>
+<li>Username: <code>postgres</code></li>
+<li>Password: <code>postgres</code></li>
+</ul>
+
+<p>If you set a different password during PostgreSQL installation, update it here.</p>
+
+<h2>Creating the Database</h2>
+
+<p>Now create the database:</p>
+
+<figure class="code"><pre><code>$ mix ecto.create
+</code></pre></figure>
+
+<p>You should see:</p>
+
+<figure class="code"><pre><code>Compiling 15 files (.ex)
+<p>Generated snippetbox app</p>
+<p>The database for Snippetbox.Repo has been created</p>
+</code></pre></figure>
+
+<p>If you get an error, double-check your database credentials in <code>config/dev.exs</code>.</p>
+
+<h2>Starting the Server</h2>
+
+<p>Start the Phoenix server:</p>
+
+<figure class="code"><pre><code>$ mix phx.server
+</code></pre></figure>
+
+<p>You should see output like:</p>
+
+<figure class="code"><pre><code>[info] Running SnippetboxWeb.Endpoint with Bandit 1.1.0 at 127.0.0.1:4000 (http)
+<p>[info] Access SnippetboxWeb.Endpoint at http://localhost:4000</p>
+<p>[watch] build finished, watching for changes...</p>
+</code></pre></figure>
+
+<p>Open your browser and visit <code>http://localhost:4000</code>. You should see the Phoenix welcome page:</p>
+
+<figure class="code"><pre><code>┌────────────────────────────────┐
+<p>│   Peace of mind from prototype │</p>
+<p>│           to production        │</p>
+<p>│                                │</p>
+<p>│   [Phoenix Framework logo]     │</p>
+<p>│                                │</p>
+<p>│   Mix Tasks:                   │</p>
+<p>│   • mix phx.new               │</p>
+<p>│   • mix phx.gen.html          │</p>
+<p>│   ...                          │</p>
+<p>└────────────────────────────────┘</p>
+</code></pre></figure>
+
+<p>Press <code>Ctrl+C</code> twice to stop the server.</p>
+
+<h2>Understanding the Application Module</h2>
+
+<p>Let's look at the entry point of our application. Open <code>lib/snippetbox/application.ex</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Application do</p>
+<p>  @moduledoc false</p>
+
+<p>  use Application</p>
+
+<p>  @impl true</p>
+<p>  def start(_type, _args) do</p>
+<p>    children = [</p>
+<p>      SnippetboxWeb.Telemetry,</p>
+<p>      Snippetbox.Repo,</p>
+<p>      {DNSCluster, query: Application.get_env(:snippetbox, :dns_cluster_query) || :ignore},</p>
+<p>      {Phoenix.PubSub, name: Snippetbox.PubSub},</p>
+<p>      {Finch, name: Snippetbox.Finch},</p>
+<p>      SnippetboxWeb.Endpoint</p>
+<p>    ]</p>
+
+<p>    opts = [strategy: :one_for_one, name: Snippetbox.Supervisor]</p>
+<p>    Supervisor.start_link(children, opts)</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def config_change(changed, _new, removed) do</p>
+<p>    SnippetboxWeb.Endpoint.config_change(changed, removed)</p>
+<p>    :ok</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Supervision Trees</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This file defines a <strong>supervision tree</strong> - a key concept in Elixir/Erlang OTP. Each <code>child</code> is a process that the supervisor monitors. If a child crashes, the supervisor restarts it automatically.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is the "let it crash" philosophy:</p>
+<ul>
+<li>Don't try to prevent every error</li>
+<li>Let processes fail and restart cleanly</li>
+<li>Isolate failures so they don't bring down the whole system</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Coming from other languages, this is similar to:</p>
+<ul>
+<li>Process managers (PM2, systemd)</li>
+<li>Container orchestrators (Kubernetes)</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>But it's built into the language and happens at the process level, not the OS level.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixirschool.com/en/lessons/advanced/otp_supervisors">Elixir School - Supervisors</a></li>
+<li><a href="https://www.erlang.org/doc/design_principles/users_guide.html">Erlang OTP Design Principles</a></li>
+</ul>
+</blockquote>
+
+<h2>Understanding the Endpoint</h2>
+
+<p>The <code>Endpoint</code> is where HTTP requests enter your application. Open <code>lib/snippetbox_web/endpoint.ex</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Endpoint do</p>
+<p>  use Phoenix.Endpoint, otp_app: :snippetbox</p>
+
+<p>  # Serve static files</p>
+<p>  plug Plug.Static,</p>
+<p>    at: "/",</p>
+<p>    from: :snippetbox,</p>
+<p>    gzip: false,</p>
+<p>    only: SnippetboxWeb.static_paths()</p>
+
+<p>  # Code reloading in development</p>
+<p>  if code_reloading? do</p>
+<p>    socket "/phoenix/live_reload/socket", Phoenix.LiveReloader.Socket</p>
+<p>    plug Phoenix.LiveReloader</p>
+<p>    plug Phoenix.CodeReloader</p>
+<p>  end</p>
+
+<p>  plug Phoenix.LiveDashboard.RequestLogger,</p>
+<p>    param_key: "request_logger",</p>
+<p>    cookie_key: "request_logger"</p>
+
+<p>  plug Plug.RequestId</p>
+<p>  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]</p>
+
+<p>  plug Plug.Parsers,</p>
+<p>    parsers: [:urlencoded, :multipart, :json],</p>
+<p>    pass: ["<em>/</em>"],</p>
+<p>    json_decoder: Phoenix.json_library()</p>
+
+<p>  plug Plug.MethodOverride</p>
+<p>  plug Plug.Head</p>
+<p>  plug Plug.Session,</p>
+<p>    store: :cookie,</p>
+<p>    key: "_snippetbox_key",</p>
+<p>    signing_salt: "some-signing-salt",</p>
+<p>    same_site: "Lax"</p>
+
+<p>  plug SnippetboxWeb.Router</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The <code>Endpoint</code> is a series of <code>plugs</code> (middleware) that process the request before it reaches your router. We'll learn more about plugs in Chapter 6.</p>
+
+<h2>Interactive Elixir with Your Application</h2>
+
+<p>You can start an interactive Elixir session with your application loaded:</p>
+
+<figure class="code"><pre><code>$ iex -S mix phx.server
+</code></pre></figure>
+
+<p>This starts both IEx and your Phoenix server. You can now interact with your application:</p>
+
+<figure class="code"><pre><code>iex(1)> SnippetboxWeb.Endpoint.url()
+<p>"http://localhost:4000"</p>
+
+<p>iex(2)> Application.get_env(:snippetbox, Snippetbox.Repo)</p>
+<p>[</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  database: "snippetbox_dev",</p>
+<p>  hostname: "localhost",</p>
+<p>  ...</p>
+<p>]</p>
+</code></pre></figure>
+
+<p>Press <code>Ctrl+C</code> twice to exit.</p>
+
+<h2>Hello World</h2>
+
+<p>Let's make a small change to verify everything works. Open <code>lib/snippetbox_web/controllers/page_controller.ex</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/page_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.PageController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def home(conn, _params) do</p>
+<p>    render(conn, :home, layout: false)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Change the <code>home</code> function to:</p>
+
+<figure class="code"><pre><code>def home(conn, _params) do
+<p>  conn</p>
+<p>  |> put_resp_content_type("text/plain")</p>
+<p>  |> send_resp(200, "Hello from SnippetBox!")</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Start the server:</p>
+
+<figure class="code"><pre><code>$ mix phx.server
+</code></pre></figure>
+
+<p>Visit <code>http://localhost:4000</code> in your browser. You should see:</p>
+
+<figure class="code"><pre><code>Hello from SnippetBox!
+</code></pre></figure>
+
+<p>The changes appeared automatically without restarting the server. This is Phoenix's <strong>live code reloading</strong> in action - one of the best features for developer productivity.</p>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we:</p>
+
+<ul>
+<li>Created a new Phoenix project with <code>mix phx.new</code></li>
+<li>Explored the Phoenix project structure</li>
+<li>Configured the database connection</li>
+<li>Started the development server</li>
+<li>Made our first code change with live reloading</li>
+</ul>
+
+<p>In the next chapter, we'll dive deeper into how Phoenix handles web requests, starting with routing and controllers.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Mix vs Other Build Tools</h3>
+
+<p>Mix is Elixir's build tool. Here's how it compares:</p>
+
+<p>| Task | Mix | npm | Cargo | Maven |</p>
+<p>|------|-----|-----|-------|-------|</p>
+<p>| New project | <code>mix new</code> | <code>npm init</code> | <code>cargo new</code> | <code>mvn archetype:generate</code> |</p>
+<p>| Dependencies | <code>mix deps.get</code> | <code>npm install</code> | <code>cargo build</code> | <code>mvn install</code> |</p>
+<p>| Run tests | <code>mix test</code> | <code>npm test</code> | <code>cargo test</code> | <code>mvn test</code> |</p>
+<p>| Run project | <code>mix phx.server</code> | <code>npm start</code> | <code>cargo run</code> | <code>mvn exec:java</code> |</p>
+
+<h3>Phoenix vs mix phx.new Options</h3>
+
+<p>The <code>mix phx.new</code> command has several options:</p>
+
+<figure class="code"><pre><code># Generate without Ecto (no database)
+<p>$ mix phx.new my_app --no-ecto</p>
+
+<h1>Generate an API-only application (no HTML)</h1>
+<p>$ mix phx.new my_app --no-html</p>
+
+<h1>Generate with LiveView</h1>
+<p>$ mix phx.new my_app --live</p>
+
+<h1>See all options</h1>
+<p>$ mix help phx.new</p>
+</code></pre></figure>
+
+<p>For this book, we use the default options which include:</p>
+<ul>
+<li>Ecto for database access</li>
+<li>HTML templating</li>
+<li>Asset management</li>
+<li>LiveView support</li>
+</ul>
+
+<h3>The Difference Between lib/snippetbox and lib/snippetbox_web</h3>
+
+<p>Phoenix separates your application into two parts:</p>
+
+<strong>lib/snippetbox/</strong> - Core logic (contexts)
+<ul>
+<li>Business logic</li>
+<li>Database schemas</li>
+<li>Application-specific code</li>
+<li>Could be used by multiple interfaces (web, CLI, API)</li>
+</ul>
+
+<strong>lib/snippetbox_web/</strong> - Web interface
+<ul>
+<li>Controllers</li>
+<li>Views</li>
+<li>Templates</li>
+<li>Router</li>
+<li>Plugs</li>
+</ul>
+
+<p>This separation is intentional:</p>
+<ul>
+<li>Keeps web concerns separate from business logic</li>
+<li>Makes testing easier</li>
+<li>Allows multiple interfaces to the same core logic</li>
+</ul>
+
+<p>This pattern is similar to:</p>
+<ul>
+<li><strong>Hexagonal Architecture</strong> (Ports and Adapters)</li>
+<li><strong>Clean Architecture</strong> (Entities vs Interfaces)</li>
+<li><strong>Domain-Driven Design</strong> (Domain vs Application layers)</li>
+</ul>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.00-foundations.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.02-web-application-basics.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

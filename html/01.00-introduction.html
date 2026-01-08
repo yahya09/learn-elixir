@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Introduction &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Introduction</span>
+            </div>
+            <div>
+                &lsaquo; <a href="00.01-contents.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="01.01-prerequisites.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 1</div>
+        <h1>Chapter 1: Introduction</h1>
+
+<h2>Welcome to Elixir and Phoenix</h2>
+
+<p>In this book, we'll build a web application called <strong>SnippetBox</strong> - a platform where users can create, share, and manage text snippets, similar to Pastebin or GitHub Gists. By the end of this guide, your application will look something like this:</p>
+
+<figure class="code"><pre><code>┌─────────────────────────────────────────┐
+<p>│  SnippetBox                    [Login]  │</p>
+<p>├─────────────────────────────────────────┤</p>
+<p>│                                         │</p>
+<p>│  Latest Snippets                        │</p>
+<p>│                                         │</p>
+<p>│  ┌─────────────────────────────────┐   │</p>
+<p>│  │ How to center a div             │   │</p>
+<p>│  │ Created: 2 hours ago            │   │</p>
+<p>│  │ Expires: in 7 days              │   │</p>
+<p>│  └─────────────────────────────────┘   │</p>
+<p>│                                         │</p>
+<p>│  ┌─────────────────────────────────┐   │</p>
+<p>│  │ Elixir pattern matching         │   │</p>
+<p>│  │ Created: 5 hours ago            │   │</p>
+<p>│  │ Expires: in 1 day               │   │</p>
+<p>│  └─────────────────────────────────┘   │</p>
+<p>│                                         │</p>
+<p>└─────────────────────────────────────────┘</p>
+</code></pre></figure>
+
+<h2>What We'll Build</h2>
+
+<p>Our application will start simple - just a few pages and basic functionality. Then, step by step, we'll add features:</p>
+
+<strong>Phase 1: Foundations</strong>
+<ul>
+<li>Basic Phoenix application setup</li>
+<li>Routing and controllers</li>
+<li>HTML templates with EEx</li>
+<li>Serving static assets</li>
+<li>Database integration with Ecto</li>
+</ul>
+
+<strong>Phase 2: Core Features</strong>
+<ul>
+<li>Create and view snippets</li>
+<li>Database queries and transactions</li>
+<li>Form handling and validation</li>
+<li>Error handling</li>
+<li>Flash messages and user feedback</li>
+</ul>
+
+<strong>Phase 3: Advanced Features</strong>
+<ul>
+<li>User authentication and registration</li>
+<li>Session management</li>
+<li>Authorization and access control</li>
+<li>HTTPS and security</li>
+<li>Real-time features with LiveView (optional)</li>
+</ul>
+
+<strong>Phase 4: Production Ready</strong>
+<ul>
+<li>Comprehensive testing</li>
+<li>Deployment strategies</li>
+<li>Performance optimization</li>
+<li>Security best practices</li>
+</ul>
+
+<h2>Learning Approach</h2>
+
+<p>This guide is designed for senior engineers transitioning to Elixir. We'll:</p>
+
+<ol>
+<li><strong>Draw Parallels</strong>: Compare Elixir patterns to familiar OOP concepts</li>
+<li><strong>Explain FP</strong>: Introduce functional programming gradually</li>
+<li><strong>Build Progressively</strong>: Each chapter adds working features</li>
+<li><strong>Follow Conventions</strong>: Use idiomatic Elixir and Phoenix patterns</li>
+<li><strong>Provide Context</strong>: Explain <em>why</em> not just <em>how</em></li>
+</ol>
+
+<h2>Conventions Used in This Book</h2>
+
+<p>Code blocks in this book are shown with syntax highlighting and file paths. Here's an example:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/page_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.PageController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def home(conn, _params) do</p>
+<p>    render(conn, :home)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Terminal commands are prefixed with <code>$</code> and sample output is shown below:</p>
+
+<figure class="code"><pre><code>$ mix phx.new snippetbox
+<ul>
+<li>creating snippetbox/config/config.exs</li>
+<li>creating snippetbox/config/dev.exs</li>
+</ul>
+<p>...</p>
+</code></pre></figure>
+
+<p>Important notes and tips are highlighted:</p>
+
+<div class="note">
+<strong>Note</strong>: The Phoenix framework follows the Model-View-Controller (MVC) pattern, similar to frameworks you may know from other languages like Django (Python), Laravel (PHP), or ASP.NET MVC (C#).
+</div>
+
+<p>Functional programming concepts are explained in dedicated sections:</p>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Immutability</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In Elixir, all data is immutable. Once created, data cannot be changed. Instead, functions return new copies with modifications. This eliminates many concurrency bugs common in mutable languages.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixirschool.com/en/lessons/basics/basics#immutability">Elixir School - Immutability</a></li>
+<li><a href="https://elixir-lang.org/getting-started/processes.html#state">Why Elixir? - Immutability</a></li>
+</ul>
+</blockquote>
+
+<h2>Why Elixir and Phoenix?</h2>
+
+<p>If you're coming from Python, PHP, C#, or JavaScript, you might wonder why choose Elixir and Phoenix. Here are some compelling reasons:</p>
+
+<strong>1. Scalability</strong>
+<ul>
+<li>Processes are lightweight (thousands to millions per node)</li>
+<li>Built-in support for distributed systems</li>
+<li>Designed for fault tolerance from the ground up</li>
+</ul>
+
+<strong>2. Performance</strong>
+<ul>
+<li>Compiled to BEAM bytecode</li>
+<li>Efficient garbage collection per process</li>
+<li>Low latency, high throughput</li>
+</ul>
+
+<strong>3. Developer Experience</strong>
+<ul>
+<li>Excellent tooling (Mix, IEx, ExUnit)</li>
+<li>Live code reloading</li>
+<li>Interactive debugging</li>
+<li>Comprehensive documentation</li>
+</ul>
+
+<strong>4. Phoenix Framework</strong>
+<ul>
+<li>Productivity similar to Rails or Django</li>
+<li>Real-time features built-in (Channels, LiveView)</li>
+<li>Fast by default</li>
+<li>Security features included</li>
+</ul>
+
+<strong>5. Functional Programming</strong>
+<ul>
+<li>Easier to reason about code</li>
+<li>Fewer bugs from shared mutable state</li>
+<li>Excellent for concurrent systems</li>
+<li>Pattern matching for cleaner code</li>
+</ul>
+
+<h2>What You Should Know</h2>
+
+<p>This book assumes you:</p>
+
+<ul>
+<li>Understand HTTP and web application fundamentals</li>
+<li>Have experience with at least one server-side language</li>
+<li>Know basic SQL and relational databases</li>
+<li>Can work with the command line</li>
+<li>Understand MVC or similar architectural patterns</li>
+</ul>
+
+<p>You don't need prior experience with:</p>
+
+<ul>
+<li>Elixir or Erlang</li>
+<li>Functional programming</li>
+<li>Phoenix Framework</li>
+</ul>
+
+<p>We'll teach all of these as we build the application.</p>
+
+<h2>About the Author</h2>
+
+<p>[This section would contain author bio - leaving it open for customization]</p>
+
+<h2>Getting Help</h2>
+
+<p>As you work through this book:</p>
+
+<ul>
+<li><strong>Elixir Forum</strong>: https://elixirforum.com/ - Friendly, active community</li>
+<li><strong>Phoenix Forum</strong>: https://elixirforum.com/c/phoenix-forum</li>
+<li><strong>Elixir Slack</strong>: https://elixir-slackin.herokuapp.com/</li>
+<li><strong>Stack Overflow</strong>: Tag questions with <code>elixir</code> and <code>phoenix-framework</code></li>
+</ul>
+
+<p>The Elixir community is known for being welcoming and helpful to newcomers.</p>
+
+<h2>Source Code</h2>
+
+<p>Complete source code for each chapter is available in the <code>source-code/</code> directory. However, we strongly encourage you to type out the examples yourself for better learning.</p>
+
+<h2>A Note on Versions</h2>
+
+<p>This guide is written for:</p>
+
+<ul>
+<li>Elixir 1.16 or later</li>
+<li>Phoenix 1.7 or later</li>
+<li>Ecto 3.11 or later</li>
+<li>PostgreSQL 14 or later</li>
+</ul>
+
+<p>While most concepts apply to earlier versions, some syntax and features may differ. We'll note version-specific features where relevant.</p>
+
+<p>---</p>
+
+<strong>Ready to begin?</strong> Let's start by setting up your development environment in the next chapter.
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<p>If you're coming from other frameworks, here's how Phoenix compares:</p>
+
+<p>| Feature | Phoenix | Rails | Django | Laravel | ASP.NET Core |</p>
+<p>|---------|---------|-------|--------|---------|--------------|</p>
+<p>| Language | Elixir | Ruby | Python | PHP | C# |</p>
+<p>| Paradigm | Functional | OOP | OOP | OOP | OOP |</p>
+<p>| Real-time | Built-in | Action Cable | Channels | Broadcasting | SignalR |</p>
+<p>| Performance | Very High | Medium | Medium | Medium | High |</p>
+<p>| Concurrency | Excellent | Fair | Fair | Fair | Good |</p>
+<p>| Learning Curve | Moderate | Easy | Easy | Easy | Moderate |</p>
+
+<h3>Why Functional Programming Matters</h3>
+
+<p>Functional programming isn't just a different syntax - it's a different way of thinking about problems:</p>
+
+<strong>Imperative (OOP) approach</strong>:
+<figure class="code"><pre><code># Python example
+<p>total = 0</p>
+<p>for item in items:</p>
+<p>    if item.active:</p>
+<p>        total += item.price</p>
+</code></pre></figure>
+
+<strong>Functional approach</strong>:
+<figure class="code"><pre><code># Elixir example
+<p>items</p>
+<p>|> Enum.filter(&(&1.active))</p>
+<p>|> Enum.map(&(&1.price))</p>
+<p>|> Enum.sum()</p>
+</code></pre></figure>
+
+<p>The functional approach:</p>
+<ul>
+<li>Makes data flow explicit</li>
+<li>Avoids mutable state</li>
+<li>Is easier to test</li>
+<li>Composes well with other operations</li>
+<li>Is more parallelizable</li>
+</ul>
+
+<p>We'll explore these concepts throughout the book.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="00.01-contents.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="01.01-prerequisites.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

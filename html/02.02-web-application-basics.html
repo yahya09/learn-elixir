@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Web Application Basics &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Web Application Basics</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.01-project-setup.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.03-routing-requests.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.2</div>
+        <h1>Chapter 2.2: Web Application Basics</h1>
+
+<p>Now that we have our Phoenix application set up, let's understand how Phoenix handles web requests. We'll build the three essential components of any web application:</p>
+
+<ol>
+<li><strong>Controllers</strong> - Handle requests and generate responses</li>
+<li><strong>Router</strong> - Map URLs to controllers</li>
+<li><strong>Templates</strong> - Generate HTML</li>
+</ol>
+
+<h2>The Phoenix Request Flow</h2>
+
+<p>When a request comes in:</p>
+
+<figure class="code"><pre><code>1. Browser → http://localhost:4000/snippets
+<ol>
+<li>Endpoint → Receives connection</li>
+<li>Router → Matches URL pattern</li>
+<li>Controller → Processes request</li>
+<li>View → Prepares data</li>
+<li>Template → Renders HTML</li>
+<li>Browser ← Receives HTML response</li>
+</ol>
+</code></pre></figure>
+
+<p>Let's build each piece step by step.</p>
+
+<h2>Creating a Simple Controller Action</h2>
+
+<p>Open <code>lib/snippetbox_web/controllers/page_controller.ex</code> and replace its contents:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/page_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.PageController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def home(conn, _params) do</p>
+<p>    text(conn, "Hello from SnippetBox!")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Let's break this down:</p>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.PageController do
+</code></pre></figure>
+<p>Defines a module (similar to a class in OOP, but without state). Phoenix convention is <code>AppNameWeb.ControllerName</code>.</p>
+
+<figure class="code"><pre><code>  use SnippetboxWeb, :controller
+</code></pre></figure>
+<p>Imports Phoenix controller functionality (like <code>text/2</code>, <code>render/3</code>, etc.).</p>
+
+<figure class="code"><pre><code>  def home(conn, _params) do
+</code></pre></figure>
+<p>Defines a controller action (function). It takes:</p>
+<ul>
+<li><code>conn</code> - The connection struct (like <code>request</code> in other frameworks)</li>
+<li><code>_params</code> - Request parameters (underscore means we're not using it yet)</li>
+</ul>
+
+<figure class="code"><pre><code>    text(conn, "Hello from SnippetBox!")
+</code></pre></figure>
+<p>Sends a plain text response.</p>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: The Connection Struct</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In Phoenix, the <code>conn</code> struct represents the entire HTTP request/response cycle. Instead of mutating a global request/response object, we pass <code>conn</code> through a pipeline of functions, each returning a new <code>conn</code> with modifications.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Each function returns a NEW conn
+<p>conn</p>
+<p>|> put_status(200)              # New conn with status 200</p>
+<p>|> put_resp_header("x-custom", "value")  # New conn with header</p>
+<p>|> text("Hello")                # New conn with response body</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This immutability means:</p>
+<ul>
+<li>No accidental state mutations</li>
+<li>Easy to test (pure functions)</li>
+<li>Composable transformations</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/plug/Plug.Conn.html">Phoenix Guides - Plug Conn</a></li>
+<li><a href="https://elixirschool.com/en/lessons/misc/plug">Understanding Plug</a></li>
+</ul>
+</blockquote>
+
+<h2>Routing Requests</h2>
+
+<p>Now let's wire this controller to a URL. Open <code>lib/snippetbox_web/router.ex</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  pipeline :browser do</p>
+<p>    plug :accepts, ["html"]</p>
+<p>    plug :fetch_session</p>
+<p>    plug :fetch_live_flash</p>
+<p>    plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>    plug :protect_from_forgery</p>
+<p>    plug :put_secure_browser_headers</p>
+<p>  end</p>
+
+<p>  pipeline :api do</p>
+<p>    plug :accepts, ["json"]</p>
+<p>  end</p>
+
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through :browser</p>
+
+<p>    get "/", PageController, :home</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Focus on this part:</p>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  get "/", PageController, :home</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>This means:</p>
+<ul>
+<li><code>get "/"</code> - Match GET requests to the root path</li>
+<li><code>PageController</code> - Use this controller</li>
+<li><code>:home</code> - Call the <code>home</code> function</li>
+</ul>
+
+<p>Phoenix will call <code>PageController.home(conn, params)</code> for requests to <code>GET /</code>.</p>
+
+<h2>Testing It Out</h2>
+
+<p>Start your server:</p>
+
+<figure class="code"><pre><code>$ mix phx.server
+</code></pre></figure>
+
+<p>Visit <code>http://localhost:4000/</code>. You should see:</p>
+
+<figure class="code"><pre><code>Hello from SnippetBox!
+</code></pre></figure>
+
+<h2>Adding More Routes</h2>
+
+<p>Let's add routes for viewing and creating snippets. Update your router:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through :browser</p>
+
+<p>  get "/", PageController, :home</p>
+<p>  get "/snippet/:id", PageController, :show</p>
+<p>  get "/snippet/create", PageController, :create</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Now add these actions to your controller:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/page_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.PageController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def home(conn, _params) do</p>
+<p>    text(conn, "Home page - Latest snippets")</p>
+<p>  end</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    text(conn, "Displaying snippet ##{id}")</p>
+<p>  end</p>
+
+<p>  def create(conn, _params) do</p>
+<p>    text(conn, "Form for creating a new snippet")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Note the <code>show</code> function:</p>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+</code></pre></figure>
+
+<p>This uses <strong>pattern matching</strong> to extract the <code>id</code> parameter. When someone visits <code>/snippet/123</code>, Phoenix calls <code>show(conn, %{"id" => "123"})</code>.</p>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pattern Matching</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Pattern matching is a powerful feature in Elixir that lets you destructure data in function arguments:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Match on specific keys in a map
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  # id variable now contains the value</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Match on multiple keys</p>
+<p>def create(conn, %{"title" => title, "content" => content}) do</p>
+<p>  # ...</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Provide default values</p>
+<p>def index(conn, %{"page" => page}) do</p>
+<p>  # ...</p>
+<p>end</p>
+<p>def index(conn, _params) do</p>
+<p>  # This clause matches when page is not provided</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is more concise and type-safe than:</p>
+<figure class="code"><pre><code>> # Python equivalent
+<p>def show(request):</p>
+<p>    id = request.params.get('id')</p>
+<p>    if id is None:</p>
+<p>        raise ValueError("Missing id parameter")</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixirschool.com/en/lessons/basics/pattern_matching">Elixir School - Pattern Matching</a></li>
+<li><a href="https://elixir-lang.org/getting-started/pattern-matching.html">Pattern Matching in Function Clauses</a></li>
+</ul>
+</blockquote>
+
+<h2>Testing the New Routes</h2>
+
+<p>Test your routes:</p>
+
+<figure class="code"><pre><code># Home page
+<p>$ curl http://localhost:4000/</p>
+<p>Home page - Latest snippets</p>
+
+<h1>View snippet</h1>
+<p>$ curl http://localhost:4000/snippet/5</p>
+<p>Displaying snippet #5</p>
+
+<h1>Create form</h1>
+<p>$ curl http://localhost:4000/snippet/create</p>
+<p>Form for creating a new snippet</p>
+</code></pre></figure>
+
+<h2>Sending JSON Responses</h2>
+
+<p>Phoenix makes it easy to send JSON for API endpoints. Add a new action:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/page_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def api_snippet(conn, %{"id" => id}) do</p>
+<p>  snippet = %{</p>
+<p>    id: id,</p>
+<p>    title: "Example Snippet",</p>
+<p>    content: "This is the content",</p>
+<p>    created: "2024-01-08"</p>
+<p>  }</p>
+
+<p>  json(conn, snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Add the route:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/api", SnippetboxWeb do</p>
+<p>  pipe_through :api</p>
+
+<p>  get "/snippet/:id", PageController, :api_snippet</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Test it:</p>
+
+<figure class="code"><pre><code>$ curl http://localhost:4000/api/snippet/5
+<p>{"id":"5","title":"Example Snippet","content":"This is the content","created":"2024-01-08"}</p>
+</code></pre></figure>
+
+<h2>Understanding the Conn Struct</h2>
+
+<p>The <code>conn</code> (connection) struct contains everything about the request and response:</p>
+
+<figure class="code"><pre><code># In IEx (iex -S mix phx.server)
+<p>iex> conn = %Plug.Conn{}</p>
+<p>iex> conn.method</p>
+<p>"GET"</p>
+<p>iex> conn.request_path</p>
+<p>"/snippet/5"</p>
+<p>iex> conn.params</p>
+<p>%{"id" => "5"}</p>
+<p>iex> conn.status</p>
+<p>nil  # Not set yet</p>
+</code></pre></figure>
+
+<p>Common operations on <code>conn</code>:</p>
+
+<figure class="code"><pre><code># Set status code
+<p>conn = put_status(conn, 404)</p>
+
+<h1>Set response headers</h1>
+<p>conn = put_resp_header(conn, "content-type", "application/json")</p>
+
+<h1>Set response body</h1>
+<p>conn = send_resp(conn, 200, "Response body")</p>
+
+<h1>Redirect</h1>
+<p>conn = redirect(conn, to: "/other-page")</p>
+
+<h1>Send file</h1>
+<p>conn = send_file(conn, 200, "path/to/file.pdf")</p>
+</code></pre></figure>
+
+<h2>The Plug Pipeline</h2>
+
+<p>Notice we're building up the response by transforming <code>conn</code>:</p>
+
+<figure class="code"><pre><code>conn
+<p>|> put_status(200)</p>
+<p>|> put_resp_header("x-version", "1.0")</p>
+<p>|> text("Hello")</p>
+</code></pre></figure>
+
+<p>This is the <strong>plug pipeline</strong> in action. Each function:</p>
+<ol>
+<li>Takes a <code>conn</code></li>
+<li>Transforms it</li>
+<li>Returns a new <code>conn</code></li>
+</ol>
+
+<p>The <code>|></code> (pipe operator) passes the result of one function to the next:</p>
+
+<figure class="code"><pre><code># These are equivalent:
+
+<h1>With pipe</h1>
+<p>result = value</p>
+<p>|> function1()</p>
+<p>|> function2()</p>
+<p>|> function3()</p>
+
+<h1>Without pipe</h1>
+<p>result = function3(function2(function1(value)))</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: The Pipe Operator</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The pipe operator <code>|></code> makes data transformations readable:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Reading left-to-right (natural for humans)
+<p>users</p>
+<p>|> Enum.filter(&(&1.active))</p>
+<p>|> Enum.map(&(&1.email))</p>
+<p>|> Enum.join(", ")</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># vs nested functions (harder to read)</p>
+<p>Enum.join(Enum.map(Enum.filter(users, &(&1.active)), &(&1.email)), ", ")</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The pipe operator in Elixir is similar to:</p>
+<ul>
+<li>Unix pipes: <code>cat file.txt | grep "error" | wc -l</code></li>
+<li>Method chaining: <code>users.filter(...).map(...).join(", ")</code></li>
+<li>F# pipe operator: <code>|></code></li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>But in Elixir, it's part of the language and works with any function.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixirschool.com/en/lessons/basics/pipe_operator">Elixir School - Pipe Operator</a></li>
+</ul>
+</blockquote>
+
+<h2>Comparing to Other Frameworks</h2>
+
+<p>Here's how Phoenix controllers compare to other frameworks:</p>
+
+<h3>Django (Python)</h3>
+<figure class="code"><pre><code># Django view
+<p>def show_snippet(request, id):</p>
+<p>    return HttpResponse(f"Snippet {id}")</p>
+</code></pre></figure>
+
+<h3>Express (Node.js)</h3>
+<figure class="code"><pre><code>// Express route handler
+<p>app.get('/snippet/:id', (req, res) => {</p>
+<p>  res.send(<code>Snippet ${req.params.id}</code>);</p>
+<p>});</p>
+</code></pre></figure>
+
+<h3>Laravel (PHP)</h3>
+<figure class="code"><pre><code>// Laravel controller method
+<p>public function show($id) {</p>
+<p>    return "Snippet " . $id;</p>
+<p>}</p>
+</code></pre></figure>
+
+<h3>Phoenix (Elixir)</h3>
+<figure class="code"><pre><code># Phoenix controller action
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  text(conn, "Snippet #{id}")</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The main difference: Phoenix passes the connection through a pipeline of transformations rather than mutating a request/response object.</p>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How to create controller actions (functions)</li>
+<li>How to define routes in the router</li>
+<li>How to match URL parameters with pattern matching</li>
+<li>How to send text and JSON responses</li>
+<li>How the <code>conn</code> struct works</li>
+<li>How to use the pipe operator for transformations</li>
+</ul>
+
+<p>In the next chapter, we'll explore routing in more detail and learn about different HTTP methods.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Controller Naming Conventions</h3>
+
+<p>Phoenix follows these conventions:</p>
+
+<ul>
+<li>Controller module: <code>AppWeb.ThingController</code></li>
+<li>Controller file: <code>lib/app_web/controllers/thing_controller.ex</code></li>
+<li>Action names: <code>index</code>, <code>show</code>, <code>new</code>, <code>create</code>, <code>edit</code>, <code>update</code>, <code>delete</code></li>
+</ul>
+
+<p>These map to RESTful resources:</p>
+
+<p>| Action | HTTP Method | Path | Purpose |</p>
+<p>|--------|-------------|------|---------|</p>
+<p>| <code>index</code> | GET | <code>/things</code> | List all |</p>
+<p>| <code>show</code> | GET | <code>/things/:id</code> | Show one |</p>
+<p>| <code>new</code> | GET | <code>/things/new</code> | New form |</p>
+<p>| <code>create</code> | POST | <code>/things</code> | Create |</p>
+<p>| <code>edit</code> | GET | <code>/things/:id/edit</code> | Edit form |</p>
+<p>| <code>update</code> | PATCH/PUT | <code>/things/:id</code> | Update |</p>
+<p>| <code>delete</code> | DELETE | <code>/things/:id</code> | Delete |</p>
+
+<p>We'll use these conventions as we build our application.</p>
+
+<h3>Why "conn" Instead of "req" and "res"?</h3>
+
+<p>In frameworks like Express, you have separate <code>request</code> and <code>response</code> objects:</p>
+
+<figure class="code"><pre><code>app.get('/', (req, res) => {
+<p>  // req for request data</p>
+<p>  // res for response methods</p>
+<p>});</p>
+</code></pre></figure>
+
+<p>Phoenix uses a single <code>conn</code> struct that represents the entire HTTP connection. This is because:</p>
+
+<ol>
+<li><strong>Immutability</strong>: We don't mutate; we transform and return new values</li>
+<li><strong>Pipeline</strong>: Easier to pass through a series of transformations</li>
+<li><strong>Testability</strong>: Single data structure to inspect and assert on</li>
+</ol>
+
+<p>The conn struct contains both request information (method, headers, params) and response information (status, headers, body).</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.01-project-setup.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.03-routing-requests.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

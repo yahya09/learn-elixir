@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Prerequisites &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Prerequisites</span>
+            </div>
+            <div>
+                &lsaquo; <a href="01.00-introduction.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.00-foundations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 1.1</div>
+        <h1>Chapter 1.1: Prerequisites</h1>
+
+<p>Before we start building our SnippetBox application, we need to set up our development environment. This chapter will guide you through installing Elixir, Phoenix, PostgreSQL, and related tools.</p>
+
+<h2>Required Software</h2>
+
+<p>To follow along with this book, you'll need:</p>
+
+<ol>
+<li><strong>Elixir</strong> (1.16 or later)</li>
+<li><strong>Erlang/OTP</strong> (26 or later) - installed automatically with Elixir</li>
+<li><strong>Phoenix Framework</strong> (1.7 or later)</li>
+<li><strong>PostgreSQL</strong> (14 or later)</li>
+<li><strong>Node.js</strong> (16 or later) - for asset compilation</li>
+<li><strong>A code editor</strong> - VS Code, IntelliJ, Emacs, or Vim</li>
+</ol>
+
+<h2>Installing Elixir</h2>
+
+<p>Elixir runs on the Erlang VM (BEAM). When you install Elixir, Erlang is typically installed as a dependency.</p>
+
+<h3>macOS</h3>
+
+<p>Using Homebrew:</p>
+
+<figure class="code"><pre><code>$ brew update
+<p>$ brew install elixir</p>
+</code></pre></figure>
+
+<h3>Ubuntu/Debian</h3>
+
+<figure class="code"><pre><code>$ wget https://packages.erlang-solutions.com/erlang-solutions_2.0_all.deb
+<p>$ sudo dpkg -i erlang-solutions_2.0_all.deb</p>
+<p>$ sudo apt-get update</p>
+<p>$ sudo apt-get install elixir</p>
+</code></pre></figure>
+
+<h3>Windows</h3>
+
+<ol>
+<li>Download the installer from https://elixir-lang.org/install.html</li>
+<li>Run the installer</li>
+<li>Verify installation from PowerShell or Command Prompt</li>
+</ol>
+
+<h3>Using asdf (Recommended for Version Management)</h3>
+
+<p>The most flexible approach is using <code>asdf</code>, a version manager for multiple languages:</p>
+
+<figure class="code"><pre><code># Install asdf (macOS/Linux)
+<p>$ git clone https://github.com/asdf-vm/asdf.git ~/.asdf --branch v0.13.1</p>
+
+<h1>Add to your shell rc file (~/.bashrc, ~/.zshrc, etc.)</h1>
+<p>$ echo '. "$HOME/.asdf/asdf.sh"' >> ~/.zshrc</p>
+<p>$ source ~/.zshrc</p>
+
+<h1>Install Erlang and Elixir plugins</h1>
+<p>$ asdf plugin add erlang</p>
+<p>$ asdf plugin add elixir</p>
+
+<h1>Install specific versions</h1>
+<p>$ asdf install erlang 26.2.1</p>
+<p>$ asdf install elixir 1.16.0-otp-26</p>
+
+<h1>Set global versions</h1>
+<p>$ asdf global erlang 26.2.1</p>
+<p>$ asdf global elixir 1.16.0-otp-26</p>
+</code></pre></figure>
+
+<h3>Verifying Installation</h3>
+
+<p>After installation, verify Elixir is working:</p>
+
+<figure class="code"><pre><code>$ elixir --version
+<p>Erlang/OTP 26 [erts-14.2.1] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:1]</p>
+
+<p>Elixir 1.16.0 (compiled with Erlang/OTP 26)</p>
+</code></pre></figure>
+
+<h2>Installing PostgreSQL</h2>
+
+<p>Phoenix works with multiple databases, but we'll use PostgreSQL in this book.</p>
+
+<h3>macOS</h3>
+
+<figure class="code"><pre><code>$ brew install postgresql@16
+<p>$ brew services start postgresql@16</p>
+</code></pre></figure>
+
+<h3>Ubuntu/Debian</h3>
+
+<figure class="code"><pre><code>$ sudo apt-get install postgresql postgresql-contrib
+<p>$ sudo service postgresql start</p>
+</code></pre></figure>
+
+<h3>Windows</h3>
+
+<ol>
+<li>Download from https://www.postgresql.org/download/windows/</li>
+<li>Run the installer</li>
+<li>Remember the password you set for the postgres user</li>
+</ol>
+
+<h3>Verifying PostgreSQL</h3>
+
+<figure class="code"><pre><code>$ psql --version
+<p>psql (PostgreSQL) 16.1</p>
+</code></pre></figure>
+
+<p>Create a test database to ensure it's working:</p>
+
+<figure class="code"><pre><code>$ psql -U postgres
+<p>postgres=# CREATE DATABASE test_db;</p>
+<p>CREATE DATABASE</p>
+<p>postgres=# \q</p>
+</code></pre></figure>
+
+<h2>Installing Phoenix</h2>
+
+<p>Phoenix is installed as a Mix archive. Mix is Elixir's build tool (similar to npm, pip, or bundler).</p>
+
+<figure class="code"><pre><code>$ mix local.hex
+<p>$ mix archive.install hex phx_new</p>
+</code></pre></figure>
+
+<p>Verify Phoenix installation:</p>
+
+<figure class="code"><pre><code>$ mix phx.new --version
+<p>Phoenix installer v1.7.10</p>
+</code></pre></figure>
+
+<h2>Installing Node.js</h2>
+
+<p>Phoenix uses esbuild for asset management, but some features still need Node.js.</p>
+
+<h3>macOS</h3>
+
+<figure class="code"><pre><code>$ brew install node
+</code></pre></figure>
+
+<h3>Ubuntu/Debian</h3>
+
+<figure class="code"><pre><code>$ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+<p>$ sudo apt-get install -y nodejs</p>
+</code></pre></figure>
+
+<h3>Windows</h3>
+
+<p>Download from https://nodejs.org/</p>
+
+<h3>Verifying Node.js</h3>
+
+<figure class="code"><pre><code>$ node --version
+<p>v20.10.0</p>
+
+<p>$ npm --version</p>
+<p>10.2.3</p>
+</code></pre></figure>
+
+<h2>Code Editor Setup</h2>
+
+<p>While any text editor works, here are recommended setups for Elixir development:</p>
+
+<h3>Visual Studio Code</h3>
+
+<p>Install these extensions:</p>
+
+<figure class="code"><pre><code># ElixirLS - Language Server
+<h1>Elixir Test</h1>
+<h1>Phoenix Framework</h1>
+</code></pre></figure>
+
+<p>Settings for VS Code (<code>settings.json</code>):</p>
+
+<figure class="code"><pre><code>{
+<p>  "elixirLS.dialyzerEnabled": true,</p>
+<p>  "elixirLS.suggestSpecs": true,</p>
+<p>  "[elixir]": {</p>
+<p>    "editor.formatOnSave": true</p>
+<p>  }</p>
+<p>}</p>
+</code></pre></figure>
+
+<h3>IntelliJ IDEA / JetBrains</h3>
+
+<p>Install the <strong>Elixir plugin</strong> from the marketplace.</p>
+
+<h3>Emacs</h3>
+
+<p>Use <code>alchemist.el</code> or <code>elixir-mode</code>:</p>
+
+<figure class="code"><pre><code>(use-package elixir-mode
+<p>  :ensure t)</p>
+
+<p>(use-package alchemist</p>
+<p>  :ensure t)</p>
+</code></pre></figure>
+
+<h3>Vim/Neovim</h3>
+
+<p>Install <code>vim-elixir</code> and consider using CoC with ElixirLS:</p>
+
+<figure class="code"><pre><code>Plug 'elixir-editors/vim-elixir'
+<p>Plug 'neoclide/coc.nvim', {'branch': 'release'}</p>
+</code></pre></figure>
+
+<h2>Testing Your Setup</h2>
+
+<p>Let's verify everything is working by creating a tiny test application:</p>
+
+<figure class="code"><pre><code>$ mix phx.new test_app --no-install
+<p>$ cd test_app</p>
+<p>$ mix deps.get</p>
+</code></pre></figure>
+
+<p>If everything is installed correctly, you should see:</p>
+
+<figure class="code"><pre><code>* creating test_app/config/config.exs
+<ul>
+<li>creating test_app/config/dev.exs</li>
+</ul>
+<p>...</p>
+<p>Resolving Hex dependencies...</p>
+<p>Resolution completed in 0.1s</p>
+<p>...</p>
+</code></pre></figure>
+
+<p>You can delete this test application:</p>
+
+<figure class="code"><pre><code>$ cd ..
+<p>$ rm -rf test_app</p>
+</code></pre></figure>
+
+<h2>Understanding the Elixir Ecosystem</h2>
+
+<p>Before we proceed, let's understand the key tools you'll use:</p>
+
+<h3>Mix</h3>
+
+<p>Mix is Elixir's build tool (think: make, rake, npm, cargo). It handles:</p>
+
+<ul>
+<li>Creating new projects</li>
+<li>Managing dependencies</li>
+<li>Running tests</li>
+<li>Compiling code</li>
+<li>Running custom tasks</li>
+</ul>
+
+<p>Common commands:</p>
+
+<figure class="code"><pre><code>$ mix new my_app          # Create new project
+<p>$ mix deps.get            # Install dependencies</p>
+<p>$ mix test                # Run tests</p>
+<p>$ mix compile             # Compile project</p>
+<p>$ mix phx.server          # Start Phoenix server</p>
+</code></pre></figure>
+
+<h3>IEx</h3>
+
+<p>IEx is Elixir's interactive shell (like Python's REPL, Node's console, or irb for Ruby):</p>
+
+<figure class="code"><pre><code>$ iex
+<p>Erlang/OTP 26 [erts-14.2.1]</p>
+
+<p>Interactive Elixir (1.16.0)</p>
+<p>iex(1)> 1 + 1</p>
+<p>2</p>
+<p>iex(2)> String.upcase("hello")</p>
+<p>"HELLO"</p>
+</code></pre></figure>
+
+<p>You can also run IEx with your application loaded:</p>
+
+<figure class="code"><pre><code>$ iex -S mix
+</code></pre></figure>
+
+<h3>Hex</h3>
+
+<p>Hex is Elixir's package manager (like npm, pip, or RubyGems):</p>
+
+<ul>
+<li>Browse packages at https://hex.pm/</li>
+<li>Add dependencies in <code>mix.exs</code></li>
+<li>Install with <code>mix deps.get</code></li>
+</ul>
+
+<h3>ExUnit</h3>
+
+<p>ExUnit is Elixir's built-in testing framework:</p>
+
+<figure class="code"><pre><code>defmodule MyAppTest do
+<p>  use ExUnit.Case</p>
+
+<p>  test "the truth" do</p>
+<p>    assert 1 + 1 == 2</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Run tests with <code>mix test</code>.</p>
+
+<h2>Quick Elixir Primer</h2>
+
+<p>If you want a head start before Chapter 2, try these resources:</p>
+
+<strong>Interactive Learning</strong>:
+<ul>
+<li>Elixir's official getting started guide: https://elixir-lang.org/getting-started/introduction.html</li>
+<li>Exercism Elixir track: https://exercism.org/tracks/elixir</li>
+</ul>
+
+<strong>Quick Reference</strong>:
+<ul>
+<li>Elixir School: https://elixirschool.com/</li>
+<li>Elixir cheatsheet: https://devhints.io/elixir</li>
+</ul>
+
+<strong>Books</strong>:
+<ul>
+<li>"Programming Elixir" by Dave Thomas</li>
+<li>"Elixir in Action" by Saša Jurić</li>
+</ul>
+
+<p>However, you don't need to complete these before continuing - we'll teach Elixir as we build the application.</p>
+
+<h2>Troubleshooting Common Issues</h2>
+
+<h3>Elixir won't install</h3>
+
+<ul>
+<li>Ensure you have the correct Erlang version</li>
+<li>Check your system's package manager is up to date</li>
+<li>Try using asdf for version management</li>
+</ul>
+
+<h3>PostgreSQL connection errors</h3>
+
+<figure class="code"><pre><code># Reset PostgreSQL password
+<p>$ sudo -u postgres psql</p>
+<p>postgres=# ALTER USER postgres PASSWORD 'postgres';</p>
+<p>postgres=# \q</p>
+</code></pre></figure>
+
+<h3>Port already in use</h3>
+
+<p>Phoenix defaults to port 4000. If it's in use:</p>
+
+<figure class="code"><pre><code># Find what's using the port
+<p>$ lsof -i :4000</p>
+
+<h1>Kill the process or use a different port</h1>
+<p>$ mix phx.server --port 4001</p>
+</code></pre></figure>
+
+<h3>Mix or Hex issues</h3>
+
+<figure class="code"><pre><code># Update Mix and Hex
+<p>$ mix local.hex --force</p>
+<p>$ mix local.rebar --force</p>
+</code></pre></figure>
+
+<h2>System Requirements</h2>
+
+<p>Minimum system requirements:</p>
+
+<ul>
+<li><strong>RAM</strong>: 4GB (8GB recommended)</li>
+<li><strong>Disk</strong>: 2GB free space</li>
+<li><strong>OS</strong>: macOS 10.14+, Ubuntu 20.04+, Windows 10+</li>
+</ul>
+
+<h2>Ready to Start</h2>
+
+<p>With your environment set up, you're ready to start building! In the next chapter, we'll create our SnippetBox application and write our first web server.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Why These Specific Versions?</h3>
+
+<p>We specify minimum versions because:</p>
+
+<ul>
+<li><strong>Elixir 1.16</strong>: Includes better compilation diagnostics</li>
+<li><strong>Erlang/OTP 26</strong>: Performance improvements and new features</li>
+<li><strong>Phoenix 1.7</strong>: Verified routes, improved generators, better LiveView</li>
+<li><strong>PostgreSQL 14</strong>: Better performance, improved JSON support</li>
+</ul>
+
+<h3>Understanding Erlang/OTP</h3>
+
+<p>Elixir runs on the Erlang VM (BEAM). Some key points:</p>
+
+<ul>
+<li><strong>OTP</strong>: "Open Telecom Platform" - set of libraries and design principles</li>
+<li><strong>BEAM</strong>: The Erlang virtual machine - highly optimized for concurrency</li>
+<li><strong>Erlang heritage</strong>: 30+ years of battle-testing in telecom systems</li>
+</ul>
+
+<p>You don't need to learn Erlang, but understanding its foundation helps:</p>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: The Erlang VM</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The BEAM (Erlang VM) is different from the JVM or Python's interpreter:</p>
+<ul>
+<li>Ultra-lightweight processes (not OS threads)</li>
+<li>Pre-emptive scheduling</li>
+<li>Per-process garbage collection</li>
+<li>Built-in distribution support</li>
+<li>"Let it crash" philosophy with supervisors</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://beam-wisdoms.clau.se/en/latest/">The Erlang Runtime System</a></li>
+<li><a href="https://www.erlang.org/doc/apps/erts/absform.html">How the BEAM Works</a></li>
+</ul>
+</blockquote>
+
+<h3>Development Workflow</h3>
+
+<p>A typical Elixir/Phoenix development workflow:</p>
+
+<ol>
+<li><strong>Write code</strong> in your editor</li>
+<li><strong>Save file</strong> - Phoenix auto-reloads</li>
+<li><strong>Check browser</strong> - changes appear automatically</li>
+<li><strong>Run tests</strong> - <code>mix test</code> in terminal</li>
+<li><strong>Interactive debugging</strong> - Use <code>IEx.pry</code> breakpoints</li>
+<li><strong>Commit</strong> - Use git for version control</li>
+</ol>
+
+<p>This tight feedback loop makes development fast and productive.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="01.00-introduction.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.00-foundations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

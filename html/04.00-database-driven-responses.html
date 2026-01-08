@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Database-Driven Responses &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Database-Driven Responses</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.03-routing-requests.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="15.00-conclusion.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4</div>
+        <h1>Chapter 4: Database-Driven Responses</h1>
+
+<p>So far, our application has used hardcoded data. In this chapter, we'll integrate PostgreSQL using Ecto, Phoenix's database wrapper. We'll create schemas, run migrations, and execute queries to build a fully database-driven application.</p>
+
+<h2>What is Ecto?</h2>
+
+<p>Ecto is Elixir's database library. It provides:</p>
+
+<ul>
+<li><strong>Schema</strong>: Define your data structures</li>
+<li><strong>Changeset</strong>: Validate and cast data</li>
+<li><strong>Query</strong>: Build and execute database queries</li>
+<li><strong>Migration</strong>: Version-control database changes</li>
+<li><strong>Repository</strong>: Interface to the database</li>
+</ul>
+
+<p>Think of Ecto as:</p>
+<ul>
+<li><strong>SQLAlchemy</strong> (Python)</li>
+<li><strong>Active Record</strong> (Ruby/Rails)</li>
+<li><strong>Entity Framework</strong> (C#/.NET)</li>
+<li><strong>Sequelize</strong> (Node.js)</li>
+<li><strong>Eloquent</strong> (PHP/Laravel)</li>
+</ul>
+
+<p>But with a functional approach.</p>
+
+<h2>Ecto vs ORM</h2>
+
+<p>Ecto is NOT an ORM (Object-Relational Mapper). Key differences:</p>
+
+<strong>Traditional ORM:</strong>
+<figure class="code"><pre><code># Python/Django
+<p>user = User.objects.get(id=1)</p>
+<p>user.email = "new@example.com"</p>
+<p>user.save()  # Implicit database update</p>
+</code></pre></figure>
+
+<strong>Ecto (Functional):</strong>
+<figure class="code"><pre><code># Explicit, composable operations
+<p>user = Repo.get(User, 1)</p>
+<p>changeset = User.changeset(user, %{email: "new@example.com"})</p>
+<p>{:ok, user} = Repo.update(changeset)</p>
+</code></pre></figure>
+
+<p>Ecto advantages:</p>
+<ul>
+<li><strong>Explicit</strong>: No hidden queries</li>
+<li><strong>Composable</strong>: Build queries step by step</li>
+<li><strong>Type-safe</strong>: Compile-time checks</li>
+<li><strong>Testable</strong>: Easy to mock/stub</li>
+</ul>
+
+<h2>The Ecto Architecture</h2>
+
+<figure class="code"><pre><code>Your Application
+<p>       ↓</p>
+<p>    Context (Business Logic)</p>
+<p>       ↓</p>
+<p>    Schema (Data Structure)</p>
+<p>       ↓</p>
+<p>    Changeset (Validation)</p>
+<p>       ↓</p>
+<p>    Query (Database Operations)</p>
+<p>       ↓</p>
+<p>    Repo (Database Interface)</p>
+<p>       ↓</p>
+<p>   PostgreSQL Database</p>
+</code></pre></figure>
+
+<h2>What We'll Build</h2>
+
+<p>In this chapter, we'll:</p>
+
+<ol>
+<li>Set up PostgreSQL</li>
+<li>Create the <code>snippets</code> table with migrations</li>
+<li>Define a <code>Snippet</code> schema</li>
+<li>Create a context for snippet operations</li>
+<li>Execute queries (CRUD operations)</li>
+<li>Use changesets for validation</li>
+<li>Handle transactions</li>
+</ol>
+
+<h2>The Snippets Table</h2>
+
+<p>Our <code>snippets</code> table will have:</p>
+
+<figure class="code"><pre><code>CREATE TABLE snippets (
+<p>  id BIGSERIAL PRIMARY KEY,</p>
+<p>  title VARCHAR(100) NOT NULL,</p>
+<p>  content TEXT NOT NULL,</p>
+<p>  expires_at TIMESTAMP,</p>
+<p>  inserted_at TIMESTAMP NOT NULL,</p>
+<p>  updated_at TIMESTAMP NOT NULL</p>
+<p>);</p>
+
+<p>CREATE INDEX idx_snippets_inserted_at ON snippets(inserted_at);</p>
+</code></pre></figure>
+
+<p>This stores:</p>
+<ul>
+<li><code>id</code>: Auto-incrementing primary key</li>
+<li><code>title</code>: Snippet title (max 100 characters)</li>
+<li><code>content</code>: The actual snippet text</li>
+<li><code>expires_at</code>: When snippet expires (nullable)</li>
+<li><code>inserted_at</code>: Creation timestamp</li>
+<li><code>updated_at</code>: Last modification timestamp</li>
+</ul>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Separation of Concerns</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In Ecto, we separate:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<ol>
+<li><strong>Schema</strong> - What the data looks like</li>
+<li><strong>Changeset</strong> - How to validate and transform data</li>
+<li><strong>Query</strong> - How to fetch data</li>
+<li><strong>Repository</strong> - How to persist data</li>
+</ol>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is different from Active Record pattern where everything is in one model class:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Rails: Everything in one class
+<p>class User < ApplicationRecord</p>
+<p>  validates :email, presence: true</p>
+<p>  has_many :posts</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>  def full_name</p>
+<p>    "#{first_name} #{last_name}"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>vs Ecto's separated concerns:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Schema - structure
+<p>defmodule User do</p>
+<p>  schema "users" do</p>
+<p>    field :email, :string</p>
+<p>    has_many :posts, Post</p>
+<p>  end</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Changeset - validation (separate function)</p>
+<p>def changeset(user, attrs) do</p>
+<p>  cast(user, attrs, [:email])</p>
+<p>  |> validate_required([:email])</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Query - fetching (separate module/function)</p>
+<p>def list_users do</p>
+<p>  User |> Repo.all()</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Schema.html">Ecto Schema</a></li>
+<li><a href="https://elixirschool.com/en/lessons/ecto/basics">Understanding Ecto</a></li>
+</ul>
+</blockquote>
+
+<h2>Comparing to Other ORMs</h2>
+
+<p>Here's how common operations compare:</p>
+
+<h3>Fetching Records</h3>
+
+<strong>Rails (Ruby)</strong>
+<figure class="code"><pre><code>User.find(1)
+<p>User.where(active: true).order(created_at: :desc).limit(10)</p>
+</code></pre></figure>
+
+<strong>Django (Python)</strong>
+<figure class="code"><pre><code>User.objects.get(id=1)
+<p>User.objects.filter(active=True).order_by('-created_at')[:10]</p>
+</code></pre></figure>
+
+<strong>Entity Framework (C#)</strong>
+<figure class="code"><pre><code>context.Users.Find(1);
+<p>context.Users.Where(u => u.Active).OrderByDescending(u => u.CreatedAt).Take(10);</p>
+</code></pre></figure>
+
+<strong>Ecto (Elixir)</strong>
+<figure class="code"><pre><code>Repo.get(User, 1)
+<p>User</p>
+<p>|> where([u], u.active == true)</p>
+<p>|> order_by([u], desc: u.inserted_at)</p>
+<p>|> limit(10)</p>
+<p>|> Repo.all()</p>
+</code></pre></figure>
+
+<h3>Creating Records</h3>
+
+<strong>Rails</strong>
+<figure class="code"><pre><code>user = User.create(email: "test@example.com")
+</code></pre></figure>
+
+<strong>Django</strong>
+<figure class="code"><pre><code>user = User.objects.create(email="test@example.com")
+</code></pre></figure>
+
+<strong>Ecto</strong>
+<figure class="code"><pre><code>%User{}
+<p>|> User.changeset(%{email: "test@example.com"})</p>
+<p>|> Repo.insert()</p>
+</code></pre></figure>
+
+<p>The Ecto way is more explicit but gives you more control over validation and error handling.</p>
+
+<h2>Database Configuration</h2>
+
+<p>Phoenix already configured your database in <code>config/dev.exs</code>. Let's review it:</p>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  hostname: "localhost",</p>
+<p>  database: "snippetbox_dev",</p>
+<p>  stacktrace: true,</p>
+<p>  show_sensitive_data_on_connection_error: true,</p>
+<p>  pool_size: 10</p>
+</code></pre></figure>
+
+<p>This configuration:</p>
+<ul>
+<li>Connects to PostgreSQL on localhost</li>
+<li>Uses database <code>snippetbox_dev</code></li>
+<li>Shows detailed errors in development</li>
+<li>Maintains a pool of 10 database connections</li>
+</ul>
+
+<h2>The Repository Pattern</h2>
+
+<p>Phoenix generated <code>lib/snippetbox/repo.ex</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/repo.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Repo do</p>
+<p>  use Ecto.Repo,</p>
+<p>    otp_app: :snippetbox,</p>
+<p>    adapter: Ecto.Adapters.Postgres</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The <code>Repo</code> module is your interface to the database. All database operations go through it:</p>
+
+<figure class="code"><pre><code>Repo.insert(changeset)
+<p>Repo.update(changeset)</p>
+<p>Repo.delete(schema)</p>
+<p>Repo.all(query)</p>
+<p>Repo.get(Schema, id)</p>
+</code></pre></figure>
+
+<div class="note">
+<strong>Note</strong>: The Repository pattern centralizes database access. Instead of models having <code>save()</code> methods, you explicitly call <code>Repo.insert()</code>, <code>Repo.update()</code>, etc. This makes database operations explicit and easier to test.
+</div>
+
+<h2>Connection Pooling</h2>
+
+<p>Ecto uses connection pooling for efficiency:</p>
+
+<figure class="code"><pre><code>Application
+<p>    ↓</p>
+<p>[Worker1] ←→ [Connection 1]</p>
+<p>[Worker2] ←→ [Connection 2]   } Pool of 10</p>
+<p>[Worker3] ←→ [Connection 3]</p>
+<p>[Worker4] ←→ [Connection 4]</p>
+<p>    ...</p>
+</code></pre></figure>
+
+<p>Benefits:</p>
+<ul>
+<li><strong>Reuses connections</strong> (faster than creating new ones)</li>
+<li><strong>Limits concurrent connections</strong> (prevents overwhelming database)</li>
+<li><strong>Handles failures</strong> (replaces broken connections)</li>
+</ul>
+
+<p>The <code>pool_size: 10</code> means up to 10 simultaneous database queries.</p>
+
+<h2>Next Steps</h2>
+
+<p>In the following sections, we'll:</p>
+
+<ol>
+<li>Create migrations to set up the database schema</li>
+<li>Define the <code>Snippet</code> schema module</li>
+<li>Build a context for snippet operations</li>
+<li>Execute queries to create, read, update, and delete snippets</li>
+<li>Use changesets for validation</li>
+<li>Handle complex queries and transactions</li>
+</ol>
+
+<p>By the end of this chapter, you'll have a fully functional, database-backed application.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Why PostgreSQL?</h3>
+
+<p>We use PostgreSQL because:</p>
+
+<ul>
+<li><strong>Feature-rich</strong>: JSON, full-text search, arrays, etc.</li>
+<li><strong>Reliable</strong>: Battle-tested in production</li>
+<li><strong>Performance</strong>: Handles millions of rows efficiently</li>
+<li><strong>Open source</strong>: Free and community-supported</li>
+<li><strong>Phoenix-friendly</strong>: Excellent Ecto support</li>
+</ul>
+
+<p>Alternatives:</p>
+<ul>
+<li><strong>MySQL</strong>: Also well-supported by Ecto</li>
+<li><strong>SQLite</strong>: Good for development/testing</li>
+<li><strong>MSSQL</strong>: Enterprise databases (via ecto_sql)</li>
+</ul>
+
+<h3>Ecto vs Other Languages</h3>
+
+<p>Ecto's functional approach differs from traditional ORMs:</p>
+
+<strong>Advantages:</strong>
+<ul>
+<li>No implicit state or behavior</li>
+<li>Explicit database operations</li>
+<li>Easy to compose queries</li>
+<li>Type-safe at compile-time</li>
+<li>Testable without database</li>
+</ul>
+
+<strong>Learning Curve:</strong>
+<ul>
+<li>Different from Active Record pattern</li>
+<li>More explicit (more code initially)</li>
+<li>Requires understanding changesets</li>
+</ul>
+
+<p>Most developers find Ecto clearer once they understand the pattern, even if it feels verbose at first.</p>
+
+<h3>Connection Pool Sizing</h3>
+
+<p>Rule of thumb for pool size:</p>
+
+<figure class="code"><pre><code>pool_size ≈ (available_db_connections) / (num_app_instances)
+</code></pre></figure>
+
+<p>Example:</p>
+<ul>
+<li>PostgreSQL allows 100 connections</li>
+<li>You run 5 app instances</li>
+<li>Use pool_size: 20 per instance (100 / 5)</li>
+</ul>
+
+<p>Phoenix defaults to 10, which is reasonable for development. Adjust for production based on load.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.03-routing-requests.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="15.00-conclusion.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

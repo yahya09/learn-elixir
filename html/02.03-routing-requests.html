@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Routing Requests &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Routing Requests</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.02-web-application-basics.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.00-database-driven-responses.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.3</div>
+        <h1>Chapter 2.3: Routing Requests</h1>
+
+<p>The router is the traffic controller of your Phoenix application. It examines incoming requests and dispatches them to the appropriate controller action. In this chapter, we'll explore Phoenix routing in depth.</p>
+
+<h2>Basic Route Patterns</h2>
+
+<p>Phoenix routes follow this pattern:</p>
+
+<figure class="code"><pre><code>verb "path", Controller, :action
+</code></pre></figure>
+
+<p>Where:</p>
+<ul>
+<li><code>verb</code> is the HTTP method (get, post, put, patch, delete)</li>
+<li><code>"path"</code> is the URL pattern to match</li>
+<li><code>Controller</code> is the controller module</li>
+<li><code>:action</code> is the function to call</li>
+</ul>
+
+<h3>HTTP Methods</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through :browser</p>
+
+<p>  get "/snippets", SnippetController, :index       # List all</p>
+<p>  post "/snippets", SnippetController, :create     # Create new</p>
+<p>  get "/snippets/:id", SnippetController, :show    # Show one</p>
+<p>  put "/snippets/:id", SnippetController, :update  # Update (full)</p>
+<p>  patch "/snippets/:id", SnippetController, :update  # Update (partial)</p>
+<p>  delete "/snippets/:id", SnippetController, :delete # Delete</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Dynamic Segments</h2>
+
+<p>Use <code>:name</code> to capture URL segments:</p>
+
+<figure class="code"><pre><code>get "/snippets/:id", SnippetController, :show
+</code></pre></figure>
+
+<p>When someone visits <code>/snippets/123</code>, Phoenix calls:</p>
+
+<figure class="code"><pre><code>SnippetController.show(conn, %{"id" => "123"})
+</code></pre></figure>
+
+<p>Multiple segments:</p>
+
+<figure class="code"><pre><code>get "/users/:user_id/snippets/:id", SnippetController, :show
+<h1>/users/5/snippets/123 →</h1>
+<h1>show(conn, %{"user_id" => "5", "id" => "123"})</h1>
+</code></pre></figure>
+
+<h2>Query String Parameters</h2>
+
+<p>Query strings are automatically parsed:</p>
+
+<figure class="code"><pre><code># URL: /snippets?page=2&limit=10
+<h1>params: %{"page" => "2", "limit" => "10"}</h1>
+
+<p>def index(conn, params) do</p>
+<p>  page = Map.get(params, "page", "1")</p>
+<p>  limit = Map.get(params, "limit", "10")</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>With pattern matching:</p>
+
+<figure class="code"><pre><code>def index(conn, %{"page" => page, "limit" => limit}) do
+<p>  # Matches only when both params exist</p>
+<p>end</p>
+
+<p>def index(conn, params) do</p>
+<p>  # Catches all other cases</p>
+<p>  page = Map.get(params, "page", "1")</p>
+<p>  limit = Map.get(params, "limit", "10")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Resourceful Routes</h2>
+
+<p>Phoenix provides <code>resources</code> macro for RESTful routing:</p>
+
+<figure class="code"><pre><code># Instead of manually defining all routes:
+<p>get "/snippets", SnippetController, :index</p>
+<p>get "/snippets/new", SnippetController, :new</p>
+<p>post "/snippets", SnippetController, :create</p>
+<p>get "/snippets/:id", SnippetController, :show</p>
+<p>get "/snippets/:id/edit", SnippetController, :edit</p>
+<p>put "/snippets/:id", SnippetController, :update</p>
+<p>patch "/snippets/:id", SnippetController, :update</p>
+<p>delete "/snippets/:id", SnippetController, :delete</p>
+
+<h1>Use this:</h1>
+<p>resources "/snippets", SnippetController</p>
+</code></pre></figure>
+
+<p>This generates all 8 RESTful routes automatically.</p>
+
+<p>Limit which actions to generate:</p>
+
+<figure class="code"><pre><code># Only index, show, and create
+<p>resources "/snippets", SnippetController, only: [:index, :show, :create]</p>
+
+<h1>Everything except delete</h1>
+<p>resources "/snippets", SnippetController, except: [:delete]</p>
+</code></pre></figure>
+
+<h2>Nested Resources</h2>
+
+<p>For related resources:</p>
+
+<figure class="code"><pre><code>resources "/users", UserController do
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>This generates routes like:</p>
+<ul>
+<li><code>GET /users/:user_id/snippets</code> - List user's snippets</li>
+<li><code>GET /users/:user_id/snippets/:id</code> - Show one snippet</li>
+</ul>
+
+<h2>Scoped Routes</h2>
+
+<p>Group routes under a common path prefix:</p>
+
+<figure class="code"><pre><code>scope "/admin", SnippetboxWeb.Admin do
+<p>  pipe_through [:browser, :require_admin]</p>
+
+<p>  resources "/snippets", SnippetController</p>
+<p>  resources "/users", UserController</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Routes become:</p>
+<ul>
+<li><code>/admin/snippets</code></li>
+<li><code>/admin/users</code></li>
+</ul>
+
+<p>And use controllers from <code>SnippetboxWeb.Admin</code> namespace.</p>
+
+<h2>Named Routes (Path Helpers)</h2>
+
+<p>Phoenix generates helper functions for each route. Instead of hardcoding URLs:</p>
+
+<figure class="code"><pre><code># Don't do this
+<p>redirect(conn, to: "/snippets/#{snippet.id}")</p>
+
+<h1>Do this</h1>
+<p>redirect(conn, to: ~p"/snippets/#{snippet.id}")</p>
+</code></pre></figure>
+
+<p>The <code>~p</code> sigil creates verified routes that are checked at compile-time.</p>
+
+<p>Common path helpers:</p>
+
+<figure class="code"><pre><code>~p"/"                           # "/"
+<p>~p"/snippets"                   # "/snippets"</p>
+<p>~p"/snippets/#{id}"             # "/snippets/123"</p>
+<p>~p"/snippets/#{id}/edit"        # "/snippets/123/edit"</p>
+<p>~p"/snippets?#{[page: 2]}"      # "/snippets?page=2"</p>
+</code></pre></figure>
+
+<h2>Route Constraints</h2>
+
+<p>Constrain what patterns match:</p>
+
+<figure class="code"><pre><code># Only match numeric IDs
+<p>get "/snippets/:id", SnippetController, :show,</p>
+<p>  constraints: %{id: ~r/\d+/}</p>
+
+<h1>Won't match /snippets/abc, only /snippets/123</h1>
+</code></pre></figure>
+
+<h2>Forward Routes</h2>
+
+<p>Forward a path prefix to another plug or router:</p>
+
+<figure class="code"><pre><code>forward "/api/v1", SnippetboxWeb.API.V1.Router
+</code></pre></figure>
+
+<p>All requests to <code>/api/v1/*</code> go to the V1 router.</p>
+
+<h2>Pipelines</h2>
+
+<p>Pipelines are groups of plugs (middleware) applied to routes:</p>
+
+<figure class="code"><pre><code>pipeline :browser do
+<p>  plug :accepts, ["html"]</p>
+<p>  plug :fetch_session</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+
+<p>pipeline :api do</p>
+<p>  plug :accepts, ["json"]</p>
+<p>end</p>
+
+<p>pipeline :auth do</p>
+<p>  plug :require_login</p>
+<p>end</p>
+
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through :browser</p>
+
+<p>  get "/", PageController, :home</p>
+<p>end</p>
+
+<p>scope "/admin", SnippetboxWeb.Admin do</p>
+<p>  pipe_through [:browser, :auth]  # Apply multiple pipelines</p>
+
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Inspecting Routes</h2>
+
+<p>List all routes in your application:</p>
+
+<figure class="code"><pre><code>$ mix phx.routes
+</code></pre></figure>
+
+<p>Output:</p>
+
+<figure class="code"><pre><code>GET    /                                      PageController :home
+<p>GET    /snippets                              SnippetController :index</p>
+<p>GET    /snippets/:id                          SnippetController :show</p>
+<p>POST   /snippets                              SnippetController :create</p>
+<p>GET    /snippets/new                          SnippetController :new</p>
+<p>GET    /snippets/:id/edit                     SnippetController :edit</p>
+<p>PATCH  /snippets/:id                          SnippetController :update</p>
+<p>PUT    /snippets/:id                          SnippetController :update</p>
+<p>DELETE /snippets/:id                          SnippetController :delete</p>
+</code></pre></figure>
+
+<p>Search for specific routes:</p>
+
+<figure class="code"><pre><code>$ mix phx.routes SnippetController
+<p>$ mix phx.routes | grep snippet</p>
+</code></pre></figure>
+
+<h2>Building Our Snippet Routes</h2>
+
+<p>Let's add proper routing for our SnippetBox application. Update your router:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  pipeline :browser do</p>
+<p>    plug :accepts, ["html"]</p>
+<p>    plug :fetch_session</p>
+<p>    plug :fetch_live_flash</p>
+<p>    plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>    plug :protect_from_forgery</p>
+<p>    plug :put_secure_browser_headers</p>
+<p>  end</p>
+
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through :browser</p>
+
+<p>    get "/", PageController, :home</p>
+<p>    get "/snippet/view/:id", SnippetController, :show</p>
+<p>    get "/snippet/create", SnippetController, :new</p>
+<p>    post "/snippet/create", SnippetController, :create</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Notice we're not using <code>resources</code> yet - we want to learn the basics first. We'll refactor to use <code>resources</code> later.</p>
+
+<h2>Creating the Snippet Controller</h2>
+
+<p>Create a new controller:</p>
+
+<figure class="code"><pre><code>$ mkdir -p lib/snippetbox_web/controllers
+<p>$ touch lib/snippetbox_web/controllers/snippet_controller.ex</p>
+</code></pre></figure>
+
+<p>Add the controller code:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    # For now, just show the ID</p>
+<p>    # We'll add database queries in Chapter 4</p>
+<p>    text(conn, "Display snippet with ID: #{id}")</p>
+<p>  end</p>
+
+<p>  def new(conn, _params) do</p>
+<p>    text(conn, "Form to create a new snippet")</p>
+<p>  end</p>
+
+<p>  def create(conn, params) do</p>
+<p>    # For now, just echo the params</p>
+<p>    text(conn, "Create snippet with params: #{inspect(params)}")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Test the routes:</p>
+
+<figure class="code"><pre><code>$ mix phx.server
+
+<h1>In another terminal:</h1>
+<p>$ curl http://localhost:4000/</p>
+<p>$ curl http://localhost:4000/snippet/view/123</p>
+<p>$ curl http://localhost:4000/snippet/create</p>
+</code></pre></figure>
+
+<h2>Understanding Route Matching Order</h2>
+
+<p>Phoenix matches routes in order from top to bottom:</p>
+
+<figure class="code"><pre><code># ❌ Bad: specific route after wildcard
+<p>get "/snippets/:id", SnippetController, :show</p>
+<p>get "/snippets/new", SnippetController, :new  # Never matches!</p>
+
+<h1>✅ Good: specific routes first</h1>
+<p>get "/snippets/new", SnippetController, :new</p>
+<p>get "/snippets/:id", SnippetController, :show</p>
+</code></pre></figure>
+
+<h2>Catch-All Routes</h2>
+
+<p>Handle 404s with a catch-all:</p>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  get "/", PageController, :home</p>
+<p>  # ... other routes ...</p>
+
+<p>  # Catch all unmatched routes</p>
+<p>  get "/*path", PageController, :not_found</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code>def not_found(conn, %{"path" => path}) do
+<p>  conn</p>
+<p>  |> put_status(:not_found)</p>
+<p>  |> text("Page not found: /#{Enum.join(path, "/")}")</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pattern Matching in Routes</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix routing uses pattern matching at compile-time to build an efficient dispatch table. When a request arrives, Phoenix:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<ol>
+<li>Matches the HTTP method</li>
+<li>Matches the path pattern</li>
+<li>Extracts parameters</li>
+<li>Calls the controller</li>
+</ol>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is very fast because routes are compiled into a decision tree, not checked sequentially at runtime.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Compare to other frameworks that check routes at runtime:</p>
+<figure class="code"><pre><code>> # Django checks each pattern sequentially
+<p>urlpatterns = [</p>
+<p>    path('articles/<int:year>/', views.year_archive),</p>
+<p>    path('articles/<int:year>/<int:month>/', views.month_archive),</p>
+<p>]</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix's compile-time routing means:</p>
+<ul>
+<li>Faster request handling</li>
+<li>Compile-time route verification</li>
+<li>Better error messages</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/routing.html">Phoenix Routing Internals</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How to define routes with different HTTP methods</li>
+<li>How to capture dynamic segments in URLs</li>
+<li>How to use query string parameters</li>
+<li>How to create resourceful routes</li>
+<li>How to organize routes with scopes and pipelines</li>
+<li>How to use verified routes with <code>~p</code></li>
+<li>How Phoenix matches routes efficiently</li>
+</ul>
+
+<p>In the next chapter, we'll learn how to customize HTTP headers and work with different response types.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>REST vs RPC Style Routing</h3>
+
+<p>Phoenix encourages RESTful routing:</p>
+
+<strong>RESTful (Resource-oriented)</strong>
+<figure class="code"><pre><code>GET    /snippets        # List
+<p>POST   /snippets        # Create</p>
+<p>GET    /snippets/:id    # Show</p>
+<p>PUT    /snippets/:id    # Update</p>
+<p>DELETE /snippets/:id    # Delete</p>
+</code></pre></figure>
+
+<strong>RPC (Action-oriented)</strong>
+<figure class="code"><pre><code>GET  /snippets/list
+<p>POST /snippets/add</p>
+<p>GET  /snippets/get/:id</p>
+<p>POST /snippets/modify/:id</p>
+<p>POST /snippets/remove/:id</p>
+</code></pre></figure>
+
+<p>RESTful routing is preferred because:</p>
+<ul>
+<li>Standard HTTP semantics</li>
+<li>Easier to cache</li>
+<li>Better API design</li>
+<li>Works well with HTTP methods</li>
+</ul>
+
+<p>However, not every action fits REST. For custom actions:</p>
+
+<figure class="code"><pre><code>resources "/snippets", SnippetController do
+<p>  post "/publish", SnippetController, :publish      # /snippets/:id/publish</p>
+<p>  delete "/archive", SnippetController, :archive    # /snippets/:id/archive</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Router Performance</h3>
+
+<p>Phoenix routers are extremely fast because:</p>
+
+<ol>
+<li><strong>Compile-time generation</strong>: Routes compile to efficient pattern matching</li>
+<li><strong>No runtime regex</strong>: Path patterns converted to pattern matching</li>
+<li><strong>Minimal overhead</strong>: Direct function calls, no reflection</li>
+</ol>
+
+<p>Benchmarks show Phoenix can handle 100k+ requests/second on modest hardware, with routing overhead measured in microseconds.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.02-web-application-basics.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.00-database-driven-responses.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

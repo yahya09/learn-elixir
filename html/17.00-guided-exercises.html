@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Guided Exercises &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Guided Exercises</span>
+            </div>
+            <div>
+                &lsaquo; <a href="16.00-further-reading.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 17</div>
+        <h1>Chapter 17: Guided Exercises</h1>
+
+<p>These exercises will help you reinforce what you've learned and extend the SnippetBox application with new features. Each exercise includes hints and suggested approaches.</p>
+
+<h2>Exercise 1: Add an About Page</h2>
+
+<strong>Difficulty</strong>: Easy
+<strong>Time</strong>: 15-20 minutes
+<strong>Concepts</strong>: Routing, Controllers, Templates
+
+<h3>Task</h3>
+
+<p>Add an "About" page to the application that displays information about SnippetBox.</p>
+
+<h3>Requirements</h3>
+
+<ol>
+<li>Create a route at <code>/about</code> that responds to GET requests</li>
+<li>Create a controller action to handle the request</li>
+<li>Create a template that displays:</li>
+</ol>
+<p>   - Application name and version</p>
+<p>   - Purpose/description</p>
+<p>   - Contact information</p>
+<ol>
+<li>Add a link to the About page in the navigation menu</li>
+</ol>
+
+<h3>Hints</h3>
+
+<details>
+<summary>Click to show hints</summary>
+
+<ol>
+<li>Add a route in <code>router.ex</code>:</li>
+</ol>
+<figure class="code"><pre><code>get "/about", PageController, :about
+</code></pre></figure>
+
+<ol>
+<li>Add an action in your controller:</li>
+</ol>
+<figure class="code"><pre><code>def about(conn, _params) do
+<p>  render(conn, :about)</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Create the template file</li>
+<li>Update your layout template to include a navigation link</li>
+</ol>
+
+</details>
+
+<h3>Extension</h3>
+
+<ul>
+<li>Add the current date/time to the page using Elixir's <code>DateTime</code></li>
+<li>Display application statistics (total snippets, total users)</li>
+<li>Make the content editable through an admin interface</li>
+</ul>
+
+<p>---</p>
+
+<h2>Exercise 2: Add a Debug Mode</h2>
+
+<strong>Difficulty</strong>: Medium
+<strong>Time</strong>: 30-40 minutes
+<strong>Concepts</strong>: Configuration, Environment Variables, Plugs
+
+<h3>Task</h3>
+
+<p>Add a debug mode that displays extra information for development purposes.</p>
+
+<h3>Requirements</h3>
+
+<ol>
+<li>Create a configuration option to enable/disable debug mode</li>
+<li>When enabled, display:</li>
+</ol>
+<p>   - Current environment (dev/test/prod)</p>
+<p>   - Request parameters</p>
+<p>   - Session data</p>
+<p>   - Execution time for each request</p>
+<ol>
+<li>Create a plug that adds debug information to assigns</li>
+<li>Add a debug info section to the layout (only visible in debug mode)</li>
+</ol>
+
+<h3>Hints</h3>
+
+<details>
+<summary>Click to show hints</summary>
+
+<ol>
+<li>Add configuration in <code>config/dev.exs</code>:</li>
+</ol>
+<figure class="code"><pre><code>config :snippetbox, debug_mode: true
+</code></pre></figure>
+
+<ol>
+<li>Create a plug module:</li>
+</ol>
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.Debug do
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    if Application.get_env(:snippetbox, :debug_mode) do</p>
+<p>      conn</p>
+<p>      |> assign(:debug_mode, true)</p>
+<p>      |> assign(:debug_info, gather_debug_info(conn))</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp gather_debug_info(conn) do</p>
+<p>    %{</p>
+<p>      env: Mix.env(),</p>
+<p>      params: conn.params,</p>
+<p>      session: get_session(conn)</p>
+<p>    }</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Add the plug to your router pipeline</li>
+</ol>
+
+</details>
+
+<h3>Extension</h3>
+
+<ul>
+<li>Log all requests to a separate debug log file</li>
+<li>Create a <code>/debug</code> route that shows system metrics</li>
+<li>Add a toolbar that displays debug info without cluttering the page</li>
+</ul>
+
+<p>---</p>
+
+<h2>Exercise 3: Test the Snippet Creation</h2>
+
+<strong>Difficulty</strong>: Medium
+<strong>Time</strong>: 30-45 minutes
+<strong>Concepts</strong>: Testing, ExUnit, Test Fixtures
+
+<h3>Task</h3>
+
+<p>Write comprehensive tests for the snippet creation functionality.</p>
+
+<h3>Requirements</h3>
+
+<ol>
+<li>Test controller action:</li>
+</ol>
+<p>   - Rendering the new snippet form</p>
+<p>   - Creating a snippet with valid data</p>
+<p>   - Rejecting invalid data</p>
+<p>   - Requiring authentication</p>
+<ol>
+<li>Test context function:</li>
+</ol>
+<p>   - Creating a snippet</p>
+<p>   - Validation rules</p>
+<p>   - Associations with users</p>
+<ol>
+<li>Test integration:</li>
+</ol>
+<p>   - Full workflow from form to database</p>
+
+<h3>Hints</h3>
+
+<details>
+<summary>Click to show hints</summary>
+
+<ol>
+<li>Controller test structure:</li>
+</ol>
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetControllerTest do
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  describe "new snippet" do</p>
+<p>    test "renders form", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/snippets/new")</p>
+<p>      assert html_response(conn, 200) =~ "New Snippet"</p>
+<p>    end</p>
+
+<p>    test "requires authentication", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/snippets/new")</p>
+<p>      assert redirected_to(conn) == ~p"/login"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create snippet" do</p>
+<p>    setup [:create_user_and_log_in]</p>
+
+<p>    test "creates snippet with valid data", %{conn: conn} do</p>
+<p>      attrs = %{title: "Test", content: "Test content"}</p>
+<p>      conn = post(conn, ~p"/snippets", snippet: attrs)</p>
+<p>      assert redirected_to(conn) =~ ~p"/snippets/"</p>
+<p>    end</p>
+
+<p>    test "renders errors with invalid data", %{conn: conn} do</p>
+<p>      conn = post(conn, ~p"/snippets", snippet: %{})</p>
+<p>      assert html_response(conn, 200) =~ "can&#39;t be blank"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Context test structure:</li>
+</ol>
+<figure class="code"><pre><code>defmodule Snippetbox.SnippetsTest do
+<p>  use Snippetbox.DataCase</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  describe "create_snippet/2" do</p>
+<p>    test "creates snippet with valid attributes" do</p>
+<p>      user = insert(:user)</p>
+<p>      attrs = %{title: "Test", content: "Test content"}</p>
+
+<p>      assert {:ok, snippet} = Snippets.create_snippet(user, attrs)</p>
+<p>      assert snippet.title == "Test"</p>
+<p>      assert snippet.user_id == user.id</p>
+<p>    end</p>
+
+<p>    test "returns error changeset with invalid attributes" do</p>
+<p>      user = insert(:user)</p>
+<p>      assert {:error, %Ecto.Changeset{}} = Snippets.create_snippet(user, %{})</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+</details>
+
+<h3>Extension</h3>
+
+<ul>
+<li>Add property-based tests using StreamData</li>
+<li>Test edge cases (very long content, special characters)</li>
+<li>Add performance tests for bulk operations</li>
+</ul>
+
+<p>---</p>
+
+<h2>Exercise 4: Add a User Profile Page</h2>
+
+<strong>Difficulty</strong>: Medium
+<strong>Time</strong>: 45-60 minutes
+<strong>Concepts</strong>: Associations, Queries, Templates
+
+<h3>Task</h3>
+
+<p>Create a user profile page that displays information about a user and their snippets.</p>
+
+<h3>Requirements</h3>
+
+<ol>
+<li>Create a route at <code>/users/:id</code></li>
+<li>Display:</li>
+</ol>
+<p>   - Username and email</p>
+<p>   - Join date</p>
+<p>   - Total number of snippets created</p>
+<p>   - List of user's public snippets (paginated)</p>
+<p>   - User statistics (e.g., most popular snippet)</p>
+<ol>
+<li>Add authorization (users can only edit their own profile)</li>
+<li>Add a link to the profile from the navigation menu (when logged in)</li>
+</ol>
+
+<h3>Hints</h3>
+
+<details>
+<summary>Click to show hints</summary>
+
+<ol>
+<li>Add route and controller action:</li>
+</ol>
+<figure class="code"><pre><code># Router
+<p>get "/users/:id", UserController, :show</p>
+
+<h1>Controller</h1>
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  user = Accounts.get_user!(id)</p>
+<p>  snippets = Snippets.list_user_snippets(user, conn.params)</p>
+<p>  render(conn, :show, user: user, snippets: snippets)</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Add context function:</li>
+</ol>
+<figure class="code"><pre><code>def list_user_snippets(user, params) do
+<p>  Snippet</p>
+<p>  |> where(user_id: ^user.id)</p>
+<p>  |> order_by(desc: :inserted_at)</p>
+<p>  |> Repo.paginate(params)</p>
+<p>end</p>
+
+<p>def user_stats(user) do</p>
+<p>  %{</p>
+<p>    total_snippets: count_user_snippets(user),</p>
+<p>    total_views: sum_snippet_views(user),</p>
+<p>    join_date: user.inserted_at</p>
+<p>  }</p>
+<p>end</p>
+</code></pre></figure>
+
+</details>
+
+<h3>Extension</h3>
+
+<ul>
+<li>Add ability to follow/unfollow users</li>
+<li>Create a feed of followed users' snippets</li>
+<li>Add user avatars with image uploads</li>
+<li>Implement user search functionality</li>
+</ul>
+
+<p>---</p>
+
+<h2>Exercise 5: Implement Snippet Expiration Handling</h2>
+
+<strong>Difficulty</strong>: Medium-Hard
+<strong>Time</strong>: 60-90 minutes
+<strong>Concepts</strong>: DateTime, Background Jobs, Database Queries
+
+<h3>Task</h3>
+
+<p>Properly handle snippet expiration with automatic cleanup and visual indicators.</p>
+
+<h3>Requirements</h3>
+
+<ol>
+<li>Add visual indicators for expiring soon (< 24 hours)</li>
+<li>Automatically hide expired snippets from listings</li>
+<li>Create a background job to delete expired snippets</li>
+<li>Add warning when viewing snippets about to expire</li>
+<li>Allow users to extend expiration date</li>
+</ol>
+
+<h3>Hints</h3>
+
+<details>
+<summary>Click to show hints</summary>
+
+<ol>
+<li>Update queries to filter expired:</li>
+</ol>
+<figure class="code"><pre><code>def list_active_snippets(params) do
+<p>  now = DateTime.utc_now()</p>
+
+<p>  Snippet</p>
+<p>  |> where([s], is_nil(s.expires_at) or s.expires_at > ^now)</p>
+<p>  |> order_by(desc: :inserted_at)</p>
+<p>  |> Repo.paginate(params)</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Add helper to check expiration status:</li>
+</ol>
+<figure class="code"><pre><code>def expiring_soon?(snippet) do
+<p>  case snippet.expires_at do</p>
+<p>    nil -> false</p>
+<p>    expires_at -></p>
+<p>      diff = DateTime.diff(expires_at, DateTime.utc_now())</p>
+<p>      diff > 0 and diff < 86_400  # Less than 24 hours</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Create a Mix task for cleanup:</li>
+</ol>
+<figure class="code"><pre><code>defmodule Mix.Tasks.Snippetbox.CleanupExpired do
+<p>  use Mix.Task</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  @impl Mix.Task</p>
+<p>  def run(_args) do</p>
+<p>    Mix.Task.run("app.start")</p>
+<p>    Snippets.delete_expired_snippets()</p>
+<p>    Mix.shell().info("Expired snippets cleaned up")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Schedule with Oban (optional):</li>
+</ol>
+<figure class="code"><pre><code>defmodule Snippetbox.Workers.CleanupExpiredSnippets do
+<p>  use Oban.Worker, queue: :default</p>
+
+<p>  @impl Oban.Worker</p>
+<p>  def perform(_job) do</p>
+<p>    Snippetbox.Snippets.delete_expired_snippets()</p>
+<p>    :ok</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+</details>
+
+<h3>Extension</h3>
+
+<ul>
+<li>Send email notifications before expiration</li>
+<li>Create a "recently expired" view for recovery</li>
+<li>Add analytics on expiration patterns</li>
+<li>Implement premium "never expires" option</li>
+</ul>
+
+<p>---</p>
+
+<h2>Exercise 6: Add Syntax Highlighting</h2>
+
+<strong>Difficulty</strong>: Hard
+<strong>Time</strong>: 90-120 minutes
+<strong>Concepts</strong>: JavaScript Integration, LiveView, Libraries
+
+<h3>Task</h3>
+
+<p>Add syntax highlighting for code snippets with language detection.</p>
+
+<h3>Requirements</h3>
+
+<ol>
+<li>Allow users to specify programming language when creating snippet</li>
+<li>Automatically detect language if not specified</li>
+<li>Display code with proper syntax highlighting</li>
+<li>Add line numbers</li>
+<li>Add "copy to clipboard" functionality</li>
+</ol>
+
+<h3>Hints</h3>
+
+<details>
+<summary>Click to show hints</summary>
+
+<ol>
+<li>Add language field to schema:</li>
+</ol>
+<figure class="code"><pre><code>schema "snippets" do
+<p>  field :title, :string</p>
+<p>  field :content, :string</p>
+<p>  field :language, :string, default: "text"</p>
+<p>  field :expires_at, :utc_datetime</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<ol>
+<li>Use highlight.js or similar library:</li>
+</ol>
+<figure class="code"><pre><code>// app.js
+<p>import hljs from 'highlight.js';</p>
+
+<p>document.addEventListener('DOMContentLoaded', () => {</p>
+<p>  document.querySelectorAll('pre code').forEach((block) => {</p>
+<p>    hljs.highlightElement(block);</p>
+<p>  });</p>
+<p>});</p>
+</code></pre></figure>
+
+<ol>
+<li>Template with syntax highlighting:</li>
+</ol>
+<figure class="code"><pre><code><pre><code class="language-<%= @snippet.language %>"><%= @snippet.content %></code></pre>
+</code></pre></figure>
+
+<ol>
+<li>Add language selector in form:</li>
+</ol>
+<figure class="code"><pre><code><%= label f, :language %>
+<%= select f, :language, [
+<p>  {"Plain Text", "text"},</p>
+<p>  {"Elixir", "elixir"},</p>
+<p>  {"Python", "python"},</p>
+<p>  {"JavaScript", "javascript"},</p>
+<p>  {"Ruby", "ruby"}</p>
+<p>] %></p>
+</code></pre></figure>
+
+</details>
+
+<h3>Extension</h3>
+
+<ul>
+<li>Implement automatic language detection using a library</li>
+<li>Add theme switcher (light/dark syntax themes)</li>
+<li>Integrate with LiveView for real-time preview</li>
+<li>Add code formatting/prettification option</li>
+<li>Support for code diffs</li>
+</ul>
+
+<p>---</p>
+
+<h2>Bonus Exercises</h2>
+
+<h3>Exercise 7: Add Snippet Tagging</h3>
+
+<p>Allow users to add tags to snippets for better organization and discovery.</p>
+
+<strong>Features:</strong>
+<ul>
+<li>Add/remove tags to snippets</li>
+<li>Tag autocomplete</li>
+<li>Browse snippets by tag</li>
+<li>Tag cloud visualization</li>
+<li>Popular tags sidebar</li>
+</ul>
+
+<h3>Exercise 8: Implement Full-Text Search</h3>
+
+<p>Add search functionality across all snippets.</p>
+
+<strong>Features:</strong>
+<ul>
+<li>Search by title and content</li>
+<li>Search result highlighting</li>
+<li>Filter by language, date, author</li>
+<li>Search suggestions</li>
+<li>Search history</li>
+</ul>
+
+<h3>Exercise 9: Add API Endpoints</h3>
+
+<p>Create a REST API for programmatic access.</p>
+
+<strong>Features:</strong>
+<ul>
+<li>JWT authentication</li>
+<li>CRUD operations for snippets</li>
+<li>Rate limiting</li>
+<li>API documentation</li>
+<li>Versioning (v1, v2)</li>
+</ul>
+
+<h3>Exercise 10: Real-time Collaboration</h3>
+
+<p>Allow multiple users to edit a snippet simultaneously using LiveView.</p>
+
+<strong>Features:</strong>
+<ul>
+<li>Real-time cursor positions</li>
+<li>User presence indicators</li>
+<li>Conflict resolution</li>
+<li>Chat sidebar</li>
+<li>Version history with diffs</li>
+</ul>
+
+<p>---</p>
+
+<h2>Testing Your Solutions</h2>
+
+<p>For each exercise, ensure you:</p>
+
+<ol>
+<li><strong>Write tests first</strong> (TDD approach)</li>
+<li><strong>Check edge cases</strong> (empty inputs, invalid data)</li>
+<li><strong>Test authentication</strong> (logged in/out states)</li>
+<li><strong>Verify authorization</strong> (can users access what they should?)</li>
+<li><strong>Test integration</strong> (end-to-end workflows)</li>
+</ol>
+
+<p>Example test checklist:</p>
+
+<figure class="code"><pre><code># For each new feature:
+<p>☐ Unit tests for context functions</p>
+<p>☐ Controller tests for each action</p>
+<p>☐ Integration tests for workflows</p>
+<p>☐ Edge cases and error handling</p>
+<p>☐ Authorization checks</p>
+<p>☐ Performance tests (if applicable)</p>
+</code></pre></figure>
+
+<h2>Getting Unstuck</h2>
+
+<p>If you're stuck on an exercise:</p>
+
+<ol>
+<li><strong>Review relevant chapters</strong> in this book</li>
+<li><strong>Check the official docs</strong> for Phoenix and Ecto</li>
+<li><strong>Look at similar examples</strong> in open-source projects</li>
+<li><strong>Ask for help</strong> on Elixir Forum</li>
+<li><strong>Break the problem down</strong> into smaller steps</li>
+</ol>
+
+<p>Remember: Struggling is part of learning. Don't skip straight to solutions!</p>
+
+<h2>Sharing Your Work</h2>
+
+<p>Once you complete an exercise:</p>
+
+<ol>
+<li><strong>Push to GitHub</strong> - Share your code</li>
+<li><strong>Write a blog post</strong> - Explain your approach</li>
+<li><strong>Help others</strong> - Answer questions on forums</li>
+<li><strong>Iterate</strong> - Improve based on feedback</li>
+</ol>
+
+<h2>Next Steps</h2>
+
+<p>After completing these exercises, consider:</p>
+
+<ol>
+<li><strong>Building your own project</strong> - Apply all concepts</li>
+<li><strong>Contributing to open source</strong> - Help improve libraries</li>
+<li><strong>Reading others' code</strong> - Learn different approaches</li>
+<li><strong>Teaching others</strong> - Solidify your knowledge</li>
+</ol>
+
+<p>Happy coding!</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="16.00-further-reading.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
