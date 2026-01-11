@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Monitoring &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Monitoring</span>
+            </div>
+            <div>
+                &lsaquo; <a href="14.04-production-config.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="15.00-conclusion.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 14.5</div>
+        <h1>Chapter 14.5: Monitoring and Observability</h1>
+
+<p>Monitoring production applications is essential for reliability. In this chapter, we'll explore observability tools for Phoenix applications.</p>
+
+<h2>The Three Pillars</h2>
+
+<figure class="code"><pre><code>Observability
+<p>├── Logging - What happened?</p>
+<p>├── Metrics - How much/how often?</p>
+<p>└── Tracing - How long/where?</p>
+</code></pre></figure>
+
+<h2>Phoenix Dashboard</h2>
+
+<p>Phoenix LiveDashboard provides real-time monitoring:</p>
+
+<h3>Setup</h3>
+
+<figure class="code"><pre><code># mix.exs
+<p>{:phoenix_live_dashboard, "~> 0.8"}</p>
+
+<h1>router.ex</h1>
+<p>import Phoenix.LiveDashboard.Router</p>
+
+<p>scope "/" do</p>
+<p>  pipe_through [:browser, :require_admin]</p>
+<p>  live_dashboard "/dashboard",</p>
+<p>    metrics: SnippetboxWeb.Telemetry,</p>
+<p>    ecto_repos: [Snippetbox.Repo],</p>
+<p>    ecto_psql_extras_options: [long_running_queries: [threshold: "200 milliseconds"]]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Production Access</h3>
+
+<figure class="code"><pre><code># lib/snippetbox_web/router.ex
+
+<p>defp require_admin(conn, _opts) do</p>
+<p>  if conn.assigns[:current_user] && conn.assigns[:current_user].admin do</p>
+<p>    conn</p>
+<p>  else</p>
+<p>    conn</p>
+<p>    |> put_flash(:error, "Unauthorized")</p>
+<p>    |> redirect(to: ~p"/")</p>
+<p>    |> halt()</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Or with basic auth</h1>
+<p>pipeline :dashboard_auth do</p>
+<p>  plug :dashboard_basic_auth</p>
+<p>end</p>
+
+<p>defp dashboard_basic_auth(conn, _opts) do</p>
+<p>  username = System.fetch_env!("DASHBOARD_USER")</p>
+<p>  password = System.fetch_env!("DASHBOARD_PASSWORD")</p>
+<p>  Plug.BasicAuth.basic_auth(conn, username: username, password: password)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Telemetry</h2>
+
+<h3>Telemetry Module</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/telemetry.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Telemetry do</p>
+<p>  use Supervisor</p>
+<p>  import Telemetry.Metrics</p>
+
+<p>  def start_link(arg) do</p>
+<p>    Supervisor.start_link(__MODULE__, arg, name: __MODULE__)</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def init(_arg) do</p>
+<p>    children = [</p>
+<p>      {:telemetry_poller, measurements: periodic_measurements(), period: 10_000}</p>
+<p>    ]</p>
+
+<p>    Supervisor.init(children, strategy: :one_for_one)</p>
+<p>  end</p>
+
+<p>  def metrics do</p>
+<p>    [</p>
+<p>      # Phoenix Metrics</p>
+<p>      summary("phoenix.endpoint.start.system_time",</p>
+<p>        unit: {:native, :millisecond}</p>
+<p>      ),</p>
+<p>      summary("phoenix.endpoint.stop.duration",</p>
+<p>        unit: {:native, :millisecond}</p>
+<p>      ),</p>
+<p>      summary("phoenix.router_dispatch.stop.duration",</p>
+<p>        tags: [:route],</p>
+<p>        unit: {:native, :millisecond}</p>
+<p>      ),</p>
+
+<p>      # LiveView Metrics</p>
+<p>      summary("phoenix.live_view.mount.stop.duration",</p>
+<p>        unit: {:native, :millisecond},</p>
+<p>        tags: [:view]</p>
+<p>      ),</p>
+<p>      summary("phoenix.live_view.handle_event.stop.duration",</p>
+<p>        unit: {:native, :millisecond},</p>
+<p>        tags: [:view, :event]</p>
+<p>      ),</p>
+
+<p>      # Database Metrics</p>
+<p>      summary("snippetbox.repo.query.total_time",</p>
+<p>        unit: {:native, :millisecond},</p>
+<p>        description: "Total query time"</p>
+<p>      ),</p>
+<p>      summary("snippetbox.repo.query.decode_time",</p>
+<p>        unit: {:native, :millisecond}</p>
+<p>      ),</p>
+<p>      summary("snippetbox.repo.query.queue_time",</p>
+<p>        unit: {:native, :millisecond}</p>
+<p>      ),</p>
+<p>      counter("snippetbox.repo.query.count"),</p>
+
+<p>      # VM Metrics</p>
+<p>      summary("vm.memory.total", unit: {:byte, :megabyte}),</p>
+<p>      summary("vm.total_run_queue_lengths.total"),</p>
+<p>      summary("vm.total_run_queue_lengths.cpu"),</p>
+<p>      summary("vm.total_run_queue_lengths.io"),</p>
+
+<p>      # Custom Business Metrics</p>
+<p>      counter("snippetbox.snippets.created.count"),</p>
+<p>      counter("snippetbox.users.registered.count"),</p>
+<p>      summary("snippetbox.snippets.view_duration",</p>
+<p>        unit: {:native, :millisecond}</p>
+<p>      )</p>
+<p>    ]</p>
+<p>  end</p>
+
+<p>  defp periodic_measurements do</p>
+<p>    [</p>
+<p>      {__MODULE__, :measure_users_online, []},</p>
+<p>      {__MODULE__, :measure_snippets_count, []}</p>
+<p>    ]</p>
+<p>  end</p>
+
+<p>  def measure_users_online do</p>
+<p>    count = SnippetboxWeb.Presence.list("users:online") |> map_size()</p>
+<p>    :telemetry.execute([:snippetbox, :users, :online], %{count: count}, %{})</p>
+<p>  end</p>
+
+<p>  def measure_snippets_count do</p>
+<p>    count = Snippetbox.Snippets.count_snippets()</p>
+<p>    :telemetry.execute([:snippetbox, :snippets, :total], %{count: count}, %{})</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Custom Telemetry Events</h3>
+
+<figure class="code"><pre><code># Emit custom event
+<p>:telemetry.execute(</p>
+<p>  [:snippetbox, :snippets, :created],</p>
+<p>  %{count: 1},</p>
+<p>  %{language: snippet.language}</p>
+<p>)</p>
+
+<h1>In context</h1>
+<p>def create_snippet(attrs) do</p>
+<p>  result = %Snippet{}</p>
+<p>  |> Snippet.changeset(attrs)</p>
+<p>  |> Repo.insert()</p>
+
+<p>  case result do</p>
+<p>    {:ok, snippet} -></p>
+<p>      :telemetry.execute([:snippetbox, :snippets, :created], %{count: 1}, %{</p>
+<p>        language: snippet.language,</p>
+<p>        user_id: snippet.user_id</p>
+<p>      })</p>
+<p>      result</p>
+
+<p>    error -></p>
+<p>      error</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Prometheus Metrics</h2>
+
+<h3>Setup</h3>
+
+<figure class="code"><pre><code># mix.exs
+<p>{:telemetry_metrics_prometheus, "~> 1.1"}</p>
+
+<h1>application.ex</h1>
+<p>def start(_type, _args) do</p>
+<p>  children = [</p>
+<p>    SnippetboxWeb.Telemetry,</p>
+<p>    TelemetryMetricsPrometheus.Core.child_spec(</p>
+<p>      metrics: SnippetboxWeb.Telemetry.metrics()</p>
+<p>    ),</p>
+<p>    # ...</p>
+<p>  ]</p>
+<p>end</p>
+
+<h1>router.ex</h1>
+<p>get "/metrics", TelemetryMetricsPrometheus.Core, []</p>
+</code></pre></figure>
+
+<h3>Prometheus Configuration</h3>
+
+<figure class="code"><pre><code># prometheus.yml
+<p>scrape_configs:</p>
+<p>  - job_name: 'snippetbox'</p>
+<p>    static_configs:</p>
+<p>      - targets: ['app:4000']</p>
+<p>    metrics_path: '/metrics'</p>
+<p>    scrape_interval: 15s</p>
+</code></pre></figure>
+
+<h2>Structured Logging</h2>
+
+<h3>Logger Configuration</h3>
+
+<figure class="code"><pre><code># config/prod.exs
+<p>config :logger, :console,</p>
+<p>  format: {SnippetboxWeb.LogFormatter, :format},</p>
+<p>  metadata: [:request_id, :user_id, :trace_id]</p>
+</code></pre></figure>
+
+<h3>Custom Log Formatter</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/log_formatter.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.LogFormatter do</p>
+<p>  def format(level, message, timestamp, metadata) do</p>
+<p>    %{</p>
+<p>      timestamp: format_timestamp(timestamp),</p>
+<p>      level: level,</p>
+<p>      message: IO.iodata_to_binary(message),</p>
+<p>      metadata: Map.new(metadata)</p>
+<p>    }</p>
+<p>    |> Jason.encode!()</p>
+<p>    |> Kernel.<>("\n")</p>
+<p>  rescue</p>
+<p>    _ -> "#{inspect({level, message, metadata})}\n"</p>
+<p>  end</p>
+
+<p>  defp format_timestamp({date, {hour, min, sec, _ms}}) do</p>
+<p>    NaiveDateTime.from_erl!({date, {hour, min, sec}})</p>
+<p>    |> NaiveDateTime.to_iso8601()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Request Logging</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/request_logger.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RequestLogger do</p>
+<p>  require Logger</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    start = System.monotonic_time()</p>
+
+<p>    Plug.Conn.register_before_send(conn, fn conn -></p>
+<p>      stop = System.monotonic_time()</p>
+<p>      duration = System.convert_time_unit(stop - start, :native, :millisecond)</p>
+
+<p>      Logger.info("Request completed",</p>
+<p>        method: conn.method,</p>
+<p>        path: conn.request_path,</p>
+<p>        status: conn.status,</p>
+<p>        duration_ms: duration,</p>
+<p>        user_id: get_in(conn.assigns, [:current_user, :id])</p>
+<p>      )</p>
+
+<p>      conn</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Error Tracking</h2>
+
+<h3>Sentry Integration</h3>
+
+<figure class="code"><pre><code># mix.exs
+<p>{:sentry, "~> 10.0"},</p>
+<p>{:hackney, "~> 1.8"}</p>
+
+<h1>config/runtime.exs</h1>
+<p>config :sentry,</p>
+<p>  dsn: System.get_env("SENTRY_DSN"),</p>
+<p>  environment_name: config_env(),</p>
+<p>  enable_source_code_context: true,</p>
+<p>  root_source_code_paths: [File.cwd!()],</p>
+<p>  tags: %{</p>
+<p>    env: config_env()</p>
+<p>  },</p>
+<p>  included_environments: [:prod]</p>
+
+<h1>endpoint.ex</h1>
+<p>use Sentry.PlugCapture</p>
+
+<h1>error_handler.ex</h1>
+<p>def handle_errors(conn, %{kind: kind, reason: reason, stack: stack}) do</p>
+<p>  Sentry.capture_exception(</p>
+<p>    reason,</p>
+<p>    stacktrace: stack,</p>
+<p>    extra: %{</p>
+<p>      kind: kind,</p>
+<p>      path: conn.request_path,</p>
+<p>      method: conn.method</p>
+<p>    }</p>
+<p>  )</p>
+
+<p>  send_resp(conn, conn.status, "Internal Server Error")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Custom Error Context</h3>
+
+<figure class="code"><pre><code># Add context to errors
+<p>Sentry.Context.set_user_context(%{</p>
+<p>  id: user.id,</p>
+<p>  email: user.email</p>
+<p>})</p>
+
+<p>Sentry.Context.set_extra_context(%{</p>
+<p>  snippet_id: snippet.id</p>
+<p>})</p>
+
+<h1>Capture with context</h1>
+<p>Sentry.capture_message("Something went wrong", extra: %{detail: "info"})</p>
+</code></pre></figure>
+
+<h2>Distributed Tracing</h2>
+
+<h3>OpenTelemetry Setup</h3>
+
+<figure class="code"><pre><code># mix.exs
+<p>{:opentelemetry, "~> 1.3"},</p>
+<p>{:opentelemetry_api, "~> 1.2"},</p>
+<p>{:opentelemetry_exporter, "~> 1.6"},</p>
+<p>{:opentelemetry_phoenix, "~> 1.1"},</p>
+<p>{:opentelemetry_ecto, "~> 1.1"}</p>
+
+<h1>application.ex</h1>
+<p>def start(_type, _args) do</p>
+<p>  OpentelemetryPhoenix.setup()</p>
+<p>  OpentelemetryEcto.setup([:snippetbox, :repo])</p>
+
+<p>  # ...</p>
+<p>end</p>
+
+<h1>config/runtime.exs</h1>
+<p>config :opentelemetry,</p>
+<p>  span_processor: :batch,</p>
+<p>  traces_exporter: :otlp</p>
+
+<p>config :opentelemetry_exporter,</p>
+<p>  otlp_protocol: :http_protobuf,</p>
+<p>  otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT")</p>
+</code></pre></figure>
+
+<h3>Custom Spans</h3>
+
+<figure class="code"><pre><code>require OpenTelemetry.Tracer, as: Tracer
+
+<p>def process_snippet(snippet) do</p>
+<p>  Tracer.with_span "process_snippet" do</p>
+<p>    Tracer.set_attribute("snippet.id", snippet.id)</p>
+<p>    Tracer.set_attribute("snippet.language", snippet.language)</p>
+
+<p>    result = do_processing(snippet)</p>
+
+<p>    Tracer.add_event("processing_complete", %{})</p>
+<p>    result</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Health Checks and Readiness</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/health_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.HealthController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  # Liveness: Is the app running?</p>
+<p>  def live(conn, _params) do</p>
+<p>    json(conn, %{status: "ok"})</p>
+<p>  end</p>
+
+<p>  # Readiness: Can the app serve traffic?</p>
+<p>  def ready(conn, _params) do</p>
+<p>    checks = [</p>
+<p>      {:database, check_database()},</p>
+<p>      {:migrations, check_migrations()}</p>
+<p>    ]</p>
+
+<p>    if Enum.all?(checks, fn {_, status} -> status == :ok end) do</p>
+<p>      json(conn, %{status: "ready", checks: Map.new(checks)})</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_status(:service_unavailable)</p>
+<p>      |> json(%{status: "not_ready", checks: Map.new(checks)})</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_database do</p>
+<p>    case Ecto.Adapters.SQL.query(Snippetbox.Repo, "SELECT 1", []) do</p>
+<p>      {:ok, _} -> :ok</p>
+<p>      _ -> :error</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_migrations do</p>
+<p>    repo = Snippetbox.Repo</p>
+<p>    migrations = Ecto.Migrator.migrations(repo)</p>
+
+<p>    if Enum.all?(migrations, fn {status, _, _} -> status == :up end) do</p>
+<p>      :ok</p>
+<p>    else</p>
+<p>      :pending</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Alerting</h2>
+
+<h3>Alert Rules</h3>
+
+<figure class="code"><pre><code># prometheus_alerts.yml
+<p>groups:</p>
+<p>  - name: snippetbox</p>
+<p>    rules:</p>
+<p>      - alert: HighErrorRate</p>
+<p>        expr: rate(phoenix_endpoint_stop_duration_count{status=~"5.."}[5m]) > 0.1</p>
+<p>        for: 5m</p>
+<p>        labels:</p>
+<p>          severity: critical</p>
+<p>        annotations:</p>
+<p>          summary: High error rate detected</p>
+
+<p>      - alert: SlowRequests</p>
+<p>        expr: histogram_quantile(0.95, rate(phoenix_endpoint_stop_duration_bucket[5m])) > 1000</p>
+<p>        for: 10m</p>
+<p>        labels:</p>
+<p>          severity: warning</p>
+<p>        annotations:</p>
+<p>          summary: 95th percentile latency above 1s</p>
+
+<p>      - alert: DatabaseConnectionsLow</p>
+<p>        expr: snippetbox_repo_pool_size - snippetbox_repo_pool_in_use < 2</p>
+<p>        for: 5m</p>
+<p>        labels:</p>
+<p>          severity: warning</p>
+<p>        annotations:</p>
+<p>          summary: Running low on database connections</p>
+</code></pre></figure>
+
+<h2>Monitoring Stack</h2>
+
+<h3>Docker Compose</h3>
+
+<figure class="code"><pre><code># docker-compose.monitoring.yml
+<p>version: "3.8"</p>
+
+<p>services:</p>
+<p>  prometheus:</p>
+<p>    image: prom/prometheus:latest</p>
+<p>    volumes:</p>
+<p>      - ./prometheus.yml:/etc/prometheus/prometheus.yml</p>
+<p>    ports:</p>
+<p>      - "9090:9090"</p>
+
+<p>  grafana:</p>
+<p>    image: grafana/grafana:latest</p>
+<p>    ports:</p>
+<p>      - "3000:3000"</p>
+<p>    volumes:</p>
+<p>      - grafana-data:/var/lib/grafana</p>
+
+<p>  jaeger:</p>
+<p>    image: jaegertracing/all-in-one:latest</p>
+<p>    ports:</p>
+<p>      - "16686:16686"</p>
+<p>      - "4317:4317"</p>
+
+<p>volumes:</p>
+<p>  grafana-data:</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Observable Side Effects</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Monitoring makes side effects observable:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Function with side effect
+<p>def create_snippet(attrs) do</p>
+<p>  Repo.insert(changeset)  # Side effect</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Observable function</p>
+<p>def create_snippet(attrs) do</p>
+<p>  :telemetry.span([:snippetbox, :snippet, :create], %{}, fn -></p>
+<p>    result = Repo.insert(changeset)</p>
+<p>    {result, %{success: match?({:ok, _}, result)}}</p>
+<p>  end)</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Now we can observe: timing, success rate, frequency</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Telemetry wraps side effects with metadata for observability.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Phoenix LiveDashboard</li>
+<li>Telemetry metrics</li>
+<li>Prometheus integration</li>
+<li>Structured logging</li>
+<li>Error tracking with Sentry</li>
+<li>Distributed tracing with OpenTelemetry</li>
+<li>Health checks and readiness probes</li>
+<li>Alerting strategies</li>
+</ul>
+
+<p>This completes the Deployment chapter. You now have the knowledge to deploy and monitor Phoenix applications in production.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="14.04-production-config.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="15.00-conclusion.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

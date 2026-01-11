@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Database Migrations &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Database Migrations</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.01-setting-up-postgresql.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.03-ecto-schemas.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.2</div>
+        <h1>Chapter 4.2: Creating Database Migrations</h1>
+
+<p>Migrations are versioned scripts that modify your database schema. In this chapter, we'll learn how to create and manage migrations for our snippets table.</p>
+
+<h2>What Are Migrations?</h2>
+
+<p>Migrations provide:</p>
+
+<ul>
+<li><strong>Version control</strong> for database schema</li>
+<li><strong>Reproducibility</strong> across environments</li>
+<li><strong>Collaboration</strong> among team members</li>
+<li><strong>Rollback</strong> capability when things go wrong</li>
+</ul>
+
+<h2>Creating Your First Migration</h2>
+
+<h3>Generate Migration</h3>
+
+<figure class="code"><pre><code>$ mix ecto.gen.migration create_snippets
+<ul>
+<li>creating priv/repo/migrations/20240115100000_create_snippets.exs</li>
+</ul>
+</code></pre></figure>
+
+<p>The filename includes a timestamp for ordering.</p>
+
+<h3>Write the Migration</h3>
+
+<figure class="code"><figcaption>File: priv/repo/migrations/20240115100000_create_snippets.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Repo.Migrations.CreateSnippets do</p>
+<p>  use Ecto.Migration</p>
+
+<p>  def change do</p>
+<p>    create table(:snippets) do</p>
+<p>      add :title, :string, null: false</p>
+<p>      add :content, :text, null: false</p>
+<p>      add :expires_at, :utc_datetime</p>
+
+<p>      timestamps(type: :utc_datetime)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Run the Migration</h3>
+
+<figure class="code"><pre><code>$ mix ecto.migrate
+<p>[info] == Running 20240115100000 Snippetbox.Repo.Migrations.CreateSnippets.change/0 forward</p>
+<p>[info] create table snippets</p>
+<p>[info] == Migrated 20240115100000 in 0.0s</p>
+</code></pre></figure>
+
+<h2>Migration DSL</h2>
+
+<h3>Creating Tables</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  create table(:snippets) do</p>
+<p>    add :title, :string, null: false</p>
+<p>    add :content, :text</p>
+<p>    add :views, :integer, default: 0</p>
+<p>    add :is_public, :boolean, default: true</p>
+<p>    add :expires_at, :utc_datetime</p>
+
+<p>    timestamps()  # Adds inserted_at and updated_at</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Column Types</h3>
+
+<p>| Elixir Type | PostgreSQL Type | Description |</p>
+<p>|-------------|-----------------|-------------|</p>
+<p>| <code>:string</code> | <code>varchar(255)</code> | Short text |</p>
+<p>| <code>:text</code> | <code>text</code> | Unlimited text |</p>
+<p>| <code>:integer</code> | <code>integer</code> | 32-bit integer |</p>
+<p>| <code>:bigint</code> | <code>bigint</code> | 64-bit integer |</p>
+<p>| <code>:float</code> | <code>float</code> | Floating point |</p>
+<p>| <code>:decimal</code> | <code>decimal</code> | Exact decimal |</p>
+<p>| <code>:boolean</code> | <code>boolean</code> | True/false |</p>
+<p>| <code>:date</code> | <code>date</code> | Date only |</p>
+<p>| <code>:time</code> | <code>time</code> | Time only |</p>
+<p>| <code>:naive_datetime</code> | <code>timestamp</code> | Date+time, no timezone |</p>
+<p>| <code>:utc_datetime</code> | <code>timestamptz</code> | Date+time with timezone |</p>
+<p>| <code>:uuid</code> | <code>uuid</code> | UUID |</p>
+<p>| <code>:binary</code> | <code>bytea</code> | Binary data |</p>
+<p>| <code>:map</code> | <code>jsonb</code> | JSON data |</p>
+<p>| <code>{:array, :string}</code> | <code>varchar[]</code> | Array |</p>
+
+<h3>Column Options</h3>
+
+<figure class="code"><pre><code>add :email, :string,
+<p>  null: false,          # NOT NULL constraint</p>
+<p>  size: 100,            # varchar(100)</p>
+<p>  default: "unknown"    # DEFAULT value</p>
+
+<p>add :age, :integer,</p>
+<p>  default: fragment("18")  # SQL fragment for default</p>
+
+<p>add :status, :string,</p>
+<p>  default: "draft"</p>
+
+<p>add :metadata, :map,</p>
+<p>  default: %{}</p>
+</code></pre></figure>
+
+<h3>Primary Keys</h3>
+
+<figure class="code"><pre><code># Default: bigserial (auto-incrementing bigint)
+<p>create table(:snippets) do</p>
+<p>  # id is added automatically</p>
+<p>end</p>
+
+<h1>UUID primary key</h1>
+<p>create table(:snippets, primary_key: false) do</p>
+<p>  add :id, :binary_id, primary_key: true</p>
+<p>  # ...</p>
+<p>end</p>
+
+<h1>Composite primary key</h1>
+<p>create table(:snippet_tags, primary_key: false) do</p>
+<p>  add :snippet_id, references(:snippets), primary_key: true</p>
+<p>  add :tag_id, references(:tags), primary_key: true</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Foreign Keys</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  create table(:snippets) do</p>
+<p>    add :title, :string</p>
+<p>    add :user_id, references(:users, on_delete: :delete_all)</p>
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  create index(:snippets, [:user_id])</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Foreign key options:</p>
+<ul>
+<li><code>:nothing</code> - Do nothing (default)</li>
+<li><code>:delete_all</code> - Cascade delete</li>
+<li><code>:nilify_all</code> - Set to NULL</li>
+<li><code>:restrict</code> - Prevent deletion</li>
+</ul>
+
+<h3>Indexes</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  create table(:snippets) do</p>
+<p>    add :title, :string</p>
+<p>    add :slug, :string</p>
+<p>    add :user_id, references(:users)</p>
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  # Simple index</p>
+<p>  create index(:snippets, [:user_id])</p>
+
+<p>  # Unique index</p>
+<p>  create unique_index(:snippets, [:slug])</p>
+
+<p>  # Composite index</p>
+<p>  create index(:snippets, [:user_id, :inserted_at])</p>
+
+<p>  # Partial index</p>
+<p>  create index(:snippets, [:expires_at],</p>
+<p>    where: "expires_at IS NOT NULL",</p>
+<p>    name: :snippets_expiring_index</p>
+<p>  )</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Modifying Tables</h2>
+
+<h3>Adding Columns</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  alter table(:snippets) do</p>
+<p>    add :language, :string, default: "text"</p>
+<p>    add :views_count, :integer, default: 0</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Removing Columns</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  alter table(:snippets) do</p>
+<p>    remove :deprecated_field</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>For reversible removal (if you need data on rollback):</p>
+
+<figure class="code"><pre><code>def change do
+<p>  alter table(:snippets) do</p>
+<p>    remove :language, :string, default: "text"  # Include type for rollback</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Modifying Columns</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  alter table(:snippets) do</p>
+<p>    modify :content, :text, from: :string  # Change type</p>
+<p>    modify :title, :string, null: false, from: {:string, null: true}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Renaming</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  # Rename table</p>
+<p>  rename table(:posts), to: table(:snippets)</p>
+
+<p>  # Rename column</p>
+<p>  rename table(:snippets), :body, to: :content</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Up and Down Functions</h2>
+
+<p>For non-reversible changes, use <code>up</code> and <code>down</code>:</p>
+
+<figure class="code"><pre><code>def up do
+<p>  execute """</p>
+<p>  ALTER TABLE snippets</p>
+<p>  ADD CONSTRAINT check_title_length</p>
+<p>  CHECK (char_length(title) >= 3)</p>
+<p>  """</p>
+<p>end</p>
+
+<p>def down do</p>
+<p>  execute """</p>
+<p>  ALTER TABLE snippets</p>
+<p>  DROP CONSTRAINT check_title_length</p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Running Raw SQL</h2>
+
+<figure class="code"><pre><code>def change do
+<p>  # Execute SQL</p>
+<p>  execute "CREATE EXTENSION IF NOT EXISTS pg_trgm"</p>
+
+<p>  # With up/down</p>
+<p>  execute(</p>
+<p>    "CREATE INDEX snippets_title_trgm ON snippets USING gin(title gin_trgm_ops)",</p>
+<p>    "DROP INDEX snippets_title_trgm"</p>
+<p>  )</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Migration Commands</h2>
+
+<figure class="code"><pre><code># Run pending migrations
+<p>$ mix ecto.migrate</p>
+
+<h1>Rollback last migration</h1>
+<p>$ mix ecto.rollback</p>
+
+<h1>Rollback multiple migrations</h1>
+<p>$ mix ecto.rollback --step 3</p>
+
+<h1>Rollback to specific version</h1>
+<p>$ mix ecto.rollback --to 20240115100000</p>
+
+<h1>Check migration status</h1>
+<p>$ mix ecto.migrations</p>
+
+<h1>Reset database (drop + create + migrate)</h1>
+<p>$ mix ecto.reset</p>
+
+<h1>Setup database (create + migrate + seed)</h1>
+<p>$ mix ecto.setup</p>
+</code></pre></figure>
+
+<h2>Complete Migration Example</h2>
+
+<figure class="code"><figcaption>File: priv/repo/migrations/20240115100000_create_snippets.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Repo.Migrations.CreateSnippets do</p>
+<p>  use Ecto.Migration</p>
+
+<p>  def change do</p>
+<p>    # Create snippets table</p>
+<p>    create table(:snippets) do</p>
+<p>      add :title, :string, null: false, size: 100</p>
+<p>      add :content, :text, null: false</p>
+<p>      add :language, :string, default: "text"</p>
+<p>      add :expires_at, :utc_datetime</p>
+<p>      add :is_public, :boolean, default: true</p>
+<p>      add :views_count, :integer, default: 0</p>
+<p>      add :user_id, references(:users, on_delete: :nilify_all)</p>
+
+<p>      timestamps(type: :utc_datetime)</p>
+<p>    end</p>
+
+<p>    # Indexes</p>
+<p>    create index(:snippets, [:user_id])</p>
+<p>    create index(:snippets, [:inserted_at])</p>
+<p>    create index(:snippets, [:expires_at], where: "expires_at IS NOT NULL")</p>
+
+<p>    # Unique slug would go here if we had one</p>
+<p>    # create unique_index(:snippets, [:slug])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Migration Best Practices</h2>
+
+<h3>1. Make Migrations Reversible</h3>
+
+<figure class="code"><pre><code># Good: Reversible
+<p>def change do</p>
+<p>  add :column, :string</p>
+<p>end</p>
+
+<h1>When not reversible, provide both directions</h1>
+<p>def up do</p>
+<p>  execute "CREATE EXTENSION ..."</p>
+<p>end</p>
+
+<p>def down do</p>
+<p>  execute "DROP EXTENSION ..."</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>2. Don't Modify Existing Migrations</h3>
+
+<p>Once a migration runs in production, create a new migration for changes.</p>
+
+<h3>3. Keep Migrations Small</h3>
+
+<p>One logical change per migration makes debugging easier.</p>
+
+<h3>4. Add Indexes for Foreign Keys</h3>
+
+<figure class="code"><pre><code>add :user_id, references(:users)
+<p>create index(:snippets, [:user_id])  # Don't forget!</p>
+</code></pre></figure>
+
+<h3>5. Consider Null Constraints</h3>
+
+<figure class="code"><pre><code># Be explicit about nullability
+<p>add :required_field, :string, null: false</p>
+<p>add :optional_field, :string  # null: true is default</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Migrations as Transformations</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Migrations are functions that transform database state:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> State₀ --migration₁--> State₁ --migration₂--> State₂
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each migration is a reversible transformation:</p>
+<ul>
+<li><code>up</code>: Transform forward (State₀ → State₁)</li>
+<li><code>down</code>: Transform backward (State₁ → State₀)</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The <code>change/0</code> function is special - Ecto automatically derives the reverse transformation when possible.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto_sql/Ecto.Migration.html">Ecto Migrations</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating migrations with <code>mix ecto.gen.migration</code></li>
+<li>Table creation with columns and constraints</li>
+<li>Column types and options</li>
+<li>Foreign keys and indexes</li>
+<li>Modifying existing tables</li>
+<li>Running and rolling back migrations</li>
+</ul>
+
+<p>In the next chapter, we'll create Ecto schemas to map our database tables to Elixir structs.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Migration Locking</h3>
+
+<p>Ecto uses advisory locks to prevent concurrent migrations:</p>
+
+<figure class="code"><pre><code>config :snippetbox, Snippetbox.Repo,
+<p>  migration_lock: :pg_advisory_lock  # Default for PostgreSQL</p>
+</code></pre></figure>
+
+<h3>Data Migrations</h3>
+
+<p>For data migrations, use Ecto directly:</p>
+
+<figure class="code"><pre><code>def up do
+<p>  # Add column</p>
+<p>  alter table(:snippets) do</p>
+<p>    add :slug, :string</p>
+<p>  end</p>
+
+<p>  flush()  # Ensure schema change is applied</p>
+
+<p>  # Migrate data</p>
+<p>  execute """</p>
+<p>  UPDATE snippets</p>
+<p>  SET slug = lower(replace(title, ' ', '-'))</p>
+<p>  """</p>
+
+<p>  # Add constraint after data migration</p>
+<p>  alter table(:snippets) do</p>
+<p>    modify :slug, :string, null: false</p>
+<p>  end</p>
+
+<p>  create unique_index(:snippets, [:slug])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Testing Migrations</h3>
+
+<figure class="code"><pre><code># Test migrate and rollback
+<p>$ mix ecto.migrate</p>
+<p>$ mix ecto.rollback</p>
+<p>$ mix ecto.migrate</p>
+</code></pre></figure>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.01-setting-up-postgresql.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.03-ecto-schemas.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

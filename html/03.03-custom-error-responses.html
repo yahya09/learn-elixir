@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Custom Error Responses &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Custom Error Responses</span>
+            </div>
+            <div>
+                &lsaquo; <a href="03.02-environment-variables.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="03.04-error-pages.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 3.3</div>
+        <h1>Chapter 3.3: Custom Error Responses</h1>
+
+<p>Errors happen. Users visit pages that don't exist, submit invalid data, or encounter server problems. In this chapter, we'll learn how Phoenix handles errors and how to customize error responses.</p>
+
+<h2>How Phoenix Handles Errors</h2>
+
+<p>Phoenix converts exceptions to HTTP responses through the error handling pipeline:</p>
+
+<figure class="code"><pre><code>Exception Raised
+<p>      ↓</p>
+<p>Phoenix.Endpoint catches it</p>
+<p>      ↓</p>
+<p>Converts to appropriate status code</p>
+<p>      ↓</p>
+<p>Renders error view (ErrorHTML or ErrorJSON)</p>
+<p>      ↓</p>
+<p>Returns response to client</p>
+</code></pre></figure>
+
+<h2>Default Error Configuration</h2>
+
+<p>Error handling is configured in your endpoint:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Endpoint do</p>
+<p>  use Phoenix.Endpoint, otp_app: :snippetbox</p>
+
+<p>  # ... other plugs ...</p>
+
+<p>  plug Plug.RequestId</p>
+<p>  plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]</p>
+
+<p>  # Error handling is configured here</p>
+<p>  # (via render_errors in config)</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  render_errors: [</p>
+<p>    formats: [html: SnippetboxWeb.ErrorHTML, json: SnippetboxWeb.ErrorJSON],</p>
+<p>    layout: false</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h2>Common HTTP Errors</h2>
+
+<p>Phoenix maps these exceptions to status codes:</p>
+
+<p>| Exception | Status Code | Meaning |</p>
+<p>|-----------|-------------|---------|</p>
+<p>| <code>Ecto.NoResultsError</code> | 404 | Record not found |</p>
+<p>| <code>Phoenix.Router.NoRouteError</code> | 404 | Route not found |</p>
+<p>| <code>Phoenix.ActionClauseError</code> | 400 | Bad parameters |</p>
+<p>| <code>Ecto.Query.CastError</code> | 400 | Invalid query value |</p>
+<p>| <code>Plug.CSRFProtection.InvalidCSRFTokenError</code> | 403 | Invalid CSRF token |</p>
+<p>| Any other exception | 500 | Server error |</p>
+
+<h2>The Error HTML Module</h2>
+
+<p>Phoenix generates a basic error view:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/error_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  # If you want to customize error pages, create templates:</p>
+<p>  # - error_html/404.html.heex</p>
+<p>  # - error_html/500.html.heex</p>
+
+<p>  embed_templates "error_html/*"</p>
+
+<p>  # Default fallback for any status code</p>
+<p>  def render(template, _assigns) do</p>
+<p>    Phoenix.Controller.status_message_from_template(template)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The default <code>render/2</code> function returns status messages like "Not Found" or "Internal Server Error".</p>
+
+<h2>Creating Custom Error Templates</h2>
+
+<h3>404 Page (Not Found)</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/error_html/404.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title>Page Not Found - Snippetbox</title></p>
+<p>  <style></p>
+<p>    body {</p>
+<p>      font-family: system-ui, sans-serif;</p>
+<p>      display: flex;</p>
+<p>      align-items: center;</p>
+<p>      justify-content: center;</p>
+<p>      min-height: 100vh;</p>
+<p>      margin: 0;</p>
+<p>      background: #f9fafb;</p>
+<p>    }</p>
+<p>    .error-container {</p>
+<p>      text-align: center;</p>
+<p>      padding: 2rem;</p>
+<p>    }</p>
+<p>    h1 {</p>
+<p>      font-size: 6rem;</p>
+<p>      margin: 0;</p>
+<p>      color: #4f46e5;</p>
+<p>    }</p>
+<p>    h2 {</p>
+<p>      font-size: 1.5rem;</p>
+<p>      color: #374151;</p>
+<p>      margin: 1rem 0;</p>
+<p>    }</p>
+<p>    p {</p>
+<p>      color: #6b7280;</p>
+<p>      margin-bottom: 2rem;</p>
+<p>    }</p>
+<p>    a {</p>
+<p>      color: #4f46e5;</p>
+<p>      text-decoration: none;</p>
+<p>      padding: 0.75rem 1.5rem;</p>
+<p>      border: 2px solid #4f46e5;</p>
+<p>      border-radius: 6px;</p>
+<p>    }</p>
+<p>    a:hover {</p>
+<p>      background: #4f46e5;</p>
+<p>      color: white;</p>
+<p>    }</p>
+<p>  </style></p>
+</head>
+<body>
+<p>  <div class="error-container"></p>
+<p>    <h1>404</h1></p>
+<p>    <h2>Page Not Found</h2></p>
+<p>    <p>Sorry, the page you're looking for doesn't exist or has been moved.</p></p>
+<p>    <a href="/">Go Home</a></p>
+<p>  </div></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h3>500 Page (Server Error)</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/error_html/500.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title>Server Error - Snippetbox</title></p>
+<p>  <style></p>
+<p>    body {</p>
+<p>      font-family: system-ui, sans-serif;</p>
+<p>      display: flex;</p>
+<p>      align-items: center;</p>
+<p>      justify-content: center;</p>
+<p>      min-height: 100vh;</p>
+<p>      margin: 0;</p>
+<p>      background: #f9fafb;</p>
+<p>    }</p>
+<p>    .error-container {</p>
+<p>      text-align: center;</p>
+<p>      padding: 2rem;</p>
+<p>    }</p>
+<p>    h1 {</p>
+<p>      font-size: 6rem;</p>
+<p>      margin: 0;</p>
+<p>      color: #ef4444;</p>
+<p>    }</p>
+<p>    h2 {</p>
+<p>      font-size: 1.5rem;</p>
+<p>      color: #374151;</p>
+<p>      margin: 1rem 0;</p>
+<p>    }</p>
+<p>    p {</p>
+<p>      color: #6b7280;</p>
+<p>      margin-bottom: 2rem;</p>
+<p>    }</p>
+<p>    a {</p>
+<p>      color: #4f46e5;</p>
+<p>      text-decoration: none;</p>
+<p>      padding: 0.75rem 1.5rem;</p>
+<p>      border: 2px solid #4f46e5;</p>
+<p>      border-radius: 6px;</p>
+<p>    }</p>
+<p>    a:hover {</p>
+<p>      background: #4f46e5;</p>
+<p>      color: white;</p>
+<p>    }</p>
+<p>  </style></p>
+</head>
+<body>
+<p>  <div class="error-container"></p>
+<p>    <h1>500</h1></p>
+<p>    <h2>Something Went Wrong</h2></p>
+<p>    <p>We're sorry, but something went wrong on our end. Please try again later.</p></p>
+<p>    <a href="/">Go Home</a></p>
+<p>  </div></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h2>Error JSON Module</h2>
+
+<p>For API responses:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/error_json.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorJSON do</p>
+<p>  @moduledoc """</p>
+<p>  JSON error responses for API endpoints.</p>
+<p>  """</p>
+
+<p>  # Customize specific errors</p>
+<p>  def render("404.json", _assigns) do</p>
+<p>    %{</p>
+<p>      error: %{</p>
+<p>        status: 404,</p>
+<p>        message: "Resource not found",</p>
+<p>        code: "not_found"</p>
+<p>      }</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def render("422.json", %{changeset: changeset}) do</p>
+<p>    %{</p>
+<p>      error: %{</p>
+<p>        status: 422,</p>
+<p>        message: "Validation failed",</p>
+<p>        code: "validation_error",</p>
+<p>        details: format_changeset_errors(changeset)</p>
+<p>      }</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def render("500.json", _assigns) do</p>
+<p>    %{</p>
+<p>      error: %{</p>
+<p>        status: 500,</p>
+<p>        message: "Internal server error",</p>
+<p>        code: "server_error"</p>
+<p>      }</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  # Fallback for any other status</p>
+<p>  def render(template, _assigns) do</p>
+<p>    status = status_from_template(template)</p>
+<p>    %{</p>
+<p>      error: %{</p>
+<p>        status: status,</p>
+<p>        message: Phoenix.Controller.status_message_from_template(template),</p>
+<p>        code: code_from_status(status)</p>
+<p>      }</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  defp status_from_template(template) do</p>
+<p>    template</p>
+<p>    |> String.replace(".json", "")</p>
+<p>    |> String.to_integer()</p>
+<p>  end</p>
+
+<p>  defp code_from_status(400), do: "bad_request"</p>
+<p>  defp code_from_status(401), do: "unauthorized"</p>
+<p>  defp code_from_status(403), do: "forbidden"</p>
+<p>  defp code_from_status(404), do: "not_found"</p>
+<p>  defp code_from_status(422), do: "unprocessable_entity"</p>
+<p>  defp code_from_status(_), do: "error"</p>
+
+<p>  defp format_changeset_errors(changeset) do</p>
+<p>    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} -></p>
+<p>      Regex.replace(~r"%{(\w+)}", msg, fn _, key -></p>
+<p>        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()</p>
+<p>      end)</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Returning Errors from Controllers</h2>
+
+<h3>Using put_status and render</h3>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  case Snippets.get_snippet(id) do</p>
+<p>    nil -></p>
+<p>      conn</p>
+<p>      |> put_status(:not_found)</p>
+<p>      |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>      |> render(:"404")</p>
+
+<p>    snippet -></p>
+<p>      render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Using Exceptions</h3>
+
+<p>Let Phoenix handle the conversion:</p>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  # Raises Ecto.NoResultsError → 404</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Custom Exceptions</h3>
+
+<p>Define your own exceptions:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/errors.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.NotFoundError do</p>
+<p>  defexception [:message, plug_status: 404]</p>
+
+<p>  def exception(opts) do</p>
+<p>    message = Keyword.get(opts, :message, "Resource not found")</p>
+<p>    %__MODULE__{message: message}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defmodule SnippetboxWeb.UnauthorizedError do</p>
+<p>  defexception [:message, plug_status: 401]</p>
+
+<p>  def exception(opts) do</p>
+<p>    message = Keyword.get(opts, :message, "Authentication required")</p>
+<p>    %__MODULE__{message: message}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defmodule SnippetboxWeb.ForbiddenError do</p>
+<p>  defexception [:message, plug_status: 403]</p>
+
+<p>  def exception(opts) do</p>
+<p>    message = Keyword.get(opts, :message, "Access denied")</p>
+<p>    %__MODULE__{message: message}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Use in controllers:</p>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+
+<p>  unless can_view?(conn.assigns.current_user, snippet) do</p>
+<p>    raise SnippetboxWeb.ForbiddenError,</p>
+<p>      message: "You don't have permission to view this snippet"</p>
+<p>  end</p>
+
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Error Handling with Fallback Controllers</h2>
+
+<p>For APIs, use a fallback controller to handle errors consistently:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/fallback_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.FallbackController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  # Handle Ecto changeset errors</p>
+<p>  def call(conn, {:error, %Ecto.Changeset{} = changeset}) do</p>
+<p>    conn</p>
+<p>    |> put_status(:unprocessable_entity)</p>
+<p>    |> put_view(json: SnippetboxWeb.ErrorJSON)</p>
+<p>    |> render("422.json", changeset: changeset)</p>
+<p>  end</p>
+
+<p>  # Handle not found</p>
+<p>  def call(conn, {:error, :not_found}) do</p>
+<p>    conn</p>
+<p>    |> put_status(:not_found)</p>
+<p>    |> put_view(json: SnippetboxWeb.ErrorJSON)</p>
+<p>    |> render("404.json")</p>
+<p>  end</p>
+
+<p>  # Handle unauthorized</p>
+<p>  def call(conn, {:error, :unauthorized}) do</p>
+<p>    conn</p>
+<p>    |> put_status(:unauthorized)</p>
+<p>    |> put_view(json: SnippetboxWeb.ErrorJSON)</p>
+<p>    |> render("401.json")</p>
+<p>  end</p>
+
+<p>  # Handle forbidden</p>
+<p>  def call(conn, {:error, :forbidden}) do</p>
+<p>    conn</p>
+<p>    |> put_status(:forbidden)</p>
+<p>    |> put_view(json: SnippetboxWeb.ErrorJSON)</p>
+<p>    |> render("403.json")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Use in API controllers:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/api/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.API.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  action_fallback SnippetboxWeb.FallbackController</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    with {:ok, snippet} <- Snippets.fetch_snippet(id) do</p>
+<p>      json(conn, %{data: snippet})</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"snippet" => params}) do</p>
+<p>    with {:ok, snippet} <- Snippets.create_snippet(params) do</p>
+<p>      conn</p>
+<p>      |> put_status(:created)</p>
+<p>      |> json(%{data: snippet})</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The context returns tuples:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>def fetch_snippet(id) do</p>
+<p>  case Repo.get(Snippet, id) do</p>
+<p>    nil -> {:error, :not_found}</p>
+<p>    snippet -> {:ok, snippet}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>def create_snippet(attrs) do</p>
+<p>  %Snippet{}</p>
+<p>  |> Snippet.changeset(attrs)</p>
+<p>  |> Repo.insert()</p>
+<p>  # Returns {:ok, snippet} or {:error, changeset}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Debug vs Production Errors</h2>
+
+<p>Phoenix shows detailed errors in development:</p>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  debug_errors: true,  # Show detailed error page</p>
+<p>  code_reloader: true</p>
+</code></pre></figure>
+
+<p>In production, errors are generic:</p>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  debug_errors: false  # Show custom error pages</p>
+</code></pre></figure>
+
+<h2>Handling Specific Exceptions</h2>
+
+<p>Customize handling for specific exceptions:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/error_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "error_html/*"</p>
+
+<p>  # Custom template for specific errors</p>
+<p>  def render("404.html", assigns) do</p>
+<p>    render("404.html", assigns)</p>
+<p>  end</p>
+
+<p>  def render("500.html", assigns) do</p>
+<p>    render("500.html", assigns)</p>
+<p>  end</p>
+
+<p>  # Access the reason in templates if needed</p>
+<p>  def render(template, %{reason: reason} = assigns) do</p>
+<p>    # Log the actual error</p>
+<p>    require Logger</p>
+<p>    Logger.error("Error: #{inspect(reason)}")</p>
+
+<p>    # Render generic page</p>
+<p>    render_generic(template, assigns)</p>
+<p>  end</p>
+
+<p>  def render(template, assigns) do</p>
+<p>    render_generic(template, assigns)</p>
+<p>  end</p>
+
+<p>  defp render_generic(template, _assigns) do</p>
+<p>    Phoenix.Controller.status_message_from_template(template)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pattern Matching for Error Handling</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix uses pattern matching to route errors to handlers:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> def call(conn, {:error, :not_found}), do: render_404(conn)
+<p>def call(conn, {:error, :unauthorized}), do: render_401(conn)</p>
+<p>def call(conn, {:error, %Ecto.Changeset{}}), do: render_422(conn)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is cleaner than imperative error checking:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Imperative
+<p>if isinstance(error, NotFoundError):</p>
+<p>    return render_404()</p>
+<p>elif isinstance(error, UnauthorizedError):</p>
+<p>    return render_401()</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Pattern matching:</p>
+<ul>
+<li><strong>Declarative</strong>: Express what to do for each case</li>
+<li><strong>Exhaustive</strong>: Compiler warns about unhandled cases</li>
+<li><strong>Extensible</strong>: Add new cases without changing existing code</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/elixir/Kernel.SpecialForms.html#with/1">With Special Form</a></li>
+<li><a href="https://elixir-lang.org/getting-started/try-catch-and-rescue.html">Error Handling in Elixir</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How Phoenix handles errors</li>
+<li>Creating custom 404 and 500 pages</li>
+<li>Error JSON responses for APIs</li>
+<li>Using exceptions with custom status codes</li>
+<li>Fallback controllers for consistent API errors</li>
+<li>Debug vs production error display</li>
+</ul>
+
+<p>In the next chapter, we'll create more sophisticated custom error pages.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Testing Error Pages</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/error_html_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorHTMLTest do</p>
+<p>  use SnippetboxWeb.ConnCase, async: true</p>
+
+<p>  test "renders 404.html" do</p>
+<p>    assert render_to_string(SnippetboxWeb.ErrorHTML, "404.html", []) =~</p>
+<p>           "Page Not Found"</p>
+<p>  end</p>
+
+<p>  test "renders 500.html" do</p>
+<p>    assert render_to_string(SnippetboxWeb.ErrorHTML, "500.html", []) =~</p>
+<p>           "Something Went Wrong"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Rails</strong>:
+<figure class="code"><pre><code># app/controllers/errors_controller.rb
+<p>class ErrorsController < ApplicationController</p>
+<p>  def not_found</p>
+<p>    render status: 404</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<strong>Express</strong>:
+<figure class="code"><pre><code>app.use((err, req, res, next) => {
+<p>  res.status(err.status || 500).render('error', { error: err });</p>
+<p>});</p>
+</code></pre></figure>
+
+<strong>Django</strong>:
+<figure class="code"><pre><code># views.py
+<p>def handler404(request, exception):</p>
+<p>    return render(request, '404.html', status=404)</p>
+</code></pre></figure>
+
+<strong>Phoenix</strong>:
+<figure class="code"><pre><code># Automatic conversion of exceptions to HTTP responses
+<h1>Plus explicit ErrorHTML/ErrorJSON modules</h1>
+</code></pre></figure>
+
+<p>Phoenix's approach is more structured, with clear separation between HTML and JSON errors.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="03.02-environment-variables.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="03.04-error-pages.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Database Exercises &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Database Exercises</span>
+            </div>
+            <div>
+                &lsaquo; <a href="17.01-foundations-exercises.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="17.03-web-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 17.2</div>
+        <h1>Chapter 17.2: Database Exercises</h1>
+
+<p>These exercises reinforce concepts from Chapter 4 covering Ecto schemas, changesets, queries, and associations.</p>
+
+<h2>Exercise 1: Schema with Validation</h2>
+
+<p>Create a schema for a <code>Comment</code> with proper validations.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/comments/comment.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Comments.Comment do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  # Create schema with:</p>
+<p>  # - content (required, min 10 chars, max 1000 chars)</p>
+<p>  # - author_name (required if user_id is nil)</p>
+<p>  # - user_id (optional, foreign key)</p>
+<p>  # - snippet_id (required, foreign key)</p>
+<p>  # - approved (boolean, default false)</p>
+<p>  # - timestamps</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Comments.Comment do
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "comments" do</p>
+<p>    field :content, :string</p>
+<p>    field :author_name, :string</p>
+<p>    field :approved, :boolean, default: false</p>
+
+<p>    belongs_to :user, Snippetbox.Accounts.User</p>
+<p>    belongs_to :snippet, Snippetbox.Snippets.Snippet</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  def changeset(comment, attrs) do</p>
+<p>    comment</p>
+<p>    |> cast(attrs, [:content, :author_name, :user_id, :snippet_id, :approved])</p>
+<p>    |> validate_required([:content, :snippet_id])</p>
+<p>    |> validate_length(:content, min: 10, max: 1000)</p>
+<p>    |> validate_author()</p>
+<p>    |> foreign_key_constraint(:user_id)</p>
+<p>    |> foreign_key_constraint(:snippet_id)</p>
+<p>  end</p>
+
+<p>  defp validate_author(changeset) do</p>
+<p>    user_id = get_field(changeset, :user_id)</p>
+<p>    author_name = get_field(changeset, :author_name)</p>
+
+<p>    if is_nil(user_id) and (is_nil(author_name) or author_name == "") do</p>
+<p>      add_error(changeset, :author_name, "is required when not logged in")</p>
+<p>    else</p>
+<p>      changeset</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 2: Complex Query</h2>
+
+<p>Write a query that returns snippets with their comment counts and average rating.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>def list_snippets_with_stats do</p>
+<p>  # Return snippets with:</p>
+<p>  # - snippet fields</p>
+<p>  # - comment_count</p>
+<p>  # - avg_rating (from a ratings table)</p>
+<p>  # - ordered by comment_count desc</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Hints</h3>
+<ul>
+<li>Use <code>left_join</code> to handle snippets without comments/ratings</li>
+<li>Use <code>group_by</code> and aggregate functions</li>
+<li>Use <code>select</code> to shape the output</li>
+</ul>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def list_snippets_with_stats do
+<p>  from(s in Snippet,</p>
+<p>    left_join: c in assoc(s, :comments),</p>
+<p>    left_join: r in assoc(s, :ratings),</p>
+<p>    group_by: s.id,</p>
+<p>    select: %{</p>
+<p>      snippet: s,</p>
+<p>      comment_count: count(c.id),</p>
+<p>      avg_rating: avg(r.score)</p>
+<p>    },</p>
+<p>    order_by: [desc: count(c.id)]</p>
+<p>  )</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 3: Custom Changeset Function</h2>
+
+<p>Create a changeset for publishing a snippet that validates additional requirements.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>def publish_changeset(snippet, attrs) do</p>
+<p>  # Requirements for publishing:</p>
+<p>  # - Title must be at least 10 characters</p>
+<p>  # - Content must be at least 50 characters</p>
+<p>  # - Must have a description</p>
+<p>  # - Must have at least one tag</p>
+<p>  # - Sets published_at to current time</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def publish_changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :description])</p>
+<p>  |> validate_required([:title, :content, :description])</p>
+<p>  |> validate_length(:title, min: 10)</p>
+<p>  |> validate_length(:content, min: 50)</p>
+<p>  |> validate_has_tags()</p>
+<p>  |> put_change(:published_at, DateTime.utc_now() |> DateTime.truncate(:second))</p>
+<p>end</p>
+
+<p>defp validate_has_tags(changeset) do</p>
+<p>  snippet = changeset.data</p>
+
+<p>  if Ecto.assoc_loaded?(snippet.tags) and length(snippet.tags) > 0 do</p>
+<p>    changeset</p>
+<p>  else</p>
+<p>    add_error(changeset, :tags, "must have at least one tag to publish")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 4: Transactions</h2>
+
+<p>Implement a function that creates a snippet with tags atomically.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>def create_snippet_with_tags(attrs, tag_names) do</p>
+<p>  # 1. Create snippet</p>
+<p>  # 2. Create or find tags by name</p>
+<p>  # 3. Associate tags with snippet</p>
+<p>  # 4. All in one transaction</p>
+<p>  # 5. Return {:ok, snippet_with_tags} or {:error, changeset}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def create_snippet_with_tags(attrs, tag_names) do
+<p>  Repo.transaction(fn -></p>
+<p>    with {:ok, snippet} <- create_snippet(attrs),</p>
+<p>         {:ok, tags} <- find_or_create_tags(tag_names),</p>
+<p>         {:ok, snippet} <- associate_tags(snippet, tags) do</p>
+<p>      snippet</p>
+<p>    else</p>
+<p>      {:error, changeset} -> Repo.rollback(changeset)</p>
+<p>    end</p>
+<p>  end)</p>
+<p>end</p>
+
+<p>defp find_or_create_tags(names) do</p>
+<p>  tags =</p>
+<p>    Enum.map(names, fn name -></p>
+<p>      case Repo.get_by(Tag, name: name) do</p>
+<p>        nil -></p>
+<p>          %Tag{}</p>
+<p>          |> Tag.changeset(%{name: name})</p>
+<p>          |> Repo.insert!()</p>
+<p>        tag -></p>
+<p>          tag</p>
+<p>      end</p>
+<p>    end)</p>
+
+<p>  {:ok, tags}</p>
+<p>rescue</p>
+<p>  e -> {:error, e}</p>
+<p>end</p>
+
+<p>defp associate_tags(snippet, tags) do</p>
+<p>  snippet</p>
+<p>  |> Repo.preload(:tags)</p>
+<p>  |> Ecto.Changeset.change()</p>
+<p>  |> Ecto.Changeset.put_assoc(:tags, tags)</p>
+<p>  |> Repo.update()</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 5: Pagination</h2>
+
+<p>Implement cursor-based pagination for snippets.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>def list_snippets_paginated(opts \\ []) do</p>
+<p>  # Options:</p>
+<p>  # - limit: number of items (default 20)</p>
+<p>  # - cursor: last item's id from previous page</p>
+<p>  # - direction: :after or :before cursor</p>
+
+<p>  # Return: %{items: [...], next_cursor: id, has_more: boolean}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def list_snippets_paginated(opts \\ []) do
+<p>  limit = Keyword.get(opts, :limit, 20)</p>
+<p>  cursor = Keyword.get(opts, :cursor)</p>
+<p>  direction = Keyword.get(opts, :direction, :after)</p>
+
+<p>  query = from(s in Snippet, order_by: [desc: s.id], limit: ^(limit + 1))</p>
+
+<p>  query =</p>
+<p>    case {cursor, direction} do</p>
+<p>      {nil, _} -> query</p>
+<p>      {cursor, :after} -> from(s in query, where: s.id < ^cursor)</p>
+<p>      {cursor, :before} -> from(s in query, where: s.id > ^cursor)</p>
+<p>    end</p>
+
+<p>  items = Repo.all(query)</p>
+<p>  has_more = length(items) > limit</p>
+<p>  items = Enum.take(items, limit)</p>
+
+<p>  next_cursor =</p>
+<p>    case List.last(items) do</p>
+<p>      nil -> nil</p>
+<p>      item -> item.id</p>
+<p>    end</p>
+
+<p>  %{</p>
+<p>    items: items,</p>
+<p>    next_cursor: next_cursor,</p>
+<p>    has_more: has_more</p>
+<p>  }</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 6: Search with Full-Text</h2>
+
+<p>Implement full-text search for snippets.</p>
+
+<figure class="code"><pre><code># Create migration for search
+<p>defmodule Snippetbox.Repo.Migrations.AddSearchToSnippets do</p>
+<p>  use Ecto.Migration</p>
+
+<p>  def up do</p>
+<p>    # Add tsvector column and index</p>
+<p>  end</p>
+
+<p>  def down do</p>
+<p>    # Remove search column and index</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>In Snippets context</h1>
+<p>def search(query_string, opts \\ []) do</p>
+<p>  # Full-text search on title and content</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code># Migration
+<p>def up do</p>
+<p>  execute """</p>
+<p>  ALTER TABLE snippets</p>
+<p>  ADD COLUMN search_vector tsvector</p>
+<p>  GENERATED ALWAYS AS (</p>
+<p>    setweight(to_tsvector('english', coalesce(title, '')), 'A') ||</p>
+<p>    setweight(to_tsvector('english', coalesce(content, '')), 'B')</p>
+<p>  ) STORED</p>
+<p>  """</p>
+
+<p>  execute "CREATE INDEX snippets_search_idx ON snippets USING GIN (search_vector)"</p>
+<p>end</p>
+
+<p>def down do</p>
+<p>  execute "DROP INDEX snippets_search_idx"</p>
+<p>  execute "ALTER TABLE snippets DROP COLUMN search_vector"</p>
+<p>end</p>
+
+<h1>Context function</h1>
+<p>def search(query_string, opts \\ []) do</p>
+<p>  limit = Keyword.get(opts, :limit, 20)</p>
+
+<p>  from(s in Snippet,</p>
+<p>    where: fragment(</p>
+<p>      "search_vector @@ plainto_tsquery('english', ?)",</p>
+<p>      ^query_string</p>
+<p>    ),</p>
+<p>    order_by: fragment(</p>
+<p>      "ts_rank(search_vector, plainto_tsquery('english', ?)) DESC",</p>
+<p>      ^query_string</p>
+<p>    ),</p>
+<p>    limit: ^limit</p>
+<p>  )</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Challenge: Implement Soft Deletes</h2>
+
+<p>Add soft delete functionality to snippets:</p>
+
+<ol>
+<li>Add <code>deleted_at</code> column</li>
+<li>Modify queries to exclude deleted records by default</li>
+<li>Add <code>delete_snippet/1</code> that sets <code>deleted_at</code></li>
+<li>Add <code>restore_snippet/1</code> to undelete</li>
+<li>Add <code>list_deleted_snippets/0</code> for admin</li>
+</ol>
+
+<figure class="code"><pre><code># Your implementation here
+</code></pre></figure>
+
+<p>This exercise tests your understanding of:</p>
+<ul>
+<li>Schema modifications</li>
+<li>Query composition</li>
+<li>Default scopes</li>
+<li>Business logic in contexts</li>
+</ul>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="17.01-foundations-exercises.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="17.03-web-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

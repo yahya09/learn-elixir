@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>CRUD Operations &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; CRUD Operations</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.04-changesets-and-validations.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.06-ecto-queries.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.5</div>
+        <h1>Chapter 4.5: CRUD Operations</h1>
+
+<p>With our schema and changesets defined, we can now perform Create, Read, Update, and Delete operations. In this chapter, we'll learn how to use the Repo module to interact with the database.</p>
+
+<h2>The Repo Module</h2>
+
+<p>All database operations go through the Repo:</p>
+
+<figure class="code"><pre><code>alias Snippetbox.Repo
+<p>alias Snippetbox.Snippets.Snippet</p>
+
+<h1>Repo is the interface to the database</h1>
+<p>Repo.insert(changeset)</p>
+<p>Repo.get(Snippet, id)</p>
+<p>Repo.update(changeset)</p>
+<p>Repo.delete(snippet)</p>
+</code></pre></figure>
+
+<h2>Create Operations</h2>
+
+<h3>Inserting Records</h3>
+
+<figure class="code"><pre><code>alias Snippetbox.Repo
+<p>alias Snippetbox.Snippets.Snippet</p>
+
+<h1>Create changeset</h1>
+<p>changeset = Snippet.changeset(%Snippet{}, %{</p>
+<p>  title: "Hello World",</p>
+<p>  content: "puts 'Hello, World!'"</p>
+<p>})</p>
+
+<h1>Insert into database</h1>
+<p>case Repo.insert(changeset) do</p>
+<p>  {:ok, snippet} -></p>
+<p>    IO.puts("Created snippet ##{snippet.id}")</p>
+
+<p>  {:error, changeset} -></p>
+<p>    IO.inspect(changeset.errors)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Insert!</h3>
+
+<p>Raises on failure (useful when you expect success):</p>
+
+<figure class="code"><pre><code># Raises Ecto.InvalidChangesetError if invalid
+<p>snippet = Repo.insert!(%Snippet{</p>
+<p>  title: "Example",</p>
+<p>  content: "Content here"</p>
+<p>})</p>
+</code></pre></figure>
+
+<h3>Insert with Returning</h3>
+
+<p>Get specific fields back:</p>
+
+<figure class="code"><pre><code>{:ok, snippet} = Repo.insert(changeset, returning: [:id, :inserted_at])
+</code></pre></figure>
+
+<h3>Insert All</h3>
+
+<p>Bulk insert multiple records:</p>
+
+<figure class="code"><pre><code>entries = [
+<p>  %{title: "Snippet 1", content: "Content 1", inserted_at: now, updated_at: now},</p>
+<p>  %{title: "Snippet 2", content: "Content 2", inserted_at: now, updated_at: now},</p>
+<p>  %{title: "Snippet 3", content: "Content 3", inserted_at: now, updated_at: now}</p>
+<p>]</p>
+
+<p>{count, nil} = Repo.insert_all(Snippet, entries)</p>
+<h1>count = 3</h1>
+</code></pre></figure>
+
+<p>With returning:</p>
+
+<figure class="code"><pre><code>{count, snippets} = Repo.insert_all(Snippet, entries, returning: true)
+<h1>snippets = [%Snippet{...}, %Snippet{...}, %Snippet{...}]</h1>
+</code></pre></figure>
+
+<h2>Read Operations</h2>
+
+<h3>Get by ID</h3>
+
+<figure class="code"><pre><code># Returns nil if not found
+<p>snippet = Repo.get(Snippet, 1)</p>
+
+<h1>Raises Ecto.NoResultsError if not found</h1>
+<p>snippet = Repo.get!(Snippet, 1)</p>
+</code></pre></figure>
+
+<h3>Get by Attributes</h3>
+
+<figure class="code"><pre><code># Get first matching record
+<p>snippet = Repo.get_by(Snippet, title: "Hello World")</p>
+<p>snippet = Repo.get_by(Snippet, title: "Hello", language: "elixir")</p>
+
+<h1>Raises if not found</h1>
+<p>snippet = Repo.get_by!(Snippet, slug: "hello-world")</p>
+</code></pre></figure>
+
+<h3>Get All</h3>
+
+<figure class="code"><pre><code># Get all records
+<p>snippets = Repo.all(Snippet)</p>
+
+<h1>With query</h1>
+<p>import Ecto.Query</p>
+
+<p>snippets = Repo.all(from s in Snippet, where: s.is_public == true)</p>
+</code></pre></figure>
+
+<h3>Get One</h3>
+
+<figure class="code"><pre><code>import Ecto.Query
+
+<h1>Returns single record or nil</h1>
+<p>snippet = Repo.one(from s in Snippet, where: s.id == ^id)</p>
+
+<h1>Raises if not exactly one result</h1>
+<p>snippet = Repo.one!(from s in Snippet, where: s.slug == ^slug)</p>
+</code></pre></figure>
+
+<h3>Check Existence</h3>
+
+<figure class="code"><pre><code>import Ecto.Query
+
+<p>exists? = Repo.exists?(from s in Snippet, where: s.slug == ^slug)</p>
+<h1>=> true or false</h1>
+</code></pre></figure>
+
+<h3>Aggregate Functions</h3>
+
+<figure class="code"><pre><code>import Ecto.Query
+
+<h1>Count</h1>
+<p>count = Repo.aggregate(Snippet, :count)</p>
+<p>count = Repo.aggregate(from(s in Snippet, where: s.is_public), :count)</p>
+
+<h1>Other aggregates</h1>
+<p>total_views = Repo.aggregate(Snippet, :sum, :views_count)</p>
+<p>avg_length = Repo.aggregate(Snippet, :avg, :content_length)</p>
+<p>max_views = Repo.aggregate(Snippet, :max, :views_count)</p>
+</code></pre></figure>
+
+<h2>Update Operations</h2>
+
+<h3>Updating Records</h3>
+
+<figure class="code"><pre><code># Fetch the record
+<p>snippet = Repo.get!(Snippet, 1)</p>
+
+<h1>Create update changeset</h1>
+<p>changeset = Snippet.changeset(snippet, %{title: "New Title"})</p>
+
+<h1>Update in database</h1>
+<p>case Repo.update(changeset) do</p>
+<p>  {:ok, updated_snippet} -></p>
+<p>    IO.puts("Updated: #{updated_snippet.title}")</p>
+
+<p>  {:error, changeset} -></p>
+<p>    IO.inspect(changeset.errors)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Update!</h3>
+
+<p>Raises on failure:</p>
+
+<figure class="code"><pre><code>snippet = Repo.get!(Snippet, 1)
+<p>changeset = Snippet.changeset(snippet, %{title: "New Title"})</p>
+<p>updated = Repo.update!(changeset)</p>
+</code></pre></figure>
+
+<h3>Update All</h3>
+
+<p>Bulk update matching records:</p>
+
+<figure class="code"><pre><code>import Ecto.Query
+
+<h1>Increment all view counts</h1>
+<p>{count, nil} = Repo.update_all(Snippet, inc: [views_count: 1])</p>
+
+<h1>Update with conditions</h1>
+<p>{count, nil} = Repo.update_all(</p>
+<p>  from(s in Snippet, where: s.expires_at < ^DateTime.utc_now()),</p>
+<p>  set: [is_expired: true]</p>
+<p>)</p>
+
+<h1>Update and return records</h1>
+<p>{count, snippets} = Repo.update_all(</p>
+<p>  from(s in Snippet, where: s.id == ^id),</p>
+<p>  [set: [views_count: 100]],</p>
+<p>  returning: true</p>
+<p>)</p>
+</code></pre></figure>
+
+<h2>Delete Operations</h2>
+
+<h3>Deleting Records</h3>
+
+<figure class="code"><pre><code>snippet = Repo.get!(Snippet, 1)
+
+<p>case Repo.delete(snippet) do</p>
+<p>  {:ok, deleted_snippet} -></p>
+<p>    IO.puts("Deleted snippet ##{deleted_snippet.id}")</p>
+
+<p>  {:error, changeset} -></p>
+<p>    IO.inspect(changeset.errors)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Delete!</h3>
+
+<p>Raises on failure:</p>
+
+<figure class="code"><pre><code>snippet = Repo.get!(Snippet, 1)
+<p>Repo.delete!(snippet)</p>
+</code></pre></figure>
+
+<h3>Delete All</h3>
+
+<p>Bulk delete matching records:</p>
+
+<figure class="code"><pre><code>import Ecto.Query
+
+<h1>Delete all expired snippets</h1>
+<p>{count, nil} = Repo.delete_all(</p>
+<p>  from s in Snippet, where: s.expires_at < ^DateTime.utc_now()</p>
+<p>)</p>
+
+<h1>Delete all</h1>
+<p>{count, nil} = Repo.delete_all(Snippet)</p>
+</code></pre></figure>
+
+<h2>The Context Pattern</h2>
+
+<p>Phoenix organizes database operations in context modules:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  @moduledoc """</p>
+<p>  The Snippets context - public API for snippet operations.</p>
+<p>  """</p>
+
+<p>  import Ecto.Query</p>
+<p>  alias Snippetbox.Repo</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  @doc """</p>
+<p>  Returns all snippets.</p>
+<p>  """</p>
+<p>  def list_snippets do</p>
+<p>    Repo.all(Snippet)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Returns all public snippets.</p>
+<p>  """</p>
+<p>  def list_public_snippets do</p>
+<p>    Snippet</p>
+<p>    |> where([s], s.is_public == true)</p>
+<p>    |> order_by([s], desc: s.inserted_at)</p>
+<p>    |> Repo.all()</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Gets a single snippet.</p>
+<p>  Raises Ecto.NoResultsError if not found.</p>
+<p>  """</p>
+<p>  def get_snippet!(id) do</p>
+<p>    Repo.get!(Snippet, id)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Gets a snippet by ID, returns nil if not found.</p>
+<p>  """</p>
+<p>  def get_snippet(id) do</p>
+<p>    Repo.get(Snippet, id)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Creates a snippet.</p>
+<p>  """</p>
+<p>  def create_snippet(attrs \\ %{}) do</p>
+<p>    %Snippet{}</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.insert()</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Updates a snippet.</p>
+<p>  """</p>
+<p>  def update_snippet(%Snippet{} = snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.update()</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Deletes a snippet.</p>
+<p>  """</p>
+<p>  def delete_snippet(%Snippet{} = snippet) do</p>
+<p>    Repo.delete(snippet)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Returns an <code>%Ecto.Changeset{}</code> for tracking snippet changes.</p>
+<p>  """</p>
+<p>  def change_snippet(%Snippet{} = snippet, attrs \\ %{}) do</p>
+<p>    Snippet.changeset(snippet, attrs)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Using the Context</h3>
+
+<figure class="code"><pre><code>alias Snippetbox.Snippets
+
+<h1>List</h1>
+<p>snippets = Snippets.list_snippets()</p>
+
+<h1>Get</h1>
+<p>snippet = Snippets.get_snippet!(1)</p>
+
+<h1>Create</h1>
+<p>{:ok, snippet} = Snippets.create_snippet(%{</p>
+<p>  title: "Hello",</p>
+<p>  content: "World"</p>
+<p>})</p>
+
+<h1>Update</h1>
+<p>{:ok, updated} = Snippets.update_snippet(snippet, %{title: "New Title"})</p>
+
+<h1>Delete</h1>
+<p>{:ok, _} = Snippets.delete_snippet(snippet)</p>
+</code></pre></figure>
+
+<h2>Transactions</h2>
+
+<p>For operations that must succeed or fail together:</p>
+
+<figure class="code"><pre><code>alias Ecto.Multi
+
+<p>def create_snippet_with_tags(attrs, tags) do</p>
+<p>  Multi.new()</p>
+<p>  |> Multi.insert(:snippet, Snippet.changeset(%Snippet{}, attrs))</p>
+<p>  |> Multi.insert_all(:tags, Tag, fn %{snippet: snippet} -></p>
+<p>    Enum.map(tags, fn tag -></p>
+<p>      %{snippet_id: snippet.id, name: tag, inserted_at: now(), updated_at: now()}</p>
+<p>    end)</p>
+<p>  end)</p>
+<p>  |> Repo.transaction()</p>
+<p>end</p>
+
+<h1>Returns</h1>
+<h1>{:ok, %{snippet: %Snippet{}, tags: {3, nil}}}</h1>
+<h1>or</h1>
+<h1>{:error, :snippet, changeset, %{}}</h1>
+</code></pre></figure>
+
+<h3>Simple Transactions</h3>
+
+<figure class="code"><pre><code>Repo.transaction(fn ->
+<p>  snippet = Repo.insert!(%Snippet{title: "A", content: "B"})</p>
+<p>  Repo.insert!(%Tag{snippet_id: snippet.id, name: "elixir"})</p>
+<p>  snippet</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h3>Rollback</h3>
+
+<figure class="code"><pre><code>Repo.transaction(fn ->
+<p>  case Repo.insert(changeset) do</p>
+<p>    {:ok, record} -> record</p>
+<p>    {:error, changeset} -> Repo.rollback(changeset)</p>
+<p>  end</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h2>Preloading Associations</h2>
+
+<figure class="code"><pre><code># Preload when fetching
+<p>snippet = Repo.get!(Snippet, 1) |> Repo.preload(:user)</p>
+<p>snippet.user  # => %User{...}</p>
+
+<h1>Preload in query</h1>
+<p>snippets = Repo.all(from s in Snippet, preload: [:user, :tags])</p>
+
+<h1>Preload multiple</h1>
+<p>snippet = Repo.preload(snippet, [:user, :tags, comments: :author])</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Result Tuples</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Ecto uses tagged tuples for operation results:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> {:ok, snippet}      # Success
+<p>{:error, changeset} # Failure with reason</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This forces explicit error handling:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> case Repo.insert(changeset) do
+<p>  {:ok, snippet} -> handle_success(snippet)</p>
+<p>  {:error, changeset} -> handle_error(changeset)</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li><strong>No exceptions</strong> for expected failures</li>
+<li><strong>Pattern matching</strong> for control flow</li>
+<li><strong>Composable</strong> with <code>with</code> and <code>case</code></li>
+<li><strong>Explicit</strong> error paths</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Repo.html">Ecto.Repo</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Insert operations (<code>insert</code>, <code>insert!</code>, <code>insert_all</code>)</li>
+<li>Read operations (<code>get</code>, <code>get!</code>, <code>get_by</code>, <code>all</code>, <code>one</code>)</li>
+<li>Update operations (<code>update</code>, <code>update!</code>, <code>update_all</code>)</li>
+<li>Delete operations (<code>delete</code>, <code>delete!</code>, <code>delete_all</code>)</li>
+<li>The Context pattern for organizing database operations</li>
+<li>Transactions for atomic operations</li>
+<li>Preloading associations</li>
+</ul>
+
+<p>In the next chapter, we'll learn how to build complex queries with Ecto.Query.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Conflict Handling</h3>
+
+<p>Handle unique constraint violations:</p>
+
+<figure class="code"><pre><code>Repo.insert(changeset, on_conflict: :nothing)
+<p>Repo.insert(changeset, on_conflict: :replace_all)</p>
+<p>Repo.insert(changeset,</p>
+<p>  on_conflict: [set: [updated_at: DateTime.utc_now()]],</p>
+<p>  conflict_target: :email</p>
+<p>)</p>
+</code></pre></figure>
+
+<h3>Comparing to Other ORMs</h3>
+
+<strong>ActiveRecord (Rails)</strong>:
+<figure class="code"><pre><code>Snippet.create(title: "Hi", content: "World")
+<p>Snippet.find(1)</p>
+<p>snippet.update(title: "New")</p>
+<p>snippet.destroy</p>
+</code></pre></figure>
+
+<strong>Django</strong>:
+<figure class="code"><pre><code>Snippet.objects.create(title="Hi", content="World")
+<p>Snippet.objects.get(pk=1)</p>
+<p>snippet.title = "New"</p>
+<p>snippet.save()</p>
+<p>snippet.delete()</p>
+</code></pre></figure>
+
+<strong>Ecto</strong>:
+<figure class="code"><pre><code>Repo.insert(changeset)
+<p>Repo.get!(Snippet, 1)</p>
+<p>Repo.update(changeset)</p>
+<p>Repo.delete(snippet)</p>
+</code></pre></figure>
+
+<p>Ecto separates the struct from database operations, making the data flow explicit.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.04-changesets-and-validations.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.06-ecto-queries.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

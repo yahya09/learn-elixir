@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Production Config &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Production Config</span>
+            </div>
+            <div>
+                &lsaquo; <a href="14.03-fly-io.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="14.05-monitoring.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 14.4</div>
+        <h1>Chapter 14.4: Production Configuration</h1>
+
+<p>Production environments require careful configuration for security, performance, and reliability. In this chapter, we'll explore production-ready configuration.</p>
+
+<h2>Runtime vs Compile-Time Config</h2>
+
+<h3>Understanding the Difference</h3>
+
+<figure class="code"><pre><code># config/config.exs - Compile-time
+<h1>Baked into release, cannot change without recompiling</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  render_errors: [formats: [html: SnippetboxWeb.ErrorHTML]]</p>
+
+<h1>config/runtime.exs - Runtime</h1>
+<h1>Read at application startup, can use environment variables</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  url: [host: System.get_env("PHX_HOST")]</p>
+</code></pre></figure>
+
+<h3>When to Use Each</h3>
+
+<p>| Compile-Time (config.exs) | Runtime (runtime.exs) |</p>
+<p>|---------------------------|----------------------|</p>
+<p>| Static configuration | Secrets |</p>
+<p>| Module configuration | Environment-specific values |</p>
+<p>| Logger formats | Database URLs |</p>
+<p>| Error templates | API keys |</p>
+
+<h2>Complete Production Config</h2>
+
+<h3>config/runtime.exs</h3>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<p>if config_env() == :prod do</p>
+<p>  # Database</p>
+<p>  database_url =</p>
+<p>    System.get_env("DATABASE_URL") ||</p>
+<p>      raise """</p>
+<p>      DATABASE_URL environment variable is missing.</p>
+<p>      Example: ecto://USER:PASS@HOST/DATABASE</p>
+<p>      """</p>
+
+<p>  maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []</p>
+
+<p>  config :snippetbox, Snippetbox.Repo,</p>
+<p>    url: database_url,</p>
+<p>    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),</p>
+<p>    socket_options: maybe_ipv6,</p>
+<p>    ssl: System.get_env("DATABASE_SSL") == "true",</p>
+<p>    ssl_opts: [</p>
+<p>      verify: :verify_peer,</p>
+<p>      cacerts: :public_key.cacerts_get(),</p>
+<p>      customize_hostname_check: [</p>
+<p>        match_fun: :public_key.pkix_verify_hostname_match_fun(:https)</p>
+<p>      ]</p>
+<p>    ]</p>
+
+<p>  # Endpoint</p>
+<p>  secret_key_base =</p>
+<p>    System.get_env("SECRET_KEY_BASE") ||</p>
+<p>      raise """</p>
+<p>      SECRET_KEY_BASE environment variable is missing.</p>
+<p>      Generate with: mix phx.gen.secret</p>
+<p>      """</p>
+
+<p>  host = System.get_env("PHX_HOST") || "localhost"</p>
+<p>  port = String.to_integer(System.get_env("PORT") || "4000")</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    url: [host: host, port: 443, scheme: "https"],</p>
+<p>    http: [</p>
+<p>      ip: {0, 0, 0, 0, 0, 0, 0, 0},</p>
+<p>      port: port</p>
+<p>    ],</p>
+<p>    secret_key_base: secret_key_base,</p>
+<p>    server: true</p>
+
+<p>  # Email (Swoosh)</p>
+<p>  config :snippetbox, Snippetbox.Mailer,</p>
+<p>    adapter: Swoosh.Adapters.Postmark,</p>
+<p>    api_key: System.get_env("POSTMARK_API_KEY")</p>
+
+<p>  # Error tracking (Sentry)</p>
+<p>  config :sentry,</p>
+<p>    dsn: System.get_env("SENTRY_DSN"),</p>
+<p>    environment_name: :prod,</p>
+<p>    included_environments: [:prod]</p>
+
+<p>  # Feature flags</p>
+<p>  config :snippetbox,</p>
+<p>    enable_registrations: System.get_env("ENABLE_REGISTRATIONS") == "true",</p>
+<p>    maintenance_mode: System.get_env("MAINTENANCE_MODE") == "true"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Environment Variables</h2>
+
+<h3>Required Variables</h3>
+
+<figure class="code"><pre><code># Essential
+<p>DATABASE_URL=ecto://user:password@host/database</p>
+<p>SECRET_KEY_BASE=super-long-secret-key-at-least-64-chars</p>
+<p>PHX_HOST=snippetbox.com</p>
+<p>PORT=4000</p>
+
+<h1>Email</h1>
+<p>POSTMARK_API_KEY=your-api-key</p>
+
+<h1>Error tracking</h1>
+<p>SENTRY_DSN=https://xxx@sentry.io/xxx</p>
+
+<h1>Feature flags</h1>
+<p>ENABLE_REGISTRATIONS=true</p>
+<p>MAINTENANCE_MODE=false</p>
+</code></pre></figure>
+
+<h3>Generating Secrets</h3>
+
+<figure class="code"><pre><code># Generate secret key base
+<p>mix phx.gen.secret</p>
+
+<h1>Output: PbXjH3bkQW...64+ characters</h1>
+</code></pre></figure>
+
+<h2>SSL/TLS Configuration</h2>
+
+<h3>Force HTTPS</h3>
+
+<figure class="code"><pre><code># config/prod.exs
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  force_ssl: [rewrite_on: [:x_forwarded_proto]]</p>
+</code></pre></figure>
+
+<h3>SSL with Custom Certificates</h3>
+
+<figure class="code"><pre><code># config/runtime.exs
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  https: [</p>
+<p>    port: 443,</p>
+<p>    cipher_suite: :strong,</p>
+<p>    keyfile: System.get_env("SSL_KEY_PATH"),</p>
+<p>    certfile: System.get_env("SSL_CERT_PATH")</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h2>Database Configuration</h2>
+
+<h3>Connection Pooling</h3>
+
+<figure class="code"><pre><code>config :snippetbox, Snippetbox.Repo,
+<p>  url: database_url,</p>
+<p>  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),</p>
+<p>  queue_target: 5000,</p>
+<p>  queue_interval: 1000</p>
+</code></pre></figure>
+
+<h3>Database SSL</h3>
+
+<figure class="code"><pre><code>config :snippetbox, Snippetbox.Repo,
+<p>  url: database_url,</p>
+<p>  ssl: true,</p>
+<p>  ssl_opts: [</p>
+<p>    verify: :verify_peer,</p>
+<p>    cacerts: :public_key.cacerts_get(),</p>
+<p>    server_name_indication: String.to_charlist(db_host),</p>
+<p>    customize_hostname_check: [</p>
+<p>      match_fun: :public_key.pkix_verify_hostname_match_fun(:https)</p>
+<p>    ]</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h2>Logging</h2>
+
+<h3>Production Logger</h3>
+
+<figure class="code"><pre><code># config/prod.exs
+
+<p>config :logger, :console,</p>
+<p>  format: "$time $metadata[$level] $message\n",</p>
+<p>  metadata: [:request_id, :user_id]</p>
+
+<p>config :logger,</p>
+<p>  level: :info,</p>
+<p>  compile_time_purge_matching: [</p>
+<p>    [level_lower_than: :info]</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h3>JSON Logging</h3>
+
+<figure class="code"><pre><code># For log aggregators
+<p>config :logger, :console,</p>
+<p>  format: {LoggerJSON.Formatters.Basic, :format},</p>
+<p>  metadata: :all</p>
+
+<h1>Add to deps: {:logger_json, "~> 5.0"}</h1>
+</code></pre></figure>
+
+<h3>Request Logging</h3>
+
+<figure class="code"><pre><code># lib/snippetbox_web/endpoint.ex
+
+<p>plug Plug.Logger, log: :info</p>
+
+<h1>Or custom logging plug</h1>
+<p>plug SnippetboxWeb.Plugs.RequestLogger</p>
+</code></pre></figure>
+
+<h2>Error Handling</h2>
+
+<h3>Error Tracking with Sentry</h3>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">{:sentry, "~> 10.0"}
+
+<h1>config/runtime.exs</h1>
+<p>config :sentry,</p>
+<p>  dsn: System.get_env("SENTRY_DSN"),</p>
+<p>  environment_name: config_env(),</p>
+<p>  enable_source_code_context: true,</p>
+<p>  root_source_code_paths: [File.cwd!()]</p>
+
+<h1>lib/snippetbox_web/endpoint.ex</h1>
+<p>use Sentry.PlugCapture</p>
+</code></pre></figure>
+
+<h3>Error Pages</h3>
+
+<figure class="code"><pre><code># lib/snippetbox_web/controllers/error_html.ex
+
+<p>defmodule SnippetboxWeb.ErrorHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "error_html/*"</p>
+
+<p>  def render(template, _assigns) do</p>
+<p>    Phoenix.Controller.status_message_from_template(template)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Session Configuration</h2>
+
+<figure class="code"><pre><code># config/prod.exs
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  session: [</p>
+<p>    store: :cookie,</p>
+<p>    key: "_snippetbox_key",</p>
+<p>    signing_salt: "random-salt",</p>
+<p>    encryption_salt: "another-salt",</p>
+<p>    same_site: "Strict",</p>
+<p>    secure: true,</p>
+<p>    max_age: 60 <em> 60 </em> 24 * 60  # 60 days</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h2>Caching</h2>
+
+<h3>Static Asset Caching</h3>
+
+<figure class="code"><pre><code># lib/snippetbox_web/endpoint.ex
+
+<p>plug Plug.Static,</p>
+<p>  at: "/",</p>
+<p>  from: :snippetbox,</p>
+<p>  gzip: true,</p>
+<p>  cache_control_for_etags: "public, max-age=31536000",</p>
+<p>  headers: [</p>
+<p>    {"cache-control", "public, max-age=31536000, immutable"}</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h3>Response Caching</h3>
+
+<figure class="code"><pre><code># In controller
+<p>def index(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> put_resp_header("cache-control", "public, max-age=3600")</p>
+<p>  |> render(:index)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Rate Limiting</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/rate_limiter.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RateLimiter do</p>
+<p>  import Plug.Conn</p>
+
+<p>  @max_requests 100</p>
+<p>  @window_ms 60_000</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    key = rate_limit_key(conn)</p>
+
+<p>    case ExRated.check_rate(key, @window_ms, @max_requests) do</p>
+<p>      {:ok, _count} -></p>
+<p>        conn</p>
+<p>      {:error, _limit} -></p>
+<p>        conn</p>
+<p>        |> put_status(:too_many_requests)</p>
+<p>        |> Phoenix.Controller.json(%{error: "Rate limit exceeded"})</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp rate_limit_key(conn) do</p>
+<p>    ip = conn.remote_ip |> :inet.ntoa() |> to_string()</p>
+<p>    "rate_limit:#{ip}"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Health Checks</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/health_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.HealthController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def check(conn, _params) do</p>
+<p>    checks = %{</p>
+<p>      database: check_database(),</p>
+<p>      memory: check_memory(),</p>
+<p>      disk: check_disk()</p>
+<p>    }</p>
+
+<p>    status = if Enum.all?(checks, fn {_, v} -> v == :ok end), do: :ok, else: :degraded</p>
+
+<p>    conn</p>
+<p>    |> put_status(if status == :ok, do: 200, else: 503)</p>
+<p>    |> json(%{</p>
+<p>      status: status,</p>
+<p>      checks: checks,</p>
+<p>      timestamp: DateTime.utc_now()</p>
+<p>    })</p>
+<p>  end</p>
+
+<p>  defp check_database do</p>
+<p>    case Ecto.Adapters.SQL.query(Snippetbox.Repo, "SELECT 1", []) do</p>
+<p>      {:ok, _} -> :ok</p>
+<p>      _ -> :error</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_memory do</p>
+<p>    memory = :erlang.memory(:total)</p>
+<p>    if memory < 1_000_000_000, do: :ok, else: :warning</p>
+<p>  end</p>
+
+<p>  defp check_disk do</p>
+<p>    # Simplified check</p>
+<p>    :ok</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Feature Flags</h2>
+
+<figure class="code"><pre><code># config/runtime.exs
+<p>config :snippetbox,</p>
+<p>  features: %{</p>
+<p>    new_editor: System.get_env("FEATURE_NEW_EDITOR") == "true",</p>
+<p>    ai_suggestions: System.get_env("FEATURE_AI_SUGGESTIONS") == "true"</p>
+<p>  }</p>
+
+<h1>Usage</h1>
+<p>def show(conn, _params) do</p>
+<p>  if Application.get_env(:snippetbox, :features)[:new_editor] do</p>
+<p>    render(conn, :show_v2)</p>
+<p>  else</p>
+<p>    render(conn, :show)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Graceful Shutdown</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>def start(_type, _args) do</p>
+<p>  children = [</p>
+<p>    # ...</p>
+<p>  ]</p>
+
+<p>  opts = [strategy: :one_for_one, name: Snippetbox.Supervisor]</p>
+
+<p>  # Handle shutdown signals</p>
+<p>  :init.notify_when_started(self())</p>
+
+<p>  Supervisor.start_link(children, opts)</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># rel/env.sh.eex
+<p>export RELEASE_DISTRIBUTION=name</p>
+<p>export RELEASE_NODE=<%= @release.name %>@127.0.0.1</p>
+
+<h1>Graceful shutdown timeout (30 seconds)</h1>
+<p>export RELEASE_SHUTDOWN_TIMEOUT=30000</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Configuration as Data</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Elixir treats configuration as data, not code:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Configuration is just keyword lists
+<p>config :my_app, key: "value"</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Runtime evaluation makes it dynamic</p>
+<p>config :my_app, key: System.get_env("VALUE")</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Access is explicit</p>
+<p>Application.get_env(:my_app, :key)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This separation makes configuration predictable and testable.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Runtime vs compile-time configuration</li>
+<li>Essential environment variables</li>
+<li>SSL/TLS setup</li>
+<li>Database configuration</li>
+<li>Production logging</li>
+<li>Error tracking</li>
+<li>Session configuration</li>
+<li>Caching strategies</li>
+<li>Rate limiting</li>
+<li>Health checks</li>
+<li>Feature flags</li>
+</ul>
+
+<p>In the next chapter, we'll explore monitoring and observability.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="14.03-fly-io.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="14.05-monitoring.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>File Uploads &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; File Uploads</span>
+            </div>
+            <div>
+                &lsaquo; <a href="08.03-changesets-in-forms.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="08.05-form-validation.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 8.4</div>
+        <h1>Chapter 8.4: File Uploads</h1>
+
+<p>Phoenix provides robust file upload handling. In this chapter, we'll explore both traditional form uploads and LiveView's advanced upload features.</p>
+
+<h2>Basic File Upload</h2>
+
+<h3>Form Setup</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/new.html.heex %>
+
+<.form for={@changeset} action={~p"/snippets"} multipart={true}>
+<p>  <.input field={@form[:title]} label="Title" /></p>
+<p>  <.input field={@form[:content]} type="textarea" label="Content" /></p>
+
+<p>  <div class="mt-4"></p>
+<p>    <label class="block text-sm font-medium">Attachment</label></p>
+<p>    <input type="file" name="snippet[attachment]" class="mt-1" /></p>
+<p>  </div></p>
+
+<p>  <.button>Create Snippet</.button></p>
+</.form>
+</code></pre></figure>
+
+<h3>Controller Handling</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def create(conn, %{"snippet" => snippet_params}) do</p>
+<p>  # Handle file upload</p>
+<p>  snippet_params = process_upload(snippet_params)</p>
+
+<p>  case Snippets.create_snippet(snippet_params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Snippet created successfully.")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, changeset} -></p>
+<p>      render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp process_upload(%{"attachment" => %Plug.Upload{} = upload} = params) do</p>
+<p>  # Generate unique filename</p>
+<p>  extension = Path.extname(upload.filename)</p>
+<p>  filename = "#{Ecto.UUID.generate()}#{extension}"</p>
+
+<p>  # Define upload directory</p>
+<p>  upload_dir = Path.join(["priv", "static", "uploads"])</p>
+<p>  File.mkdir_p!(upload_dir)</p>
+
+<p>  # Copy file to destination</p>
+<p>  dest_path = Path.join(upload_dir, filename)</p>
+<p>  File.cp!(upload.path, dest_path)</p>
+
+<p>  # Update params with file path</p>
+<p>  Map.put(params, "attachment_path", "/uploads/#{filename}")</p>
+<p>end</p>
+
+<p>defp process_upload(params), do: params</p>
+</code></pre></figure>
+
+<h3>Plug.Upload Structure</h3>
+
+<p>When a file is uploaded, Phoenix provides a <code>Plug.Upload</code> struct:</p>
+
+<figure class="code"><pre><code>%Plug.Upload{
+<p>  path: "/tmp/plug-1234/multipart-12345",  # Temporary file path</p>
+<p>  filename: "myfile.pdf",                   # Original filename</p>
+<p>  content_type: "application/pdf"           # MIME type</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>File Validation</h2>
+
+<h3>Validating in Controller</h3>
+
+<figure class="code"><pre><code>defp process_upload(%{"attachment" => %Plug.Upload{} = upload} = params) do
+<p>  with :ok <- validate_file_size(upload),</p>
+<p>       :ok <- validate_file_type(upload) do</p>
+<p>    # Process the upload</p>
+<p>    save_upload(upload, params)</p>
+<p>  else</p>
+<p>    {:error, reason} -></p>
+<p>      # Return params unchanged, add error to changeset later</p>
+<p>      Map.put(params, "attachment_error", reason)</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp validate_file_size(%Plug.Upload{path: path}) do</p>
+<p>  case File.stat(path) do</p>
+<p>    {:ok, %{size: size}} when size <= 10_000_000 -> :ok  # 10MB limit</p>
+<p>    {:ok, _} -> {:error, "File too large (max 10MB)"}</p>
+<p>    {:error, _} -> {:error, "Could not read file"}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp validate_file_type(%Plug.Upload{content_type: type}) do</p>
+<p>  allowed_types = ~w(image/jpeg image/png image/gif application/pdf text/plain)</p>
+
+<p>  if type in allowed_types do</p>
+<p>    :ok</p>
+<p>  else</p>
+<p>    {:error, "File type not allowed"}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Validating in Changeset</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>def changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :attachment_path])</p>
+<p>  |> validate_required([:title, :content])</p>
+<p>  |> validate_attachment(attrs)</p>
+<p>end</p>
+
+<p>defp validate_attachment(changeset, %{"attachment_error" => error}) do</p>
+<p>  add_error(changeset, :attachment, error)</p>
+<p>end</p>
+
+<p>defp validate_attachment(changeset, _attrs), do: changeset</p>
+</code></pre></figure>
+
+<h2>Multiple File Uploads</h2>
+
+<h3>Form</h3>
+
+<figure class="code"><pre><code><.form for={@changeset} action={~p"/gallery"} multipart={true}>
+<p>  <.input field={@form[:title]} label="Gallery Title" /></p>
+
+<p>  <div class="mt-4"></p>
+<p>    <label class="block text-sm font-medium">Images</label></p>
+<p>    <input type="file" name="gallery[images][]" multiple class="mt-1" /></p>
+<p>    <p class="text-sm text-gray-500">Select up to 10 images</p></p>
+<p>  </div></p>
+
+<p>  <.button>Create Gallery</.button></p>
+</.form>
+</code></pre></figure>
+
+<h3>Controller</h3>
+
+<figure class="code"><pre><code>def create(conn, %{"gallery" => %{"images" => uploads} = gallery_params}) when is_list(uploads) do
+<p>  # Process each upload</p>
+<p>  image_paths =</p>
+<p>    uploads</p>
+<p>    |> Enum.take(10)  # Limit to 10 files</p>
+<p>    |> Enum.map(&save_image/1)</p>
+<p>    |> Enum.reject(&is_nil/1)</p>
+
+<p>  gallery_params = Map.put(gallery_params, "image_paths", image_paths)</p>
+
+<p>  case Galleries.create_gallery(gallery_params) do</p>
+<p>    {:ok, gallery} -></p>
+<p>      redirect(conn, to: ~p"/galleries/#{gallery}")</p>
+
+<p>    {:error, changeset} -></p>
+<p>      render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp save_image(%Plug.Upload{} = upload) do</p>
+<p>  if valid_image?(upload) do</p>
+<p>    filename = "#{Ecto.UUID.generate()}#{Path.extname(upload.filename)}"</p>
+<p>    dest = Path.join(["priv", "static", "uploads", "images", filename])</p>
+<p>    File.cp!(upload.path, dest)</p>
+<p>    "/uploads/images/#{filename}"</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp valid_image?(%Plug.Upload{content_type: type}) do</p>
+<p>  type in ~w(image/jpeg image/png image/gif image/webp)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Image Processing</h2>
+
+<h3>Using Image Libraries</h3>
+
+<p>Add to <code>mix.exs</code>:</p>
+
+<figure class="code"><pre><code>defp deps do
+<p>  [</p>
+<p>    {:image, "~> 0.37"}  # or {:mogrify, "~> 0.9"}</p>
+<p>  ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Resizing Images</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.ImageProcessor do
+<p>  @moduledoc """</p>
+<p>  Image processing utilities.</p>
+<p>  """</p>
+
+<p>  @upload_dir "priv/static/uploads"</p>
+
+<p>  def process_avatar(upload) do</p>
+<p>    with {:ok, image} <- Image.open(upload.path),</p>
+<p>         {:ok, resized} <- Image.thumbnail(image, 200, height: 200, crop: :center),</p>
+<p>         filename <- generate_filename(upload.filename),</p>
+<p>         dest_path <- Path.join(@upload_dir, filename),</p>
+<p>         :ok <- Image.write(resized, dest_path) do</p>
+<p>      {:ok, "/uploads/#{filename}"}</p>
+<p>    else</p>
+<p>      {:error, reason} -> {:error, reason}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def process_snippet_image(upload) do</p>
+<p>    with {:ok, image} <- Image.open(upload.path),</p>
+<p>         {:ok, resized} <- Image.thumbnail(image, 800),</p>
+<p>         filename <- generate_filename(upload.filename),</p>
+<p>         dest_path <- Path.join(@upload_dir, filename),</p>
+<p>         :ok <- Image.write(resized, dest_path) do</p>
+<p>      {:ok, "/uploads/#{filename}"}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp generate_filename(original) do</p>
+<p>    ext = Path.extname(original)</p>
+<p>    "#{Ecto.UUID.generate()}#{ext}"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Cloud Storage</h2>
+
+<h3>S3 Upload Example</h3>
+
+<p>Add to <code>mix.exs</code>:</p>
+
+<figure class="code"><pre><code>defp deps do
+<p>  [</p>
+<p>    {:ex_aws, "~> 2.4"},</p>
+<p>    {:ex_aws_s3, "~> 2.4"},</p>
+<p>    {:hackney, "~> 1.18"},</p>
+<p>    {:sweet_xml, "~> 0.7"}</p>
+<p>  ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Configuration:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>config :ex_aws,</p>
+<p>  access_key_id: [{:system, "AWS_ACCESS_KEY_ID"}, :instance_role],</p>
+<p>  secret_access_key: [{:system, "AWS_SECRET_ACCESS_KEY"}, :instance_role],</p>
+<p>  region: "us-east-1"</p>
+
+<p>config :snippetbox, :uploads,</p>
+<p>  bucket: "my-snippetbox-uploads"</p>
+</code></pre></figure>
+
+<p>Upload module:</p>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Uploads do
+<p>  @bucket Application.compile_env(:snippetbox, [:uploads, :bucket])</p>
+
+<p>  def upload_to_s3(%Plug.Upload{} = upload) do</p>
+<p>    filename = generate_filename(upload.filename)</p>
+<p>    content = File.read!(upload.path)</p>
+
+<p>    case ExAws.S3.put_object(@bucket, filename, content, content_type: upload.content_type)</p>
+<p>         |> ExAws.request() do</p>
+<p>      {:ok, _} -></p>
+<p>        {:ok, "https://#{@bucket}.s3.amazonaws.com/#{filename}"}</p>
+
+<p>      {:error, reason} -></p>
+<p>        {:error, reason}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp generate_filename(original) do</p>
+<p>    ext = Path.extname(original)</p>
+<p>    "uploads/#{Date.utc_today()}/#{Ecto.UUID.generate()}#{ext}"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Serving Uploaded Files</h2>
+
+<h3>Static Plug Configuration</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>plug Plug.Static,</p>
+<p>  at: "/uploads",</p>
+<p>  from: {:snippetbox, "priv/static/uploads"},</p>
+<p>  gzip: false</p>
+</code></pre></figure>
+
+<h3>Secure File Downloads</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/download_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.DownloadController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    attachment = Attachments.get_attachment!(id)</p>
+
+<p>    # Check authorization</p>
+<p>    if authorized?(conn.assigns.current_user, attachment) do</p>
+<p>      send_download(conn, {:file, attachment.path},</p>
+<p>        filename: attachment.original_filename,</p>
+<p>        content_type: attachment.content_type</p>
+<p>      )</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_status(:forbidden)</p>
+<p>      |> text("Access denied")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp authorized?(user, attachment) do</p>
+<p>    attachment.user_id == user.id</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>LiveView Uploads (Preview)</h2>
+
+<p>LiveView provides advanced upload features with progress tracking:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/snippet_live/form.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetLive.Form do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:changeset, Snippets.change_snippet(%Snippet{}))</p>
+<p>     |> allow_upload(:attachment,</p>
+<p>       accept: ~w(.jpg .jpeg .png .pdf),</p>
+<p>       max_entries: 3,</p>
+<p>       max_file_size: 10_000_000</p>
+<p>     )}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <.form for={@changeset} phx-submit="save" phx-change="validate"></p>
+<p>      <.input field={@form[:title]} label="Title" /></p>
+
+<p>      <div class="mt-4" phx-drop-target={@uploads.attachment.ref}></p>
+<p>        <.live_file_input upload={@uploads.attachment} /></p>
+
+<p>        <%# Show upload progress %></p>
+<p>        <div :for={entry <- @uploads.attachment.entries} class="mt-2"></p>
+<p>          <div class="flex items-center gap-2"></p>
+<p>            <span><%= entry.client_name %></span></p>
+<p>            <progress value={entry.progress} max="100"><%= entry.progress %>%</progress></p>
+<p>            <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref}></p>
+<p>              Cancel</p>
+<p>            </button></p>
+<p>          </div></p>
+
+<p>          <%# Show errors %></p>
+<p>          <p :for={err <- upload_errors(@uploads.attachment, entry)} class="text-red-600"></p>
+<p>            <%= error_to_string(err) %></p>
+</p>
+<p>        </div></p>
+<p>      </div></p>
+
+<p>      <.button>Save</.button></p>
+<p>    </.form></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("save", %{"snippet" => params}, socket) do</p>
+<p>    uploaded_files =</p>
+<p>      consume_uploaded_entries(socket, :attachment, fn %{path: path}, entry -></p>
+<p>        dest = Path.join(["priv", "static", "uploads", entry.client_name])</p>
+<p>        File.cp!(path, dest)</p>
+<p>        {:ok, "/uploads/#{entry.client_name}"}</p>
+<p>      end)</p>
+
+<p>    params = Map.put(params, "attachments", uploaded_files)</p>
+
+<p>    case Snippets.create_snippet(params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        {:noreply,</p>
+<p>         socket</p>
+<p>         |> put_flash(:info, "Created!")</p>
+<p>         |> push_navigate(to: ~p"/snippets/#{snippet}")}</p>
+
+<p>      {:error, changeset} -></p>
+<p>        {:noreply, assign(socket, :changeset, changeset)}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def handle_event("cancel-upload", %{"ref" => ref}, socket) do</p>
+<p>    {:noreply, cancel_upload(socket, :attachment, ref)}</p>
+<p>  end</p>
+
+<p>  defp error_to_string(:too_large), do: "File too large"</p>
+<p>  defp error_to_string(:not_accepted), do: "File type not accepted"</p>
+<p>  defp error_to_string(:too_many_files), do: "Too many files"</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pipeline Processing</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>File uploads naturally fit the pipeline pattern:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> upload
+<p>|> validate_size()</p>
+<p>|> validate_type()</p>
+<p>|> generate_filename()</p>
+<p>|> save_to_storage()</p>
+<p>|> update_database()</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each step transforms the data, making the flow clear and each step testable independently.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Basic file upload handling</li>
+<li>File validation (size, type)</li>
+<li>Multiple file uploads</li>
+<li>Image processing and resizing</li>
+<li>Cloud storage with S3</li>
+<li>Serving and downloading files</li>
+<li>LiveView upload preview with progress</li>
+</ul>
+
+<p>In the next chapter, we'll explore form validation in depth.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="08.03-changesets-in-forms.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="08.05-form-validation.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

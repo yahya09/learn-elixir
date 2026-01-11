@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>URL Query Strings &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; URL Query Strings</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.04-customizing-http-headers.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.06-project-structure.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.5</div>
+        <h1>Chapter 2.5: URL Query Strings and Parameters</h1>
+
+<p>Query strings allow passing data through URLs. In this chapter, we'll learn how to work with query parameters, path parameters, and how Phoenix handles different parameter types.</p>
+
+<h2>Understanding URL Parameters</h2>
+
+<p>URLs can contain parameters in different places:</p>
+
+<figure class="code"><pre><code>https://example.com/snippets/123?page=2&sort=date#section1
+<p>\_____/\_________/\_______/\_/\______________/\______/</p>
+<p>  |         |        |     |        |            |</p>
+<p>scheme    host      path  path   query        fragment</p>
+<p>                         param   string</p>
+</code></pre></figure>
+
+<p>Phoenix gives you access to:</p>
+<ul>
+<li><strong>Path parameters</strong>: <code>/snippets/:id</code> → <code>%{"id" => "123"}</code></li>
+<li><strong>Query parameters</strong>: <code>?page=2&sort=date</code> → <code>%{"page" => "2", "sort" => "date"}</code></li>
+<li><strong>Body parameters</strong>: Form data or JSON body</li>
+</ul>
+
+<p>All parameters are merged into the <code>params</code> map passed to your controller action.</p>
+
+<h2>Path Parameters</h2>
+
+<p>Define path parameters in your router with <code>:name</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through :browser</p>
+
+<p>  get "/snippets/:id", SnippetController, :show</p>
+<p>  get "/users/:user_id/snippets/:id", SnippetController, :user_snippet</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Access them in your controller:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  text(conn, "Showing snippet #{id}")</p>
+<p>end</p>
+
+<p>def user_snippet(conn, %{"user_id" => user_id, "id" => id}) do</p>
+<p>  text(conn, "User #{user_id}'s snippet #{id}")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Pattern Matching Parameters</h3>
+
+<p>Use pattern matching to extract and validate:</p>
+
+<figure class="code"><pre><code># Match specific parameter values
+<p>def show(conn, %{"id" => "new"}) do</p>
+<p>  # Handle /snippets/new specially</p>
+<p>  render(conn, :new)</p>
+<p>end</p>
+
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  # Handle /snippets/:id</p>
+<p>  render(conn, :show, id: id)</p>
+<p>end</p>
+</code></pre></figure>
+
+<div class="important">
+<strong>Important</strong>: Define more specific patterns before general ones. Elixir matches from top to bottom.
+</div>
+
+<h2>Query String Parameters</h2>
+
+<p>Query parameters are automatically parsed from the URL:</p>
+
+<figure class="code"><pre><code>GET /snippets?page=2&limit=10&sort=created_at&order=desc
+</code></pre></figure>
+
+<p>Access them in your controller:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def index(conn, params) do</p>
+<p>  # params = %{</p>
+<p>  #   "page" => "2",</p>
+<p>  #   "limit" => "10",</p>
+<p>  #   "sort" => "created_at",</p>
+<p>  #   "order" => "desc"</p>
+<p>  # }</p>
+
+<p>  page = Map.get(params, "page", "1")</p>
+<p>  limit = Map.get(params, "limit", "20")</p>
+
+<p>  text(conn, "Page #{page}, showing #{limit} items")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Pattern Matching Query Parameters</h3>
+
+<figure class="code"><pre><code># When pagination params are provided
+<p>def index(conn, %{"page" => page, "limit" => limit}) do</p>
+<p>  # Both page and limit are present</p>
+<p>  list_snippets(page: page, limit: limit)</p>
+<p>end</p>
+
+<h1>Default case - no pagination params</h1>
+<p>def index(conn, _params) do</p>
+<p>  # Use defaults</p>
+<p>  list_snippets(page: "1", limit: "20")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Extracting with Defaults</h3>
+
+<p>Use <code>Map.get/3</code> for optional parameters with defaults:</p>
+
+<figure class="code"><pre><code>def index(conn, params) do
+<p>  page = params |> Map.get("page", "1") |> String.to_integer()</p>
+<p>  limit = params |> Map.get("limit", "20") |> String.to_integer()</p>
+<p>  sort = Map.get(params, "sort", "inserted_at")</p>
+<p>  order = Map.get(params, "order", "desc")</p>
+
+<p>  snippets = list_snippets(</p>
+<p>    page: page,</p>
+<p>    limit: limit,</p>
+<p>    sort: sort,</p>
+<p>    order: order</p>
+<p>  )</p>
+
+<p>  render(conn, :index, snippets: snippets)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Type Conversion</h2>
+
+<p>All URL parameters arrive as strings. Convert them as needed:</p>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  # Convert string to integer</p>
+<p>  case Integer.parse(id) do</p>
+<p>    {int_id, ""} -></p>
+<p>      snippet = Snippets.get_snippet!(int_id)</p>
+<p>      render(conn, :show, snippet: snippet)</p>
+
+<p>    _ -></p>
+<p>      conn</p>
+<p>      |> put_status(:bad_request)</p>
+<p>      |> text("Invalid ID format")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Safe Type Conversion</h3>
+
+<p>Create helper functions for common conversions:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/helpers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Helpers do</p>
+<p>  def to_integer(value, default \\ 0)</p>
+
+<p>  def to_integer(value, default) when is_binary(value) do</p>
+<p>    case Integer.parse(value) do</p>
+<p>      {int, ""} -> int</p>
+<p>      _ -> default</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def to_integer(value, _default) when is_integer(value), do: value</p>
+<p>  def to_integer(_, default), do: default</p>
+
+<p>  def to_boolean("true"), do: true</p>
+<p>  def to_boolean("1"), do: true</p>
+<p>  def to_boolean(_), do: false</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Use in controllers:</p>
+
+<figure class="code"><pre><code>import SnippetboxWeb.Helpers
+
+<p>def index(conn, params) do</p>
+<p>  page = to_integer(params["page"], 1)</p>
+<p>  limit = to_integer(params["limit"], 20)</p>
+<p>  show_expired = to_boolean(params["show_expired"])</p>
+
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Array Parameters</h2>
+
+<p>Phoenix handles array-style parameters:</p>
+
+<figure class="code"><pre><code>GET /snippets?tags[]=elixir&tags[]=phoenix&tags[]=web
+</code></pre></figure>
+
+<figure class="code"><pre><code>def index(conn, %{"tags" => tags}) when is_list(tags) do
+<p>  # tags = ["elixir", "phoenix", "web"]</p>
+<p>  snippets = Snippets.filter_by_tags(tags)</p>
+<p>  render(conn, :index, snippets: snippets)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Nested Parameters</h2>
+
+<p>Phoenix parses nested parameters from bracket notation:</p>
+
+<figure class="code"><pre><code>GET /snippets?filter[status]=active&filter[category]=tutorial
+</code></pre></figure>
+
+<figure class="code"><pre><code>def index(conn, %{"filter" => filter}) do
+<p>  # filter = %{"status" => "active", "category" => "tutorial"}</p>
+<p>  status = filter["status"]</p>
+<p>  category = filter["category"]</p>
+
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Building URLs with Query Parameters</h2>
+
+<p>Use verified routes with query parameters:</p>
+
+<figure class="code"><pre><code># In a template or controller
+<p>~p"/snippets?page=2&limit=10"</p>
+
+<h1>With dynamic values</h1>
+<p>~p"/snippets?#{[page: page, limit: limit]}"</p>
+
+<h1>Complex parameters</h1>
+<p>~p"/snippets?#{[filter: %{status: "active"}, sort: "date"]}"</p>
+</code></pre></figure>
+
+<p>In templates:</p>
+
+<figure class="code"><pre><code><.link href={~p"/snippets?#{[page: @page + 1]}"}>
+<p>  Next Page</p>
+</.link>
+</code></pre></figure>
+
+<h2>Validating Parameters</h2>
+
+<p>Create validation functions for complex parameter requirements:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def index(conn, params) do</p>
+<p>  with {:ok, validated} <- validate_index_params(params) do</p>
+<p>    snippets = Snippets.list_snippets(validated)</p>
+<p>    render(conn, :index, snippets: snippets, params: validated)</p>
+<p>  else</p>
+<p>    {:error, message} -></p>
+<p>      conn</p>
+<p>      |> put_status(:bad_request)</p>
+<p>      |> text("Invalid parameters: #{message}")</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp validate_index_params(params) do</p>
+<p>  page = to_integer(params["page"], 1)</p>
+<p>  limit = to_integer(params["limit"], 20)</p>
+<p>  sort = params["sort"] || "inserted_at"</p>
+<p>  order = params["order"] || "desc"</p>
+
+<p>  cond do</p>
+<p>    page < 1 -></p>
+<p>      {:error, "page must be positive"}</p>
+
+<p>    limit < 1 or limit > 100 -></p>
+<p>      {:error, "limit must be between 1 and 100"}</p>
+
+<p>    sort not in ~w(inserted_at title expires_at) -></p>
+<p>      {:error, "invalid sort field"}</p>
+
+<p>    order not in ~w(asc desc) -></p>
+<p>      {:error, "order must be asc or desc"}</p>
+
+<p>    true -></p>
+<p>      {:ok, %{page: page, limit: limit, sort: sort, order: order}}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Practical Example: Search with Filters</h2>
+
+<p>Build a search endpoint with multiple filter options:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def search(conn, params) do</p>
+<p>  search_params = %{</p>
+<p>    query: params["q"] || "",</p>
+<p>    page: to_integer(params["page"], 1),</p>
+<p>    per_page: to_integer(params["per_page"], 20),</p>
+<p>    language: params["language"],</p>
+<p>    author: params["author"],</p>
+<p>    from_date: parse_date(params["from"]),</p>
+<p>    to_date: parse_date(params["to"]),</p>
+<p>    sort: params["sort"] || "relevance"</p>
+<p>  }</p>
+
+<p>  results = Snippets.search(search_params)</p>
+
+<p>  render(conn, :search,</p>
+<p>    results: results,</p>
+<p>    params: search_params</p>
+<p>  )</p>
+<p>end</p>
+
+<p>defp parse_date(nil), do: nil</p>
+<p>defp parse_date(date_string) do</p>
+<p>  case Date.from_iso8601(date_string) do</p>
+<p>    {:ok, date} -> date</p>
+<p>    _ -> nil</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>URL example:</p>
+<figure class="code"><pre><code>/snippets/search?q=elixir&language=elixir&from=2024-01-01&sort=date
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pattern Matching for Control Flow</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Pattern matching replaces conditional logic:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Instead of:
+<p>def index(conn, params) do</p>
+<p>  if params["page"] != nil and params["limit"] != nil do</p>
+<p>    # paginated</p>
+<p>  else</p>
+<p>    # not paginated</p>
+<p>  end</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Use pattern matching:</p>
+<p>def index(conn, %{"page" => page, "limit" => limit}) do</p>
+<p>  # paginated - these params exist</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>def index(conn, _params) do</p>
+<p>  # not paginated - catch-all</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li>Clearer intent</li>
+<li>Compiler checks for missing cases</li>
+<li>Separates concerns into different function clauses</li>
+<li>Each clause is smaller and focused</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixir-lang.org/getting-started/pattern-matching.html">Elixir Pattern Matching</a></li>
+<li><a href="https://elixir-lang.org/getting-started/modules-and-functions.html#named-functions">Function Clauses</a></li>
+</ul>
+</blockquote>
+
+<h2>Accessing Raw Query String</h2>
+
+<p>If you need the unparsed query string:</p>
+
+<figure class="code"><pre><code>def debug(conn, _params) do
+<p>  query_string = conn.query_string</p>
+<p>  # "page=2&limit=10&sort=date"</p>
+
+<p>  text(conn, "Raw query: #{query_string}")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How to define and access path parameters (<code>:id</code>)</li>
+<li>How to work with query string parameters (<code>?key=value</code>)</li>
+<li>How to convert string parameters to other types</li>
+<li>How to handle array and nested parameters</li>
+<li>How to validate parameters</li>
+<li>How to build URLs with query parameters</li>
+</ul>
+
+<p>In the next chapter, we'll explore how Phoenix projects are structured and organized.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Parameter Precedence</h3>
+
+<p>When the same key exists in multiple places, Phoenix merges them with this precedence (highest to lowest):</p>
+
+<ol>
+<li>Body parameters (POST/PUT data)</li>
+<li>Query string parameters</li>
+<li>Path parameters</li>
+</ol>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Express (Node.js)</strong>:
+<figure class="code"><pre><code>app.get('/snippets/:id', (req, res) => {
+<p>  const { id } = req.params;        // Path param</p>
+<p>  const { page } = req.query;       // Query param</p>
+<p>});</p>
+</code></pre></figure>
+
+<strong>Django (Python)</strong>:
+<figure class="code"><pre><code>def show(request, id):              # Path param from URL conf
+<p>    page = request.GET.get('page')  # Query param</p>
+</code></pre></figure>
+
+<strong>Laravel (PHP)</strong>:
+<figure class="code"><pre><code>public function show(Request $request, $id) {
+<p>    $page = $request->query('page'); // Query param</p>
+<p>}</p>
+</code></pre></figure>
+
+<strong>Phoenix (Elixir)</strong>:
+<figure class="code"><pre><code>def show(conn, %{"id" => id, "page" => page}) do
+<p>  # Both path and query params in same map</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Phoenix's unified params map is simpler - you don't need to remember which map to check.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.04-customizing-http-headers.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.06-project-structure.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

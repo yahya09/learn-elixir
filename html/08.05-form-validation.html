@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Form Validation &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Form Validation</span>
+            </div>
+            <div>
+                &lsaquo; <a href="08.04-file-uploads.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="08.06-form-security.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 8.5</div>
+        <h1>Chapter 8.5: Form Validation</h1>
+
+<p>Effective form validation improves user experience and data integrity. In this chapter, we'll explore validation strategies at multiple levels.</p>
+
+<h2>Validation Layers</h2>
+
+<figure class="code"><pre><code>┌─────────────────────────────────────────┐
+<p>│           Client-Side (HTML5)           │  ← Instant feedback</p>
+<p>├─────────────────────────────────────────┤</p>
+<p>│        Client-Side (JavaScript)         │  ← Rich validation</p>
+<p>├─────────────────────────────────────────┤</p>
+<p>│         Server-Side (Changeset)         │  ← Business rules</p>
+<p>├─────────────────────────────────────────┤</p>
+<p>│        Database (Constraints)           │  ← Data integrity</p>
+<p>└─────────────────────────────────────────┘</p>
+</code></pre></figure>
+
+<h2>HTML5 Validation</h2>
+
+<h3>Built-in Attributes</h3>
+
+<figure class="code"><pre><code><%# Required field %>
+<.input field={@form[:title]} label="Title" required />
+
+<%# Length constraints %>
+<.input field={@form[:title]} label="Title" minlength={3} maxlength={100} />
+
+<%# Pattern matching %>
+<.input field={@form[:username]} label="Username" pattern="[a-z0-9_]+" />
+
+<%# Number range %>
+<.input field={@form[:age]} type="number" label="Age" min={18} max={120} />
+
+<%# Email format %>
+<.input field={@form[:email]} type="email" label="Email" />
+</code></pre></figure>
+
+<h3>Disabling HTML5 Validation</h3>
+
+<p>Sometimes you want server-side validation only:</p>
+
+<figure class="code"><pre><code><.form for={@changeset} action={~p"/snippets"} novalidate>
+<p>  <%# Fields... %></p>
+</.form>
+</code></pre></figure>
+
+<h2>Server-Side Validation</h2>
+
+<h3>Changeset Validations</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>def changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :language, :expires_at])</p>
+<p>  |> validate_required([:title, :content])</p>
+<p>  |> validate_length(:title, min: 3, max: 100)</p>
+<p>  |> validate_length(:content, min: 1, max: 100_000)</p>
+<p>  |> validate_inclusion(:language, supported_languages())</p>
+<p>  |> validate_future_date(:expires_at)</p>
+<p>  |> unique_constraint(:title, name: :snippets_user_id_title_index)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Custom Validation Functions</h3>
+
+<figure class="code"><pre><code>defp validate_future_date(changeset, field) do
+<p>  validate_change(changeset, field, fn _, value -></p>
+<p>    if DateTime.compare(value, DateTime.utc_now()) == :gt do</p>
+<p>      []</p>
+<p>    else</p>
+<p>      [{field, "must be in the future"}]</p>
+<p>    end</p>
+<p>  end)</p>
+<p>end</p>
+
+<p>defp validate_no_spam(changeset, field) do</p>
+<p>  validate_change(changeset, field, fn _, value -></p>
+<p>    spam_patterns = ~r/(viagra|casino|lottery|winner)/i</p>
+
+<p>    if Regex.match?(spam_patterns, value) do</p>
+<p>      [{field, "contains prohibited content"}]</p>
+<p>    else</p>
+<p>      []</p>
+<p>    end</p>
+<p>  end)</p>
+<p>end</p>
+
+<p>defp validate_url(changeset, field) do</p>
+<p>  validate_change(changeset, field, fn _, value -></p>
+<p>    case URI.parse(value) do</p>
+<p>      %URI{scheme: scheme, host: host}</p>
+<p>      when scheme in ["http", "https"] and not is_nil(host) -></p>
+<p>        []</p>
+
+<p>      _ -></p>
+<p>        [{field, "must be a valid URL"}]</p>
+<p>    end</p>
+<p>  end)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Cross-Field Validation</h3>
+
+<figure class="code"><pre><code>def changeset(user, attrs) do
+<p>  user</p>
+<p>  |> cast(attrs, [:password, :password_confirmation])</p>
+<p>  |> validate_required([:password])</p>
+<p>  |> validate_confirmation(:password, message: "does not match password")</p>
+<p>end</p>
+
+<h1>Or custom cross-field validation</h1>
+<p>def changeset(event, attrs) do</p>
+<p>  event</p>
+<p>  |> cast(attrs, [:starts_at, :ends_at])</p>
+<p>  |> validate_required([:starts_at, :ends_at])</p>
+<p>  |> validate_end_after_start()</p>
+<p>end</p>
+
+<p>defp validate_end_after_start(changeset) do</p>
+<p>  starts_at = get_field(changeset, :starts_at)</p>
+<p>  ends_at = get_field(changeset, :ends_at)</p>
+
+<p>  if starts_at && ends_at && DateTime.compare(ends_at, starts_at) != :gt do</p>
+<p>    add_error(changeset, :ends_at, "must be after start time")</p>
+<p>  else</p>
+<p>    changeset</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Conditional Validation</h3>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :visibility, :password])</p>
+<p>  |> validate_required([:title, :content, :visibility])</p>
+<p>  |> validate_password_if_private()</p>
+<p>end</p>
+
+<p>defp validate_password_if_private(changeset) do</p>
+<p>  case get_field(changeset, :visibility) do</p>
+<p>    :private -></p>
+<p>      changeset</p>
+<p>      |> validate_required([:password], message: "required for private snippets")</p>
+<p>      |> validate_length(:password, min: 8)</p>
+
+<p>    _ -></p>
+<p>      changeset</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Database Constraints</h2>
+
+<h3>Unique Constraints</h3>
+
+<figure class="code"><pre><code># Migration
+<p>create unique_index(:users, [:email])</p>
+<p>create unique_index(:snippets, [:user_id, :title], name: :snippets_user_id_title_index)</p>
+
+<h1>Changeset</h1>
+<p>def changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :username])</p>
+<p>  |> validate_required([:email, :username])</p>
+<p>  |> unique_constraint(:email)</p>
+<p>  |> unique_constraint(:username)</p>
+<p>end</p>
+
+<p>def changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :user_id])</p>
+<p>  |> unique_constraint([:user_id, :title],</p>
+<p>       name: :snippets_user_id_title_index,</p>
+<p>       message: "you already have a snippet with this title")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Check Constraints</h3>
+
+<figure class="code"><pre><code># Migration
+<p>create constraint(:products, :price_must_be_positive, check: "price > 0")</p>
+<p>create constraint(:events, :end_after_start, check: "ends_at > starts_at")</p>
+
+<h1>Changeset</h1>
+<p>def changeset(product, attrs) do</p>
+<p>  product</p>
+<p>  |> cast(attrs, [:name, :price])</p>
+<p>  |> check_constraint(:price, name: :price_must_be_positive, message: "must be positive")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Foreign Key Constraints</h3>
+
+<figure class="code"><pre><code># Migration
+<p>alter table(:snippets) do</p>
+<p>  add :user_id, references(:users, on_delete: :delete_all), null: false</p>
+<p>end</p>
+
+<h1>Changeset</h1>
+<p>def changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :user_id])</p>
+<p>  |> foreign_key_constraint(:user_id, message: "user does not exist")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Error Messages</h2>
+
+<h3>Custom Error Messages</h3>
+
+<figure class="code"><pre><code>def changeset(user, attrs) do
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :password, :age])</p>
+<p>  |> validate_required(:email, message: "we need your email to continue")</p>
+<p>  |> validate_format(:email, ~r/@/, message: "must contain @")</p>
+<p>  |> validate_length(:password,</p>
+<p>       min: 12,</p>
+<p>       message: "must be at least 12 characters for security")</p>
+<p>  |> validate_number(:age,</p>
+<p>       greater_than_or_equal_to: 13,</p>
+<p>       message: "you must be at least 13 years old")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Interpolated Messages</h3>
+
+<figure class="code"><pre><code>|> validate_length(:title, min: 3, max: 100)
+<h1>Default message: "should be at least %{count} character(s)"</h1>
+
+<h1>Custom with interpolation</h1>
+<p>|> validate_length(:title, min: 3,</p>
+<p>     message: "please enter at least %{count} characters")</p>
+</code></pre></figure>
+
+<h3>Translation</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/core_components.ex</figcaption><pre><code class="language-elixir">
+<p>def translate_error({msg, opts}) do</p>
+<p>  # Use Gettext for translations</p>
+<p>  if count = opts[:count] do</p>
+<p>    Gettext.dngettext(SnippetboxWeb.Gettext, "errors", msg, msg, count, opts)</p>
+<p>  else</p>
+<p>    Gettext.dgettext(SnippetboxWeb.Gettext, "errors", msg, opts)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Real-Time Validation with LiveView</h2>
+
+<h3>Setup</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/snippet_live/form.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetLive.Form do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    changeset = Snippets.change_snippet(%Snippet{})</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:changeset, changeset)</p>
+<p>     |> assign(:check_errors, false)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <.form</p>
+<p>      for={@changeset}</p>
+<p>      phx-change="validate"</p>
+<p>      phx-submit="save"</p>
+<p>    ></p>
+<p>      <.input field={@form[:title]} label="Title" phx-debounce="300" /></p>
+<p>      <.input field={@form[:content]} type="textarea" label="Content" phx-debounce="500" /></p>
+
+<p>      <.button phx-disable-with="Saving...">Save</.button></p>
+<p>    </.form></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("validate", %{"snippet" => params}, socket) do</p>
+<p>    changeset =</p>
+<p>      %Snippet{}</p>
+<p>      |> Snippets.change_snippet(params)</p>
+<p>      |> Map.put(:action, :validate)</p>
+
+<p>    {:noreply, assign(socket, :changeset, changeset)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("save", %{"snippet" => params}, socket) do</p>
+<p>    case Snippets.create_snippet(params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        {:noreply,</p>
+<p>         socket</p>
+<p>         |> put_flash(:info, "Snippet created!")</p>
+<p>         |> push_navigate(to: ~p"/snippets/#{snippet}")}</p>
+
+<p>      {:error, changeset} -></p>
+<p>        {:noreply, assign(socket, :changeset, changeset)}</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Async Validation</h3>
+
+<figure class="code"><pre><code>def handle_event("validate", %{"user" => %{"username" => username} = params}, socket) do
+<p>  # Check username availability asynchronously</p>
+<p>  send(self(), {:check_username, username})</p>
+
+<p>  changeset =</p>
+<p>    %User{}</p>
+<p>    |> Users.change_user(params)</p>
+<p>    |> Map.put(:action, :validate)</p>
+
+<p>  {:noreply, assign(socket, :changeset, changeset)}</p>
+<p>end</p>
+
+<p>def handle_info({:check_username, username}, socket) do</p>
+<p>  available = Users.username_available?(username)</p>
+
+<p>  socket =</p>
+<p>    if available do</p>
+<p>      socket</p>
+<p>    else</p>
+<p>      changeset =</p>
+<p>        socket.assigns.changeset</p>
+<p>        |> Ecto.Changeset.add_error(:username, "is already taken")</p>
+<p>        |> Map.put(:action, :validate)</p>
+
+<p>      assign(socket, :changeset, changeset)</p>
+<p>    end</p>
+
+<p>  {:noreply, socket}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Validation Best Practices</h2>
+
+<h3>1. Validate Early, Validate Often</h3>
+
+<figure class="code"><pre><code># In context module - single source of truth
+<p>def change_snippet(snippet, attrs \\ %{}) do</p>
+<p>  Snippet.changeset(snippet, attrs)</p>
+<p>end</p>
+
+<h1>Used in:</h1>
+<h1>- Controller new action (empty form)</h1>
+<h1>- Controller create action (validation)</h1>
+<h1>- LiveView validate event (real-time)</h1>
+<h1>- LiveView save event (final validation)</h1>
+</code></pre></figure>
+
+<h3>2. User-Friendly Error Messages</h3>
+
+<figure class="code"><pre><code># Bad
+<p>validate_length(:password, min: 8)</p>
+<h1>"should be at least 8 character(s)"</h1>
+
+<h1>Good</h1>
+<p>validate_length(:password, min: 8,</p>
+<p>  message: "must be at least 8 characters for security")</p>
+</code></pre></figure>
+
+<h3>3. Show Errors at the Right Time</h3>
+
+<figure class="code"><pre><code># Only show errors after user interaction
+<p>def input(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do</p>
+<p>  # phx-no-feedback class hides errors until form is submitted</p>
+<p>  ~H"""</p>
+<p>  <div phx-feedback-for={@name}></p>
+<p>    <%# ... %></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>4. Combine Client and Server Validation</h3>
+
+<figure class="code"><pre><code><%# HTML5 for instant feedback %>
+<.input
+<p>  field={@form[:email]}</p>
+<p>  type="email"</p>
+<p>  label="Email"</p>
+<p>  required</p>
+<p>/></p>
+
+<%# Server validates everything again %>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Validation as Composition</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Ecto validation composes naturally:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> changeset
+<p>|> validate_required([:title])      # First validation</p>
+<p>|> validate_length(:title, min: 3)  # Adds to errors if any</p>
+<p>|> validate_format(:title, ~r/.../) # Adds more if needed</p>
+<p>|> unique_constraint(:title)        # DB-level check</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each validation is independent and composable. The changeset accumulates all errors, giving users complete feedback in one response.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Multiple validation layers (client, server, database)</li>
+<li>HTML5 validation attributes</li>
+<li>Changeset validations (built-in and custom)</li>
+<li>Cross-field and conditional validation</li>
+<li>Database constraints for data integrity</li>
+<li>Custom error messages and translation</li>
+<li>Real-time validation with LiveView</li>
+<li>Validation best practices</li>
+</ul>
+
+<p>In the next chapter, we'll explore form security.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="08.04-file-uploads.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="08.06-form-security.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

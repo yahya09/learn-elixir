@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Form Security &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Form Security</span>
+            </div>
+            <div>
+                &lsaquo; <a href="08.05-form-validation.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="09.00-sessions-and-state.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 8.6</div>
+        <h1>Chapter 8.6: Form Security</h1>
+
+<p>Forms are a common attack vector. In this chapter, we'll explore security measures to protect your Phoenix application from form-based attacks.</p>
+
+<h2>CSRF Protection</h2>
+
+<h3>What is CSRF?</h3>
+
+<p>Cross-Site Request Forgery (CSRF) tricks users into submitting malicious requests:</p>
+
+<figure class="code"><pre><code>1. User logs into yoursite.com
+<ol>
+<li>User visits malicious-site.com</li>
+<li>Malicious site contains:</li>
+</ol>
+<p>   <form action="https://yoursite.com/transfer" method="post"></p>
+<p>     <input name="amount" value="10000"></p>
+<p>     <input name="to" value="attacker"></p>
+<p>   </form></p>
+<p>   <script>document.forms[0].submit()</script></p>
+<ol>
+<li>Browser sends request with user's session cookie</li>
+<li>Server processes unauthorized request</li>
+</ol>
+</code></pre></figure>
+
+<h3>Phoenix CSRF Protection</h3>
+
+<p>Phoenix automatically generates and validates CSRF tokens:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser do</p>
+<p>  plug :accepts, ["html"]</p>
+<p>  plug :fetch_session</p>
+<p>  plug :fetch_live_flash</p>
+<p>  plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>  plug :protect_from_forgery  # ← CSRF protection</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>How It Works</h3>
+
+<figure class="code"><pre><code><%# Phoenix automatically includes CSRF token in forms %>
+<.form for={@changeset} action={~p"/snippets"}>
+<p>  <%# Generates: %></p>
+<p>  <%# <input type="hidden" name="_csrf_token" value="abc123..."> %></p>
+</.form>
+</code></pre></figure>
+
+<p>The token is validated on POST/PUT/PATCH/DELETE requests.</p>
+
+<h3>Token in AJAX Requests</h3>
+
+<p>For JavaScript requests, include the token from the meta tag:</p>
+
+<figure class="code"><pre><code><%# In root layout %>
+<meta name="csrf-token" content={get_csrf_token()} />
+</code></pre></figure>
+
+<figure class="code"><pre><code>// In JavaScript
+<p>const csrfToken = document.querySelector("meta[name='csrf-token']").content;</p>
+
+<p>fetch('/api/snippets', {</p>
+<p>  method: 'POST',</p>
+<p>  headers: {</p>
+<p>    'Content-Type': 'application/json',</p>
+<p>    'X-CSRF-Token': csrfToken</p>
+<p>  },</p>
+<p>  body: JSON.stringify(data)</p>
+<p>});</p>
+</code></pre></figure>
+
+<h3>Disabling CSRF (API Routes)</h3>
+
+<p>For API routes with token authentication, CSRF isn't needed:</p>
+
+<figure class="code"><pre><code>pipeline :api do
+<p>  plug :accepts, ["json"]</p>
+<p>  # No :protect_from_forgery - API uses token auth</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Mass Assignment Protection</h2>
+
+<h3>The Problem</h3>
+
+<p>Without protection, users can modify any field:</p>
+
+<figure class="code"><pre><code><!-- Attacker adds hidden field -->
+<input type="hidden" name="user[role]" value="admin">
+</code></pre></figure>
+
+<h3>Ecto's cast/4 Solution</h3>
+
+<p>Only explicitly listed fields are accepted:</p>
+
+<figure class="code"><pre><code>def changeset(user, attrs) do
+<p>  user</p>
+<p>  # Only these fields can be set from params</p>
+<p>  |> cast(attrs, [:name, :email, :bio])</p>
+<p>  # role, admin, etc. are NOT castable</p>
+<p>  |> validate_required([:name, :email])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Different Changesets for Different Contexts</h3>
+
+<figure class="code"><pre><code># For user self-registration
+<p>def registration_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:name, :email, :password])</p>
+<p>  |> validate_required([:name, :email, :password])</p>
+<p>  |> hash_password()</p>
+<p>end</p>
+
+<h1>For admin editing users</h1>
+<p>def admin_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:name, :email, :role, :active])</p>
+<p>  |> validate_required([:name, :email])</p>
+<p>  |> validate_inclusion(:role, [:user, :moderator, :admin])</p>
+<p>end</p>
+
+<h1>For user updating own profile</h1>
+<p>def profile_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:name, :bio, :website])</p>
+<p>  |> validate_length(:bio, max: 500)</p>
+<p>  |> validate_url(:website)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Input Sanitization</h2>
+
+<h3>XSS Protection</h3>
+
+<p>Phoenix/HEEx automatically escapes output:</p>
+
+<figure class="code"><pre><code><%# Automatically escaped - safe %>
+<p><%= @snippet.content %></p>
+
+<%# Renders as: %>
+<p>&lt;script&gt;alert('xss')&lt;/script&gt;</p>
+</code></pre></figure>
+
+<h3>Raw HTML (Use Carefully)</h3>
+
+<figure class="code"><pre><code><%# DANGEROUS - only use for trusted content %>
+<div><%= raw(@trusted_html) %></div>
+
+<%# Or with Phoenix.HTML.raw/1 %>
+<div><%= Phoenix.HTML.raw(@trusted_html) %></div>
+</code></pre></figure>
+
+<h3>HTML Sanitization for User Content</h3>
+
+<p>If you need to allow some HTML:</p>
+
+<figure class="code"><pre><code># Add to mix.exs
+<p>{:html_sanitize_ex, "~> 1.4"}</p>
+
+<h1>Sanitize user input</h1>
+<p>defmodule Snippetbox.Sanitizer do</p>
+<p>  def sanitize_html(html) do</p>
+<p>    HtmlSanitizeEx.basic_html(html)</p>
+<p>    # Allows: p, br, strong, em, a, ul, ol, li</p>
+<p>    # Strips: script, style, iframe, etc.</p>
+<p>  end</p>
+
+<p>  def strip_all_html(text) do</p>
+<p>    HtmlSanitizeEx.strip_tags(text)</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>In changeset</h1>
+<p>def changeset(comment, attrs) do</p>
+<p>  comment</p>
+<p>  |> cast(attrs, [:content])</p>
+<p>  |> sanitize_field(:content)</p>
+<p>end</p>
+
+<p>defp sanitize_field(changeset, field) do</p>
+<p>  case get_change(changeset, field) do</p>
+<p>    nil -> changeset</p>
+<p>    value -> put_change(changeset, field, Sanitizer.sanitize_html(value))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>SQL Injection Prevention</h2>
+
+<h3>Ecto Protects You</h3>
+
+<p>Ecto uses parameterized queries by default:</p>
+
+<figure class="code"><pre><code># Safe - parameters are escaped
+<p>Repo.all(from s in Snippet, where: s.title == ^user_input)</p>
+
+<h1>Generated SQL:</h1>
+<h1>SELECT * FROM snippets WHERE title = $1</h1>
+<h1>Parameters: [user_input]</h1>
+</code></pre></figure>
+
+<h3>Dangerous: Raw SQL</h3>
+
+<p>Avoid string interpolation in queries:</p>
+
+<figure class="code"><pre><code># DANGEROUS - SQL injection vulnerability
+<p>query = "SELECT * FROM snippets WHERE title = '#{user_input}'"</p>
+<p>Repo.query(query)</p>
+
+<h1>Safe - use parameters</h1>
+<p>Repo.query("SELECT * FROM snippets WHERE title = $1", [user_input])</p>
+</code></pre></figure>
+
+<h3>Fragment with Parameters</h3>
+
+<figure class="code"><pre><code># Safe use of fragment
+<p>from s in Snippet,</p>
+<p>  where: fragment("lower(?) LIKE lower(?)", s.title, ^"%#{search}%")</p>
+</code></pre></figure>
+
+<h2>Rate Limiting</h2>
+
+<h3>Protect Against Brute Force</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/rate_limit.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RateLimit do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def rate_limit_login(conn, _opts) do</p>
+<p>    ip = to_string(:inet.ntoa(conn.remote_ip))</p>
+<p>    key = "login_attempts:#{ip}"</p>
+
+<p>    case Hammer.check_rate(key, 60_000, 5) do</p>
+<p>      {:allow, _count} -></p>
+<p>        conn</p>
+
+<p>      {:deny, _limit} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:error, "Too many login attempts. Please try again later.")</p>
+<p>        |> redirect(to: ~p"/login")</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code># In router or controller
+<p>plug :rate_limit_login when action in [:create]</p>
+</code></pre></figure>
+
+<h3>Form Submission Rate Limiting</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetController do
+<p>  plug :rate_limit_create when action == :create</p>
+
+<p>  defp rate_limit_create(conn, _opts) do</p>
+<p>    user_id = conn.assigns.current_user.id</p>
+<p>    key = "snippet_create:#{user_id}"</p>
+
+<p>    case Hammer.check_rate(key, 3600_000, 10) do  # 10 per hour</p>
+<p>      {:allow, _count} -> conn</p>
+<p>      {:deny, _limit} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:error, "You're creating snippets too quickly.")</p>
+<p>        |> redirect(to: ~p"/snippets")</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Hidden Field Tampering</h2>
+
+<h3>Verify Hidden Field Values</h3>
+
+<figure class="code"><pre><code>def update(conn, %{"id" => id, "snippet" => params}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+
+<p>  # Verify ownership - don't trust hidden user_id field</p>
+<p>  if snippet.user_id != conn.assigns.current_user.id do</p>
+<p>    conn</p>
+<p>    |> put_flash(:error, "You can't edit this snippet.")</p>
+<p>    |> redirect(to: ~p"/snippets")</p>
+<p>  else</p>
+<p>    # Safe to proceed</p>
+<p>    case Snippets.update_snippet(snippet, params) do</p>
+<p>      {:ok, snippet} -> redirect(conn, to: ~p"/snippets/#{snippet}")</p>
+<p>      {:error, changeset} -> render(conn, :edit, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Signed Values</h3>
+
+<p>For sensitive hidden fields:</p>
+
+<figure class="code"><pre><code># Sign value before putting in form
+<p>def new(conn, _params) do</p>
+<p>  token = Phoenix.Token.sign(conn, "return_to", conn.request_path)</p>
+<p>  render(conn, :new, return_token: token)</p>
+<p>end</p>
+
+<h1>Verify on submission</h1>
+<p>def create(conn, %{"return_token" => token} = params) do</p>
+<p>  case Phoenix.Token.verify(conn, "return_to", token, max_age: 3600) do</p>
+<p>    {:ok, return_path} -></p>
+<p>      # Safe to redirect to return_path</p>
+<p>      redirect(conn, to: return_path)</p>
+
+<p>    {:error, _reason} -></p>
+<p>      redirect(conn, to: ~p"/")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Content Security Policy</h2>
+
+<h3>Restrict Form Targets</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/security_headers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.SecurityHeaders do</p>
+<p>  import Plug.Conn</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    conn</p>
+<p>    |> put_resp_header("content-security-policy",</p>
+<p>         "default-src 'self'; " <></p>
+<p>         "form-action 'self'; " <>  # Forms can only submit to same origin</p>
+<p>         "frame-ancestors 'none'")</p>
+<p>    |> put_resp_header("x-frame-options", "DENY")</p>
+<p>    |> put_resp_header("x-content-type-options", "nosniff")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Security Checklist</h2>
+
+<h3>Form Security Checklist</h3>
+
+<ul>
+<li>[ ] CSRF protection enabled for browser routes</li>
+<li>[ ] Use <code>cast/4</code> to whitelist form fields</li>
+<li>[ ] Different changesets for different user roles</li>
+<li>[ ] HTML output is escaped (default in HEEx)</li>
+<li>[ ] Raw HTML is sanitized if needed</li>
+<li>[ ] No SQL string interpolation</li>
+<li>[ ] Rate limiting on sensitive forms</li>
+<li>[ ] Verify ownership before updates</li>
+<li>[ ] Sign sensitive hidden values</li>
+<li>[ ] CSP headers configured</li>
+</ul>
+
+<h3>Testing Security</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/snippet_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>describe "security" do</p>
+<p>  test "rejects requests without CSRF token", %{conn: conn} do</p>
+<p>    conn =</p>
+<p>      conn</p>
+<p>      |> delete_req_header("x-csrf-token")</p>
+<p>      |> post(~p"/snippets", snippet: %{title: "Test"})</p>
+
+<p>    assert html_response(conn, 403) =~ "forbidden"</p>
+<p>  end</p>
+
+<p>  test "cannot mass assign protected fields", %{conn: conn} do</p>
+<p>    user = user_fixture()</p>
+<p>    conn = log_in_user(conn, user)</p>
+
+<p>    post(conn, ~p"/users/#{user}", user: %{role: "admin"})</p>
+
+<p>    # Role should not change</p>
+<p>    assert Accounts.get_user!(user.id).role == :user</p>
+<p>  end</p>
+
+<p>  test "cannot edit other users' snippets", %{conn: conn} do</p>
+<p>    owner = user_fixture()</p>
+<p>    attacker = user_fixture()</p>
+<p>    snippet = snippet_fixture(user: owner)</p>
+
+<p>    conn = log_in_user(conn, attacker)</p>
+<p>    conn = put(conn, ~p"/snippets/#{snippet}", snippet: %{title: "Hacked"})</p>
+
+<p>    assert redirected_to(conn) == ~p"/snippets"</p>
+<p>    assert Snippets.get_snippet!(snippet.id).title != "Hacked"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Defense in Depth</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Security follows the functional principle of composition:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> conn
+<p>|> validate_csrf_token()      # Layer 1</p>
+<p>|> authenticate_user()        # Layer 2</p>
+<p>|> authorize_resource()       # Layer 3</p>
+<p>|> validate_input()           # Layer 4</p>
+<p>|> process_safely()           # Layer 5</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each layer is independent and composable. If one fails, it halts the pipeline. This makes security both robust and testable.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://owasp.org/www-project-top-ten/">OWASP Top 10</a></li>
+<li><a href="https://hexdocs.pm/phoenix/security.html">Phoenix Security Guide</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>CSRF protection and tokens</li>
+<li>Mass assignment protection with changesets</li>
+<li>XSS prevention and HTML sanitization</li>
+<li>SQL injection prevention</li>
+<li>Rate limiting forms</li>
+<li>Hidden field tampering protection</li>
+<li>Content Security Policy</li>
+<li>Security testing practices</li>
+</ul>
+
+<p>This completes the Processing Forms chapter. In the next chapter, we'll explore sessions and state management.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="08.05-form-validation.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="09.00-sessions-and-state.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

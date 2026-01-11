@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Flash Messages &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Flash Messages</span>
+            </div>
+            <div>
+                &lsaquo; <a href="09.01-session-management.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="09.03-cookies.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 9.2</div>
+        <h1>Chapter 9.2: Flash Messages</h1>
+
+<p>Flash messages provide feedback to users after actions. They persist across a single redirect and are automatically cleared after being displayed.</p>
+
+<h2>How Flash Works</h2>
+
+<figure class="code"><pre><code>User submits form
+<p>       ↓</p>
+<p>Controller processes</p>
+<p>       ↓</p>
+<p>put_flash(:info, "Success!")</p>
+<p>       ↓</p>
+<p>Redirect to new page</p>
+<p>       ↓</p>
+<p>Flash stored in session</p>
+<p>       ↓</p>
+<p>New page renders</p>
+<p>       ↓</p>
+<p>Flash displayed</p>
+<p>       ↓</p>
+<p>Flash cleared from session</p>
+</code></pre></figure>
+
+<h2>Using Flash Messages</h2>
+
+<h3>Setting Flash</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def create(conn, %{"snippet" => snippet_params}) do</p>
+<p>  case Snippets.create_snippet(snippet_params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Snippet created successfully.")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, changeset} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "Please fix the errors below.")</p>
+<p>      |> render(:new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+
+<p>def delete(conn, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  {:ok, _} = Snippets.delete_snippet(snippet)</p>
+
+<p>  conn</p>
+<p>  |> put_flash(:info, "Snippet deleted.")</p>
+<p>  |> redirect(to: ~p"/snippets")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Flash Types</h3>
+
+<p>Common flash types by convention:</p>
+
+<p>| Type | Usage | Typical Color |</p>
+<p>|------|-------|---------------|</p>
+<p>| <code>:info</code> | Success messages | Green/Blue |</p>
+<p>| <code>:error</code> | Error messages | Red |</p>
+<p>| <code>:warning</code> | Warning messages | Yellow/Orange |</p>
+
+<figure class="code"><pre><code>put_flash(conn, :info, "Profile updated!")
+<p>put_flash(conn, :error, "Could not save changes.")</p>
+<p>put_flash(conn, :warning, "Your subscription expires soon.")</p>
+</code></pre></figure>
+
+<h2>Displaying Flash Messages</h2>
+
+<h3>In Layouts</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/app.html.heex %>
+
+<main class="px-4 py-8">
+<p>  <.flash_group flash={@flash} /></p>
+<p>  <%= @inner_content %></p>
+</main>
+</code></pre></figure>
+
+<h3>Default Flash Component</h3>
+
+<p>Phoenix generates flash components in <code>core_components.ex</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/core_components.ex</figcaption><pre><code class="language-elixir">
+<p>attr :id, :string, doc: "the optional id of flash container"</p>
+<p>attr :flash, :map, default: %{}, doc: "the map of flash messages"</p>
+<p>attr :title, :string, default: nil</p>
+<p>attr :kind, :atom, values: [:info, :error], doc: "used for styling and aria attributes"</p>
+<p>attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"</p>
+
+<p>slot :inner_block, doc: "the optional inner block that renders the flash message"</p>
+
+<p>def flash(assigns) do</p>
+<p>  assigns = assign_new(assigns, :id, fn -> "flash-#{assigns.kind}" end)</p>
+
+<p>  ~H"""</p>
+<p>  <div</p>
+<p>    :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}</p>
+<p>    id={@id}</p>
+<p>    phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}</p>
+<p>    role="alert"</p>
+<p>    class={[</p>
+<p>      "fixed top-2 right-2 mr-2 w-80 sm:w-96 z-50 rounded-lg p-3 ring-1",</p>
+<p>      @kind == :info && "bg-emerald-50 text-emerald-800 ring-emerald-500 fill-cyan-900",</p>
+<p>      @kind == :error && "bg-rose-50 text-rose-900 ring-rose-500 fill-rose-900"</p>
+<p>    ]}</p>
+<p>    {@rest}</p>
+<p>  ></p>
+<p>    <p :if={@title} class="flex items-center gap-1.5 text-sm font-semibold leading-6"></p>
+<p>      <.icon :if={@kind == :info} name="hero-information-circle-mini" class="h-4 w-4" /></p>
+<p>      <.icon :if={@kind == :error} name="hero-exclamation-circle-mini" class="h-4 w-4" /></p>
+<p>      <%= @title %></p>
+</p>
+<p>    <p class="mt-2 text-sm leading-5"><%= msg %></p></p>
+<p>    <button type="button" class="group absolute top-1 right-1 p-2" aria-label="close"></p>
+<p>      <.icon name="hero-x-mark-solid" class="h-5 w-5 opacity-40 group-hover:opacity-70" /></p>
+<p>    </button></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+
+<p>attr :flash, :map, required: true, doc: "the map of flash messages"</p>
+<p>attr :id, :string, default: "flash-group", doc: "the optional id of flash container"</p>
+
+<p>def flash_group(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div id={@id}></p>
+<p>    <.flash kind={:info} title="Success!" flash={@flash} /></p>
+<p>    <.flash kind={:error} title="Error!" flash={@flash} /></p>
+<p>    <.flash</p>
+<p>      id="client-error"</p>
+<p>      kind={:error}</p>
+<p>      title="We can't find the internet"</p>
+<p>      phx-disconnected={show(".phx-client-error #client-error")}</p>
+<p>      phx-connected={hide("#client-error")}</p>
+<p>      hidden</p>
+<p>    ></p>
+<p>      Attempting to reconnect <.icon name="hero-arrow-path" class="ml-1 h-3 w-3 animate-spin" /></p>
+<p>    </.flash></p>
+
+<p>    <.flash</p>
+<p>      id="server-error"</p>
+<p>      kind={:error}</p>
+<p>      title="Something went wrong!"</p>
+<p>      phx-disconnected={show(".phx-server-error #server-error")}</p>
+<p>      phx-connected={hide("#server-error")}</p>
+<p>      hidden</p>
+<p>    ></p>
+<p>      Hang in there while we get back on track</p>
+<p>      <.icon name="hero-arrow-path" class="ml-1 h-3 w-3 animate-spin" /></p>
+<p>    </.flash></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Custom Flash Display</h3>
+
+<figure class="code"><pre><code><%# Simple inline display %>
+<div :if={info = Phoenix.Flash.get(@flash, :info)} class="alert alert-info">
+<p>  <%= info %></p>
+</div>
+
+<div :if={error = Phoenix.Flash.get(@flash, :error)} class="alert alert-error">
+<p>  <%= error %></p>
+</div>
+</code></pre></figure>
+
+<h3>Multiple Flash Messages</h3>
+
+<figure class="code"><pre><code># Setting multiple flashes
+<p>conn</p>
+<p>|> put_flash(:info, "Profile updated!")</p>
+<p>|> put_flash(:warning, "Don't forget to verify your email.")</p>
+<p>|> redirect(to: ~p"/profile")</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code><%# Display in template %>
+<div :for={{type, message} <- @flash} class={"alert alert-#{type}"}>
+<p>  <%= message %></p>
+</div>
+</code></pre></figure>
+
+<h2>Flash with Render vs Redirect</h2>
+
+<h3>With Redirect (Persists)</h3>
+
+<figure class="code"><pre><code>def create(conn, params) do
+<p>  # Flash persists through redirect</p>
+<p>  conn</p>
+<p>  |> put_flash(:info, "Created!")</p>
+<p>  |> redirect(to: ~p"/snippets")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>With Render (Immediate)</h3>
+
+<figure class="code"><pre><code>def create(conn, params) do
+<p>  case Snippets.create_snippet(params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      redirect(conn, to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, changeset} -></p>
+<p>      # Flash shown on same request (no redirect)</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "Please fix the errors.")</p>
+<p>      |> render(:new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>LiveView Flash</h2>
+
+<h3>In LiveView</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/snippet_live/index.ex</figcaption><pre><code class="language-elixir">
+<p>def handle_event("delete", %{"id" => id}, socket) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  {:ok, _} = Snippets.delete_snippet(snippet)</p>
+
+<p>  {:noreply,</p>
+<p>   socket</p>
+<p>   |> put_flash(:info, "Snippet deleted.")</p>
+<p>   |> stream_delete(:snippets, snippet)}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Clearing Flash in LiveView</h3>
+
+<figure class="code"><pre><code># Automatically cleared on navigation
+<h1>Or manually clear:</h1>
+<p>def handle_event("dismiss-flash", %{"key" => key}, socket) do</p>
+<p>  {:noreply, clear_flash(socket, String.to_existing_atom(key))}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Flash Helper Functions</h2>
+
+<h3>Creating Flash Helpers</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/helpers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Helpers do</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def flash_success(conn, message) do</p>
+<p>    put_flash(conn, :info, message)</p>
+<p>  end</p>
+
+<p>  def flash_error(conn, message) do</p>
+<p>    put_flash(conn, :error, message)</p>
+<p>  end</p>
+
+<p>  def flash_warning(conn, message) do</p>
+<p>    put_flash(conn, :warning, message)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Form Error Flash</h3>
+
+<figure class="code"><pre><code>def create(conn, %{"snippet" => params}) do
+<p>  case Snippets.create_snippet(params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Snippet created!")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>      error_count = length(changeset.errors)</p>
+
+<p>      conn</p>
+<p>      |> put_flash(:error, "Please fix #{error_count} error(s) below.")</p>
+<p>      |> render(:new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Styled Flash Components</h2>
+
+<h3>Toast-Style Flash</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/core_components.ex</figcaption><pre><code class="language-elixir">
+<p>def toast(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div</p>
+<p>    :if={msg = Phoenix.Flash.get(@flash, @kind)}</p>
+<p>    id={"toast-#{@kind}"}</p>
+<p>    class={[</p>
+<p>      "fixed bottom-4 right-4 z-50 rounded-lg shadow-lg p-4 max-w-sm",</p>
+<p>      "transform transition-all duration-300",</p>
+<p>      @kind == :info && "bg-green-500 text-white",</p>
+<p>      @kind == :error && "bg-red-500 text-white",</p>
+<p>      @kind == :warning && "bg-yellow-500 text-black"</p>
+<p>    ]}</p>
+<p>    role="alert"</p>
+<p>    phx-click={JS.hide(to: "#toast-#{@kind}")}</p>
+<p>  ></p>
+<p>    <div class="flex items-center gap-2"></p>
+<p>      <.icon :if={@kind == :info} name="hero-check-circle" class="h-5 w-5" /></p>
+<p>      <.icon :if={@kind == :error} name="hero-x-circle" class="h-5 w-5" /></p>
+<p>      <.icon :if={@kind == :warning} name="hero-exclamation-triangle" class="h-5 w-5" /></p>
+<p>      <span><%= msg %></span></p>
+<p>    </div></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Auto-Dismissing Flash</h3>
+
+<figure class="code"><pre><code><div
+<p>  :if={msg = Phoenix.Flash.get(@flash, :info)}</p>
+<p>  id="flash-info"</p>
+<p>  class="alert alert-info"</p>
+<p>  phx-mounted={JS.hide(time: 5000, to: "#flash-info")}</p>
+<p>></p>
+<p>  <%= msg %></p>
+</div>
+</code></pre></figure>
+
+<p>Or with JavaScript:</p>
+
+<figure class="code"><pre><code>// Auto-hide flash after 5 seconds
+<p>document.querySelectorAll('[data-flash-auto-hide]').forEach(el => {</p>
+<p>  setTimeout(() => {</p>
+<p>    el.style.transition = 'opacity 0.5s';</p>
+<p>    el.style.opacity = '0';</p>
+<p>    setTimeout(() => el.remove(), 500);</p>
+<p>  }, 5000);</p>
+<p>});</p>
+</code></pre></figure>
+
+<h2>Accessing Flash in Controllers</h2>
+
+<h3>Reading Flash</h3>
+
+<figure class="code"><pre><code>def show(conn, _params) do
+<p>  # Read flash value</p>
+<p>  info_message = Phoenix.Flash.get(conn.assigns.flash, :info)</p>
+
+<p>  # Flash is also available in templates via @flash</p>
+<p>  render(conn, :show)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Clearing Flash</h3>
+
+<figure class="code"><pre><code>def clear_notifications(conn, _params) do
+<p>  conn</p>
+<p>  |> clear_flash()  # Clears all flash messages</p>
+<p>  |> redirect(to: ~p"/")</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Ephemeral State</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Flash messages are ephemeral - they exist for one "hop":</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Request 1: Set flash
+<p>put_flash(conn, :info, "Saved!")</p>
+<p>redirect(to: "/page")</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Request 2: Flash available</p>
+<p>Phoenix.Flash.get(@flash, :info) # => "Saved!"</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Request 3: Flash gone</p>
+<p>Phoenix.Flash.get(@flash, :info) # => nil</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This automatic cleanup is a functional pattern - state is explicitly managed rather than persisting indefinitely.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How flash messages work</li>
+<li>Setting flash with <code>put_flash/3</code></li>
+<li>Displaying flash in layouts and templates</li>
+<li>Custom flash components</li>
+<li>LiveView flash handling</li>
+<li>Auto-dismissing flash</li>
+<li>Flash helper functions</li>
+</ul>
+
+<p>In the next chapter, we'll explore cookies.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="09.01-session-management.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="09.03-cookies.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

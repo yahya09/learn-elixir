@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>LiveView Basics &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; LiveView Basics</span>
+            </div>
+            <div>
+                &lsaquo; <a href="12.00-liveview.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="12.02-liveview-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 12.1</div>
+        <h1>Chapter 12.1: LiveView Basics</h1>
+
+<p>LiveView processes maintain state and respond to events. In this chapter, we'll explore the LiveView lifecycle and fundamental patterns.</p>
+
+<h2>Creating a LiveView</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/counter_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.CounterLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok, assign(socket, count: 0)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="text-center"></p>
+<p>      <h1 class="text-4xl font-bold"><%= @count %></h1></p>
+<p>      <div class="mt-4 space-x-2"></p>
+<p>        <button phx-click="decrement" class="btn">-</button></p>
+<p>        <button phx-click="increment" class="btn">+</button></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("increment", _params, socket) do</p>
+<p>    {:noreply, update(socket, :count, &(&1 + 1))}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("decrement", _params, socket) do</p>
+<p>    {:noreply, update(socket, :count, &(&1 - 1))}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Router Setup</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>live_session :default, on_mount: [{SnippetboxWeb.UserAuth, :mount_current_user}] do</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through :browser</p>
+
+<p>    live "/counter", CounterLive</p>
+<p>    live "/snippets", SnippetLive.Index, :index</p>
+<p>    live "/snippets/new", SnippetLive.Index, :new</p>
+<p>    live "/snippets/:id", SnippetLive.Show, :show</p>
+<p>    live "/snippets/:id/edit", SnippetLive.Show, :edit</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>LiveView Lifecycle</h2>
+
+<figure class="code"><pre><code>1. HTTP Request → mount/3 (disconnected)
+<ol>
+<li>WebSocket connects → mount/3 (connected)</li>
+<li>URL changes → handle_params/3</li>
+<li>User events → handle_event/3</li>
+<li>Server messages → handle_info/2</li>
+<li>Re-render → render/1 (only changed parts)</li>
+</ol>
+</code></pre></figure>
+
+<h3>Mount</h3>
+
+<figure class="code"><pre><code>@impl true
+<p>def mount(params, session, socket) do</p>
+<p>  # params: URL parameters</p>
+<p>  # session: Session data</p>
+<p>  # socket: LiveView socket</p>
+
+<p>  if connected?(socket) do</p>
+<p>    # Only runs when WebSocket is connected</p>
+<p>    Phoenix.PubSub.subscribe(Snippetbox.PubSub, "snippets")</p>
+<p>  end</p>
+
+<p>  {:ok, assign(socket, items: [])}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Handle Params</h3>
+
+<figure class="code"><pre><code>@impl true
+<p>def handle_params(params, _uri, socket) do</p>
+<p>  {:noreply, apply_action(socket, socket.assigns.live_action, params)}</p>
+<p>end</p>
+
+<p>defp apply_action(socket, :index, _params) do</p>
+<p>  socket</p>
+<p>  |> assign(:page_title, "All Snippets")</p>
+<p>  |> assign(:snippet, nil)</p>
+<p>end</p>
+
+<p>defp apply_action(socket, :new, _params) do</p>
+<p>  socket</p>
+<p>  |> assign(:page_title, "New Snippet")</p>
+<p>  |> assign(:snippet, %Snippet{})</p>
+<p>end</p>
+
+<p>defp apply_action(socket, :edit, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+
+<p>  socket</p>
+<p>  |> assign(:page_title, "Edit #{snippet.title}")</p>
+<p>  |> assign(:snippet, snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Handle Event</h3>
+
+<figure class="code"><pre><code>@impl true
+<p>def handle_event("search", %{"query" => query}, socket) do</p>
+<p>  snippets = Snippets.search_snippets(query)</p>
+<p>  {:noreply, assign(socket, snippets: snippets, query: query)}</p>
+<p>end</p>
+
+<p>def handle_event("delete", %{"id" => id}, socket) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  {:ok, _} = Snippets.delete_snippet(snippet)</p>
+
+<p>  {:noreply, stream_delete(socket, :snippets, snippet)}</p>
+<p>end</p>
+
+<p>def handle_event("sort", %{"column" => column}, socket) do</p>
+<p>  snippets = Snippets.list_snippets(sort_by: column)</p>
+<p>  {:noreply, stream(socket, :snippets, snippets, reset: true)}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Handle Info</h3>
+
+<figure class="code"><pre><code>@impl true
+<p>def handle_info({:snippet_created, snippet}, socket) do</p>
+<p>  {:noreply, stream_insert(socket, :snippets, snippet, at: 0)}</p>
+<p>end</p>
+
+<p>def handle_info({:snippet_updated, snippet}, socket) do</p>
+<p>  {:noreply, stream_insert(socket, :snippets, snippet)}</p>
+<p>end</p>
+
+<p>def handle_info({:snippet_deleted, snippet}, socket) do</p>
+<p>  {:noreply, stream_delete(socket, :snippets, snippet)}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Socket Assigns</h2>
+
+<h3>Basic Assigns</h3>
+
+<figure class="code"><pre><code># Set single assign
+<p>socket = assign(socket, :name, "value")</p>
+
+<h1>Set multiple assigns</h1>
+<p>socket = assign(socket, name: "value", count: 0)</p>
+
+<h1>Update existing assign</h1>
+<p>socket = update(socket, :count, &(&1 + 1))</p>
+
+<h1>Access assigns</h1>
+<p>socket.assigns.name</p>
+</code></pre></figure>
+
+<h3>Temporary Assigns</h3>
+
+<p>For large lists that don't need to stay in memory:</p>
+
+<figure class="code"><pre><code>@impl true
+<p>def mount(_params, _session, socket) do</p>
+<p>  {:ok, assign(socket, items: large_list()), temporary_assigns: [items: []]}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Streams</h3>
+
+<p>For efficient list updates:</p>
+
+<figure class="code"><pre><code>@impl true
+<p>def mount(_params, _session, socket) do</p>
+<p>  {:ok, stream(socket, :snippets, Snippets.list_snippets())}</p>
+<p>end</p>
+
+<h1>Insert at beginning</h1>
+<p>stream_insert(socket, :snippets, snippet, at: 0)</p>
+
+<h1>Insert at end (default)</h1>
+<p>stream_insert(socket, :snippets, snippet)</p>
+
+<h1>Update existing item</h1>
+<p>stream_insert(socket, :snippets, updated_snippet)</p>
+
+<h1>Delete item</h1>
+<p>stream_delete(socket, :snippets, snippet)</p>
+
+<h1>Reset entire stream</h1>
+<p>stream(socket, :snippets, new_list, reset: true)</p>
+</code></pre></figure>
+
+<h2>Event Bindings</h2>
+
+<h3>Click Events</h3>
+
+<figure class="code"><pre><code><button phx-click="action">Click me</button>
+<button phx-click="action" phx-value-id={@item.id}>Delete</button>
+</code></pre></figure>
+
+<h3>Form Events</h3>
+
+<figure class="code"><pre><code><form phx-submit="save" phx-change="validate">
+<p>  <input name="query" phx-debounce="300" /></p>
+</form>
+</code></pre></figure>
+
+<h3>Focus Events</h3>
+
+<figure class="code"><pre><code><input phx-focus="focus" phx-blur="blur" />
+</code></pre></figure>
+
+<h3>Key Events</h3>
+
+<figure class="code"><pre><code><div phx-window-keydown="keydown" phx-key="Escape">
+<p>  Press Escape to close</p>
+</div>
+</code></pre></figure>
+
+<h3>Debounce and Throttle</h3>
+
+<figure class="code"><pre><code><%# Debounce: wait for pause in typing %>
+<input phx-change="search" phx-debounce="300" />
+
+<%# Throttle: fire at most every N ms %>
+<div phx-click="scroll" phx-throttle="500">
+</code></pre></figure>
+
+<h2>Navigation</h2>
+
+<h3>Live Navigation</h3>
+
+<figure class="code"><pre><code><%# Stay in same LiveView, call handle_params %>
+<.link patch={~p"/snippets?page=2"}>Page 2</.link>
+
+<%# Navigate to different LiveView %>
+<.link navigate={~p"/settings"}>Settings</.link>
+
+<%# Regular link (full page load) %>
+<.link href={~p"/logout"} method="delete">Logout</.link>
+</code></pre></figure>
+
+<h3>Programmatic Navigation</h3>
+
+<figure class="code"><pre><code># Patch current LiveView
+<p>{:noreply, push_patch(socket, to: ~p"/snippets?page=2")}</p>
+
+<h1>Navigate to different LiveView</h1>
+<p>{:noreply, push_navigate(socket, to: ~p"/settings")}</p>
+
+<h1>Redirect (full page load)</h1>
+<p>{:noreply, redirect(socket, to: ~p"/login")}</p>
+</code></pre></figure>
+
+<h2>Complete Example: Snippet Index</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/snippet_live/index.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetLive.Index do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    if connected?(socket) do</p>
+<p>      Phoenix.PubSub.subscribe(Snippetbox.PubSub, "snippets")</p>
+<p>    end</p>
+
+<p>    {:ok, stream(socket, :snippets, Snippets.list_snippets())}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_params(params, _url, socket) do</p>
+<p>    {:noreply, apply_action(socket, socket.assigns.live_action, params)}</p>
+<p>  end</p>
+
+<p>  defp apply_action(socket, :index, _params) do</p>
+<p>    socket</p>
+<p>    |> assign(:page_title, "Snippets")</p>
+<p>    |> assign(:snippet, nil)</p>
+<p>  end</p>
+
+<p>  defp apply_action(socket, :new, _params) do</p>
+<p>    socket</p>
+<p>    |> assign(:page_title, "New Snippet")</p>
+<p>    |> assign(:snippet, %Snippet{})</p>
+<p>  end</p>
+
+<p>  defp apply_action(socket, :edit, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+
+<p>    socket</p>
+<p>    |> assign(:page_title, "Edit #{snippet.title}")</p>
+<p>    |> assign(:snippet, snippet)</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("delete", %{"id" => id}, socket) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    {:ok, _} = Snippets.delete_snippet(snippet)</p>
+
+<p>    {:noreply, stream_delete(socket, :snippets, snippet)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:snippet_created, snippet}, socket) do</p>
+<p>    {:noreply, stream_insert(socket, :snippets, snippet, at: 0)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <.header></p>
+<p>      Snippets</p>
+<p>      <:actions></p>
+<p>        <.link patch={~p"/snippets/new"}></p>
+<p>          <.button>New Snippet</.button></p>
+<p>        </.link></p>
+<p>      </:actions></p>
+<p>    </.header></p>
+
+<p>    <.table id="snippets" rows={@streams.snippets} row_click={fn {_id, snippet} -> JS.navigate(~p"/snippets/#{snippet}") end}></p>
+<p>      <:col :let={{_id, snippet}} label="Title"><%= snippet.title %></:col></p>
+<p>      <:col :let={{_id, snippet}} label="Language"><%= snippet.language %></:col></p>
+<p>      <:col :let={{_id, snippet}} label="Created"><%= format_date(snippet.inserted_at) %></:col></p>
+<p>      <:action :let={{_id, snippet}}></p>
+<p>        <.link patch={~p"/snippets/#{snippet}/edit"}>Edit</.link></p>
+<p>      </:action></p>
+<p>      <:action :let={{id, snippet}}></p>
+<p>        <.link</p>
+<p>          phx-click={JS.push("delete", value: %{id: snippet.id}) |> hide("##{id}")}</p>
+<p>          data-confirm="Are you sure?"</p>
+<p>        ></p>
+<p>          Delete</p>
+<p>        </.link></p>
+<p>      </:action></p>
+<p>    </.table></p>
+
+<p>    <.modal :if={@live_action in [:new, :edit]} id="snippet-modal" show on_cancel={JS.patch(~p"/snippets")}></p>
+<p>      <.live_component</p>
+<p>        module={SnippetboxWeb.SnippetLive.FormComponent}</p>
+<p>        id={@snippet.id || :new}</p>
+<p>        title={@page_title}</p>
+<p>        action={@live_action}</p>
+<p>        snippet={@snippet}</p>
+<p>        patch={~p"/snippets"}</p>
+<p>      /></p>
+<p>    </.modal></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  defp format_date(datetime) do</p>
+<p>    Calendar.strftime(datetime, "%B %d, %Y")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Stateful Processes</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>LiveViews are stateful processes, but state changes are explicit:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # State is in socket.assigns
+<p># Changes are explicit transformations</p>
+<p>socket</p>
+<p>|> assign(:count, 0)           # Set initial</p>
+<p>|> update(:count, &(&1 + 1))   # Transform existing</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Each callback returns new socket</p>
+<p>{:noreply, new_socket}</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>While stateful, the model is still functional—state changes through explicit transformations.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating LiveView modules</li>
+<li>Lifecycle callbacks (mount, handle_params, handle_event, handle_info)</li>
+<li>Socket assigns and streams</li>
+<li>Event bindings (click, form, focus, key)</li>
+<li>Navigation (patch, navigate, redirect)</li>
+<li>Complete LiveView index example</li>
+</ul>
+
+<p>In the next chapter, we'll explore LiveView forms.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="12.00-liveview.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="12.02-liveview-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

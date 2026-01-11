@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Session Management &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Session Management</span>
+            </div>
+            <div>
+                &lsaquo; <a href="09.00-sessions-and-state.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="09.02-flash-messages.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 9.1</div>
+        <h1>Chapter 9.1: Session Management</h1>
+
+<p>Sessions allow you to persist data across requests for individual users. In this chapter, we'll explore Phoenix's session management system.</p>
+
+<h2>How Sessions Work</h2>
+
+<figure class="code"><pre><code>Browser                          Server
+<p>   │                               │</p>
+<p>   │  Request (no cookie)          │</p>
+<p>   │──────────────────────────────>│</p>
+<p>   │                               │</p>
+<p>   │  Response                     │</p>
+<p>   │  Set-Cookie: _session=abc123  │</p>
+<p>   │<──────────────────────────────│</p>
+<p>   │                               │</p>
+<p>   │  Request                      │</p>
+<p>   │  Cookie: _session=abc123      │</p>
+<p>   │──────────────────────────────>│</p>
+<p>   │                               │</p>
+<p>   │  Server decodes session       │</p>
+<p>   │  %{user_id: 42, ...}          │</p>
+<p>   │                               │</p>
+</code></pre></figure>
+
+<h2>Session Configuration</h2>
+
+<h3>Endpoint Configuration</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Endpoint do</p>
+<p>  use Phoenix.Endpoint, otp_app: :snippetbox</p>
+
+<p>  # Session configuration</p>
+<p>  @session_options [</p>
+<p>    store: :cookie,</p>
+<p>    key: "_snippetbox_key",</p>
+<p>    signing_salt: "abc123xyz",</p>
+<p>    encryption_salt: "encrypted_cookie_salt",</p>
+<p>    same_site: "Lax"</p>
+<p>  ]</p>
+
+<p>  plug Plug.Session, @session_options</p>
+
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Configuration Options</h3>
+
+<p>| Option | Description | Default |</p>
+<p>|--------|-------------|---------|</p>
+<p>| <code>:store</code> | Storage backend (<code>:cookie</code> or <code>:ets</code>) | <code>:cookie</code> |</p>
+<p>| <code>:key</code> | Cookie name | Required |</p>
+<p>| <code>:signing_salt</code> | Salt for signing | Required |</p>
+<p>| <code>:encryption_salt</code> | Salt for encryption | Optional |</p>
+<p>| <code>:max_age</code> | Session lifetime in seconds | Session cookie |</p>
+<p>| <code>:same_site</code> | SameSite cookie attribute | <code>"Lax"</code> |</p>
+<p>| <code>:secure</code> | HTTPS only | <code>false</code> |</p>
+<p>| <code>:http_only</code> | Not accessible via JS | <code>true</code> |</p>
+<p>| <code>:domain</code> | Cookie domain | Current domain |</p>
+
+<h3>Environment-Specific Configuration</h3>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  # Base configuration</p>
+
+<h1>File: config/prod.exs</h1>
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  secret_key_base: System.get_env("SECRET_KEY_BASE")</p>
+
+<h1>Session options can reference this</h1>
+<p>@session_options [</p>
+<p>  store: :cookie,</p>
+<p>  key: "_snippetbox_key",</p>
+<p>  signing_salt: "production_signing_salt",</p>
+<p>  encryption_salt: "production_encryption_salt",</p>
+<p>  same_site: "Lax",</p>
+<p>  secure: true,  # HTTPS in production</p>
+<p>  max_age: 60 <em> 60 </em> 24 * 60  # 60 days</p>
+<p>]</p>
+</code></pre></figure>
+
+<h2>Using Sessions</h2>
+
+<h3>Pipeline Setup</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser do</p>
+<p>  plug :accepts, ["html"]</p>
+<p>  plug :fetch_session       # ← Load session data</p>
+<p>  plug :fetch_live_flash</p>
+<p>  plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>  plug :protect_from_forgery</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Reading Session Data</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/page_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def home(conn, _params) do</p>
+<p>  # Get single value</p>
+<p>  user_id = get_session(conn, :user_id)</p>
+
+<p>  # Get with default</p>
+<p>  theme = get_session(conn, :theme) || "light"</p>
+
+<p>  # Get all session data (for debugging)</p>
+<p>  all_session = conn.private.plug_session</p>
+
+<p>  render(conn, :home, user_id: user_id, theme: theme)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Writing Session Data</h3>
+
+<figure class="code"><pre><code>def login(conn, %{"user" => user_params}) do
+<p>  case Accounts.authenticate(user_params) do</p>
+<p>    {:ok, user} -></p>
+<p>      conn</p>
+<p>      |> put_session(:user_id, user.id)</p>
+<p>      |> put_session(:logged_in_at, DateTime.utc_now())</p>
+<p>      |> configure_session(renew: true)  # New session ID (security)</p>
+<p>      |> redirect(to: ~p"/")</p>
+
+<p>    {:error, _reason} -></p>
+<p>      render(conn, :new, error: "Invalid credentials")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Deleting Session Data</h3>
+
+<figure class="code"><pre><code>def logout(conn, _params) do
+<p>  conn</p>
+<p>  |> clear_session()  # Remove all session data</p>
+<p>  |> redirect(to: ~p"/")</p>
+<p>end</p>
+
+<h1>Or delete specific keys</h1>
+<p>def clear_preferences(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> delete_session(:theme)</p>
+<p>  |> delete_session(:language)</p>
+<p>  |> redirect(to: ~p"/settings")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Session Configuration at Runtime</h3>
+
+<figure class="code"><pre><code># Renew session ID (after login for security)
+<p>configure_session(conn, renew: true)</p>
+
+<h1>Drop the session entirely</h1>
+<p>configure_session(conn, drop: true)</p>
+
+<h1>Ignore changes made to session</h1>
+<p>configure_session(conn, ignore: true)</p>
+</code></pre></figure>
+
+<h2>Session Storage Backends</h2>
+
+<h3>Cookie Store (Default)</h3>
+
+<p>Stores session data in signed/encrypted cookie:</p>
+
+<figure class="code"><pre><code>@session_options [
+<p>  store: :cookie,</p>
+<p>  key: "_snippetbox_key",</p>
+<p>  signing_salt: "...",</p>
+<p>  encryption_salt: "..."</p>
+<p>]</p>
+</code></pre></figure>
+
+<p>Pros:</p>
+<ul>
+<li>No server-side storage needed</li>
+<li>Scales horizontally easily</li>
+<li>Fast (no database lookup)</li>
+</ul>
+
+<p>Cons:</p>
+<ul>
+<li>Limited to ~4KB</li>
+<li>Data sent with every request</li>
+<li>Cannot invalidate from server</li>
+</ul>
+
+<h3>ETS Store</h3>
+
+<p>Stores session data in server memory:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>@session_options [</p>
+<p>  store: :ets,</p>
+<p>  key: "_snippetbox_key",</p>
+<p>  table: :session_store</p>
+<p>]</p>
+
+<h1>Create ETS table on application start</h1>
+<h1>File: lib/snippetbox/application.ex</h1>
+
+<p>def start(_type, _args) do</p>
+<p>  :ets.new(:session_store, [:named_table, :public, read_concurrency: true])</p>
+
+<p>  children = [</p>
+<p>    # ...</p>
+<p>  ]</p>
+
+<p>  Supervisor.start_link(children, strategy: :one_for_one)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Pros:</p>
+<ul>
+<li>Can store larger data</li>
+<li>Can invalidate from server</li>
+<li>Less data per request</li>
+</ul>
+
+<p>Cons:</p>
+<ul>
+<li>Lost on server restart</li>
+<li>Doesn't scale horizontally (without distributed ETS)</li>
+<li>More memory usage</li>
+</ul>
+
+<h3>Redis/Database Store (Custom)</h3>
+
+<p>For production with multiple servers:</p>
+
+<figure class="code"><pre><code># Add dependency
+<p>{:plug_session_redis, "~> 0.1"}</p>
+
+<h1>Configuration</h1>
+<p>@session_options [</p>
+<p>  store: PlugSessionRedis,</p>
+<p>  key: "_snippetbox_key",</p>
+<p>  table: :redis_sessions,</p>
+<p>  ttl: 86400  # 24 hours</p>
+<p>]</p>
+</code></pre></figure>
+
+<h2>Authentication Pattern</h2>
+
+<h3>Storing User in Session</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/session_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def create(conn, %{"email" => email, "password" => password}) do</p>
+<p>  case Accounts.authenticate_user(email, password) do</p>
+<p>    {:ok, user} -></p>
+<p>      conn</p>
+<p>      |> put_session(:user_id, user.id)</p>
+<p>      |> put_session(:user_token, Accounts.generate_session_token(user))</p>
+<p>      |> configure_session(renew: true)</p>
+<p>      |> put_flash(:info, "Welcome back!")</p>
+<p>      |> redirect(to: ~p"/")</p>
+
+<p>    {:error, :invalid_credentials} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "Invalid email or password")</p>
+<p>      |> render(:new)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Loading User from Session</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.Auth do</p>
+<p>  import Plug.Conn</p>
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  def fetch_current_user(conn, _opts) do</p>
+<p>    user_token = get_session(conn, :user_token)</p>
+<p>    user = user_token && Accounts.get_user_by_session_token(user_token)</p>
+<p>    assign(conn, :current_user, user)</p>
+<p>  end</p>
+
+<p>  def require_authenticated_user(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> Phoenix.Controller.put_flash(:error, "You must log in to access this page.")</p>
+<p>      |> Phoenix.Controller.redirect(to: "/login")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Router Setup</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser do</p>
+<p>  # ... standard plugs ...</p>
+<p>  plug :fetch_current_user</p>
+<p>end</p>
+
+<p>pipeline :require_authenticated_user do</p>
+<p>  plug :require_authenticated_user</p>
+<p>end</p>
+
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Session Security</h2>
+
+<h3>Token-Based Sessions</h3>
+
+<p>Store a token instead of user ID for better security:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>def generate_session_token(user) do</p>
+<p>  token = :crypto.strong_rand_bytes(32) |> Base.url_encode64()</p>
+
+<p>  # Store token in database</p>
+<p>  Repo.insert!(%UserToken{</p>
+<p>    token: token,</p>
+<p>    user_id: user.id,</p>
+<p>    context: "session",</p>
+<p>    inserted_at: NaiveDateTime.utc_now()</p>
+<p>  })</p>
+
+<p>  token</p>
+<p>end</p>
+
+<p>def get_user_by_session_token(token) do</p>
+<p>  query =</p>
+<p>    from t in UserToken,</p>
+<p>      where: t.token == ^token and t.context == "session",</p>
+<p>      where: t.inserted_at > ago(60, "day"),</p>
+<p>      join: u in assoc(t, :user),</p>
+<p>      select: u</p>
+
+<p>  Repo.one(query)</p>
+<p>end</p>
+
+<p>def delete_session_token(token) do</p>
+<p>  Repo.delete_all(from t in UserToken, where: t.token == ^token)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Session Expiry</h3>
+
+<figure class="code"><pre><code># Check session age
+<p>def validate_session_age(conn, _opts) do</p>
+<p>  logged_in_at = get_session(conn, :logged_in_at)</p>
+
+<p>  if logged_in_at && session_expired?(logged_in_at) do</p>
+<p>    conn</p>
+<p>    |> clear_session()</p>
+<p>    |> put_flash(:info, "Your session has expired. Please log in again.")</p>
+<p>    |> redirect(to: ~p"/login")</p>
+<p>    |> halt()</p>
+<p>  else</p>
+<p>    conn</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp session_expired?(logged_in_at) do</p>
+<p>  max_age = 60 <em> 60 </em> 24 * 7  # 7 days</p>
+<p>  DateTime.diff(DateTime.utc_now(), logged_in_at) > max_age</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Session Fixation Prevention</h3>
+
+<p>Always renew session after authentication:</p>
+
+<figure class="code"><pre><code>def login(conn, params) do
+<p>  # After successful authentication</p>
+<p>  conn</p>
+<p>  |> configure_session(renew: true)  # ← Prevents session fixation</p>
+<p>  |> put_session(:user_id, user.id)</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Immutable Session</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In Phoenix, <code>conn</code> is immutable. Session operations return a new conn:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Each operation returns a new conn
+<p>conn</p>
+<p>|> put_session(:key, "value")    # Returns new conn</p>
+<p>|> delete_session(:other_key)    # Returns new conn</p>
+<p>|> configure_session(renew: true) # Returns new conn</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes session manipulation predictable and thread-safe.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How sessions work in Phoenix</li>
+<li>Session configuration options</li>
+<li>Reading, writing, and deleting session data</li>
+<li>Different storage backends</li>
+<li>Authentication patterns with sessions</li>
+<li>Session security best practices</li>
+</ul>
+
+<p>In the next chapter, we'll explore flash messages.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="09.00-sessions-and-state.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="09.02-flash-messages.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>LiveView Exercises &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; LiveView Exercises</span>
+            </div>
+            <div>
+                &lsaquo; <a href="17.04-auth-exercises.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="17.06-deployment-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 17.5</div>
+        <h1>Chapter 17.5: LiveView Exercises</h1>
+
+<p>These exercises reinforce concepts from Chapter 12 covering LiveView basics, forms, components, and real-time features.</p>
+
+<h2>Exercise 1: Real-Time Counter with Persistence</h2>
+
+<p>Create a counter that persists across page refreshes and syncs across browsers.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/persistent_counter_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.PersistentCounterLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  # Requirements:</p>
+<p>  # - Counter value stored in database</p>
+<p>  # - All connected clients see the same value</p>
+<p>  # - Updates broadcast to all viewers</p>
+<p>  # - Show number of viewers</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.PersistentCounterLive do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Counters</p>
+<p>  alias SnippetboxWeb.Presence</p>
+
+<p>  @topic "counter"</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    if connected?(socket) do</p>
+<p>      Phoenix.PubSub.subscribe(Snippetbox.PubSub, @topic)</p>
+<p>      Presence.track(self(), @topic, socket.id, %{})</p>
+<p>    end</p>
+
+<p>    counter = Counters.get_counter("main")</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:count, counter.value)</p>
+<p>     |> assign(:viewers, count_viewers())}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="text-center"></p>
+<p>      <p class="text-sm text-gray-500 mb-4"><%= @viewers %> watching</p></p>
+<p>      <h1 class="text-6xl font-bold mb-8"><%= @count %></h1></p>
+<p>      <div class="space-x-4"></p>
+<p>        <.button phx-click="decrement">-</.button></p>
+<p>        <.button phx-click="increment">+</.button></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("increment", _params, socket) do</p>
+<p>    {:ok, counter} = Counters.increment("main")</p>
+<p>    broadcast_update(counter.value)</p>
+<p>    {:noreply, assign(socket, :count, counter.value)}</p>
+<p>  end</p>
+
+<p>  def handle_event("decrement", _params, socket) do</p>
+<p>    {:ok, counter} = Counters.decrement("main")</p>
+<p>    broadcast_update(counter.value)</p>
+<p>    {:noreply, assign(socket, :count, counter.value)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:counter_updated, value}, socket) do</p>
+<p>    {:noreply, assign(socket, :count, value)}</p>
+<p>  end</p>
+
+<p>  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do</p>
+<p>    {:noreply, assign(socket, :viewers, count_viewers())}</p>
+<p>  end</p>
+
+<p>  defp broadcast_update(value) do</p>
+<p>    Phoenix.PubSub.broadcast(Snippetbox.PubSub, @topic, {:counter_updated, value})</p>
+<p>  end</p>
+
+<p>  defp count_viewers do</p>
+<p>    Presence.list(@topic) |> map_size()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 2: Autocomplete Component</h2>
+
+<p>Build an autocomplete input component.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/components/autocomplete_component.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.AutocompleteComponent do</p>
+<p>  use SnippetboxWeb, :live_component</p>
+
+<p>  # Requirements:</p>
+<p>  # - Debounced search (300ms)</p>
+<p>  # - Show dropdown with results</p>
+<p>  # - Keyboard navigation (up/down/enter)</p>
+<p>  # - Click to select</p>
+<p>  # - Close on blur/escape</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.AutocompleteComponent do
+<p>  use SnippetboxWeb, :live_component</p>
+
+<p>  @impl true</p>
+<p>  def mount(socket) do</p>
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:query, "")</p>
+<p>     |> assign(:results, [])</p>
+<p>     |> assign(:selected_index, -1)</p>
+<p>     |> assign(:show_results, false)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="relative" phx-click-away="close" phx-target={@myself}></p>
+<p>      <input</p>
+<p>        type="text"</p>
+<p>        value={@query}</p>
+<p>        phx-keyup="search"</p>
+<p>        phx-keydown="navigate"</p>
+<p>        phx-debounce="300"</p>
+<p>        phx-target={@myself}</p>
+<p>        placeholder={@placeholder}</p>
+<p>        class="w-full px-4 py-2 border rounded-lg"</p>
+<p>        autocomplete="off"</p>
+<p>      /></p>
+
+<p>      <ul</p>
+<p>        :if={@show_results and @results != []}</p>
+<p>        class="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto"</p>
+<p>      ></p>
+<p>        <li</p>
+<p>          :for={{result, index} <- Enum.with_index(@results)}</p>
+<p>          phx-click="select"</p>
+<p>          phx-value-index={index}</p>
+<p>          phx-target={@myself}</p>
+<p>          class={[</p>
+<p>            "px-4 py-2 cursor-pointer",</p>
+<p>            index == @selected_index && "bg-blue-100"</p>
+<p>          ]}</p>
+<p>        ></p>
+<p>          <%= render_result(result) %></p>
+<p>        </li></p>
+<p>      </ul></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("search", %{"value" => query}, socket) do</p>
+<p>    results =</p>
+<p>      if String.length(query) >= 2 do</p>
+<p>        socket.assigns.search_fn.(query)</p>
+<p>      else</p>
+<p>        []</p>
+<p>      end</p>
+
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> assign(:query, query)</p>
+<p>     |> assign(:results, results)</p>
+<p>     |> assign(:selected_index, -1)</p>
+<p>     |> assign(:show_results, true)}</p>
+<p>  end</p>
+
+<p>  def handle_event("navigate", %{"key" => "ArrowDown"}, socket) do</p>
+<p>    max_index = length(socket.assigns.results) - 1</p>
+<p>    new_index = min(socket.assigns.selected_index + 1, max_index)</p>
+<p>    {:noreply, assign(socket, :selected_index, new_index)}</p>
+<p>  end</p>
+
+<p>  def handle_event("navigate", %{"key" => "ArrowUp"}, socket) do</p>
+<p>    new_index = max(socket.assigns.selected_index - 1, 0)</p>
+<p>    {:noreply, assign(socket, :selected_index, new_index)}</p>
+<p>  end</p>
+
+<p>  def handle_event("navigate", %{"key" => "Enter"}, socket) do</p>
+<p>    if socket.assigns.selected_index >= 0 do</p>
+<p>      result = Enum.at(socket.assigns.results, socket.assigns.selected_index)</p>
+<p>      send(self(), {:autocomplete_select, socket.assigns.id, result})</p>
+<p>    end</p>
+<p>    {:noreply, assign(socket, :show_results, false)}</p>
+<p>  end</p>
+
+<p>  def handle_event("navigate", %{"key" => "Escape"}, socket) do</p>
+<p>    {:noreply, assign(socket, :show_results, false)}</p>
+<p>  end</p>
+
+<p>  def handle_event("navigate", _params, socket), do: {:noreply, socket}</p>
+
+<p>  def handle_event("select", %{"index" => index}, socket) do</p>
+<p>    result = Enum.at(socket.assigns.results, String.to_integer(index))</p>
+<p>    send(self(), {:autocomplete_select, socket.assigns.id, result})</p>
+
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> assign(:query, result.name)</p>
+<p>     |> assign(:show_results, false)}</p>
+<p>  end</p>
+
+<p>  def handle_event("close", _params, socket) do</p>
+<p>    {:noreply, assign(socket, :show_results, false)}</p>
+<p>  end</p>
+
+<p>  defp render_result(result), do: result.name</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 3: Infinite Scroll</h2>
+
+<p>Implement infinite scroll for a list of items.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/infinite_scroll_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.InfiniteScrollLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  # Requirements:</p>
+<p>  # - Load items in batches of 20</p>
+<p>  # - Load more when user scrolls near bottom</p>
+<p>  # - Show loading indicator</p>
+<p>  # - Handle empty state</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.InfiniteScrollLive do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  @page_size 20</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:page, 1)</p>
+<p>     |> assign(:loading, false)</p>
+<p>     |> assign(:end_of_list, false)</p>
+<p>     |> stream(:snippets, Snippets.list_snippets(limit: @page_size))}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div id="infinite-scroll" phx-hook="InfiniteScroll" data-page={@page}></p>
+<p>      <div id="snippets" phx-update="stream" class="space-y-4"></p>
+<p>        <div :for={{dom_id, snippet} <- @streams.snippets} id={dom_id} class="p-4 border rounded"></p>
+<p>          <h3 class="font-bold"><%= snippet.title %></h3></p>
+<p>          <p class="text-sm text-gray-500"><%= snippet.language %></p></p>
+<p>        </div></p>
+<p>      </div></p>
+
+<p>      <div :if={@loading} class="text-center py-4"></p>
+<p>        <.spinner /></p>
+<p>      </div></p>
+
+<p>      <div :if={@end_of_list} class="text-center py-4 text-gray-500"></p>
+<p>        No more items</p>
+<p>      </div></p>
+
+<p>      <div id="scroll-sentinel" phx-hook="ScrollSentinel" class="h-4"></div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("load-more", _params, socket) do</p>
+<p>    if socket.assigns.loading or socket.assigns.end_of_list do</p>
+<p>      {:noreply, socket}</p>
+<p>    else</p>
+<p>      {:noreply, load_more(socket)}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp load_more(socket) do</p>
+<p>    page = socket.assigns.page</p>
+<p>    offset = page * @page_size</p>
+
+<p>    socket = assign(socket, :loading, true)</p>
+<p>    send(self(), {:load_page, offset})</p>
+<p>    socket</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:load_page, offset}, socket) do</p>
+<p>    snippets = Snippets.list_snippets(limit: @page_size, offset: offset)</p>
+<p>    end_of_list = length(snippets) < @page_size</p>
+
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> stream(:snippets, snippets)</p>
+<p>     |> assign(:page, socket.assigns.page + 1)</p>
+<p>     |> assign(:loading, false)</p>
+<p>     |> assign(:end_of_list, end_of_list)}</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>JavaScript Hook (assets/js/hooks.js)</h1>
+<h1>ScrollSentinel = {</h1>
+<h1>  mounted() {</h1>
+<h1>    const observer = new IntersectionObserver((entries) => {</h1>
+<h1>      if (entries[0].isIntersecting) {</h1>
+<h1>        this.pushEvent("load-more", {})</h1>
+<h1>      }</h1>
+<h1>    })</h1>
+<h1>    observer.observe(this.el)</h1>
+<h1>  }</h1>
+<h1>}</h1>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 4: Sortable List</h2>
+
+<p>Create a drag-and-drop sortable list.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/sortable_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SortableLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  # Requirements:</p>
+<p>  # - Drag items to reorder</p>
+<p>  # - Persist order to database</p>
+<p>  # - Optimistic updates</p>
+<p>  # - Handle errors gracefully</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SortableLive do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Lists</p>
+
+<p>  @impl true</p>
+<p>  def mount(%{"id" => list_id}, _session, socket) do</p>
+<p>    list = Lists.get_list_with_items!(list_id)</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:list, list)</p>
+<p>     |> stream(:items, list.items)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div></p>
+<p>      <h1 class="text-2xl font-bold mb-4"><%= @list.name %></h1></p>
+
+<p>      <ul</p>
+<p>        id="sortable-items"</p>
+<p>        phx-hook="Sortable"</p>
+<p>        phx-update="stream"</p>
+<p>        class="space-y-2"</p>
+<p>      ></p>
+<p>        <li</p>
+<p>          :for={{dom_id, item} <- @streams.items}</p>
+<p>          id={dom_id}</p>
+<p>          data-id={item.id}</p>
+<p>          class="p-4 bg-white border rounded shadow cursor-move"</p>
+<p>        ></p>
+<p>          <div class="flex items-center gap-2"></p>
+<p>            <.icon name="hero-bars-3" class="text-gray-400" /></p>
+<p>            <span><%= item.content %></span></p>
+<p>          </div></p>
+<p>        </li></p>
+<p>      </ul></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("reorder", %{"ids" => ids}, socket) do</p>
+<p>    case Lists.reorder_items(socket.assigns.list, ids) do</p>
+<p>      {:ok, items} -></p>
+<p>        {:noreply, stream(socket, :items, items, reset: true)}</p>
+
+<p>      {:error, _} -></p>
+<p>        {:noreply, put_flash(socket, :error, "Failed to save order")}</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>JavaScript Hook</h1>
+<h1>Sortable = {</h1>
+<h1>  mounted() {</h1>
+<h1>    new Sortable(this.el, {</h1>
+<h1>      animation: 150,</h1>
+<h1>      onEnd: (evt) => {</h1>
+<h1>        const ids = Array.from(this.el.children).map(el => el.dataset.id)</h1>
+<h1>        this.pushEvent("reorder", { ids })</h1>
+<h1>      }</h1>
+<h1>    })</h1>
+<h1>  }</h1>
+<h1>}</h1>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 5: Real-Time Notifications</h2>
+
+<p>Build a notification system with toast messages.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/notification_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.NotificationLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  # Requirements:</p>
+<p>  # - Subscribe to user-specific notifications</p>
+<p>  # - Show toast messages that auto-dismiss</p>
+<p>  # - Support different types (info, success, error)</p>
+<p>  # - Allow manual dismiss</p>
+<p>  # - Stack multiple notifications</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.NotificationLive do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    if connected?(socket) do</p>
+<p>      user_id = socket.assigns.current_user.id</p>
+<p>      Phoenix.PubSub.subscribe(Snippetbox.PubSub, "user:#{user_id}:notifications")</p>
+<p>    end</p>
+
+<p>    {:ok, assign(socket, :notifications, [])}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="fixed top-4 right-4 z-50 space-y-2 w-80"></p>
+<p>      <div</p>
+<p>        :for={notif <- @notifications}</p>
+<p>        id={"notification-#{notif.id}"}</p>
+<p>        class={[</p>
+<p>          "p-4 rounded-lg shadow-lg transition-all transform",</p>
+<p>          notification_class(notif.type),</p>
+<p>          notif.leaving && "opacity-0 translate-x-full"</p>
+<p>        ]}</p>
+<p>        phx-click="dismiss"</p>
+<p>        phx-value-id={notif.id}</p>
+<p>      ></p>
+<p>        <div class="flex items-start gap-3"></p>
+<p>          <.icon name={notification_icon(notif.type)} class="h-5 w-5" /></p>
+<p>          <div class="flex-1"></p>
+<p>            <p class="font-medium"><%= notif.title %></p></p>
+<p>            <p :if={notif.message} class="text-sm opacity-90"><%= notif.message %></p></p>
+<p>          </div></p>
+<p>          <button class="opacity-50 hover:opacity-100">&times;</button></p>
+<p>        </div></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:notification, type, title, message}, socket) do</p>
+<p>    notif = %{</p>
+<p>      id: System.unique_integer([:positive]),</p>
+<p>      type: type,</p>
+<p>      title: title,</p>
+<p>      message: message,</p>
+<p>      leaving: false</p>
+<p>    }</p>
+
+<p>    # Auto-dismiss after 5 seconds</p>
+<p>    Process.send_after(self(), {:auto_dismiss, notif.id}, 5000)</p>
+
+<p>    {:noreply, update(socket, :notifications, &[notif | &1])}</p>
+<p>  end</p>
+
+<p>  def handle_info({:auto_dismiss, id}, socket) do</p>
+<p>    {:noreply, dismiss_notification(socket, id)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("dismiss", %{"id" => id}, socket) do</p>
+<p>    {:noreply, dismiss_notification(socket, String.to_integer(id))}</p>
+<p>  end</p>
+
+<p>  defp dismiss_notification(socket, id) do</p>
+<p>    notifications =</p>
+<p>      socket.assigns.notifications</p>
+<p>      |> Enum.map(fn</p>
+<p>        %{id: ^id} = n -> %{n | leaving: true}</p>
+<p>        n -> n</p>
+<p>      end)</p>
+
+<p>    # Remove after animation</p>
+<p>    Process.send_after(self(), {:remove, id}, 300)</p>
+
+<p>    assign(socket, :notifications, notifications)</p>
+<p>  end</p>
+
+<p>  def handle_info({:remove, id}, socket) do</p>
+<p>    notifications = Enum.reject(socket.assigns.notifications, &(&1.id == id))</p>
+<p>    {:noreply, assign(socket, :notifications, notifications)}</p>
+<p>  end</p>
+
+<p>  defp notification_class(:info), do: "bg-blue-500 text-white"</p>
+<p>  defp notification_class(:success), do: "bg-green-500 text-white"</p>
+<p>  defp notification_class(:error), do: "bg-red-500 text-white"</p>
+<p>  defp notification_class(:warning), do: "bg-yellow-500 text-black"</p>
+
+<p>  defp notification_icon(:info), do: "hero-information-circle"</p>
+<p>  defp notification_icon(:success), do: "hero-check-circle"</p>
+<p>  defp notification_icon(:error), do: "hero-x-circle"</p>
+<p>  defp notification_icon(:warning), do: "hero-exclamation-triangle"</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 6: Collaborative Editor</h2>
+
+<p>Build a simple collaborative text editor.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/collaborative_editor_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.CollaborativeEditorLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  # Requirements:</p>
+<p>  # - Multiple users can edit same document</p>
+<p>  # - Show cursors of other users</p>
+<p>  # - Real-time sync (debounced)</p>
+<p>  # - Show list of active editors</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>This is an advanced exercise combining presence, PubSub, and real-time updates.</p>
+
+<h2>Challenge: Build a Kanban Board</h2>
+
+<p>Create a Kanban board with:</p>
+
+<ol>
+<li>Multiple columns (To Do, In Progress, Done)</li>
+<li>Drag cards between columns</li>
+<li>Real-time updates for all viewers</li>
+<li>Card editing inline</li>
+<li>User assignment to cards</li>
+</ol>
+
+<p>This comprehensive exercise tests all LiveView concepts together.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="17.04-auth-exercises.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="17.06-deployment-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

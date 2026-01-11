@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Nested Resources &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Nested Resources</span>
+            </div>
+            <div>
+                &lsaquo; <a href="07.00-advanced-routing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="07.02-scopes-and-namespaces.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 7.1</div>
+        <h1>Chapter 7.1: Nested Resources</h1>
+
+<p>When resources have parent-child relationships, nested routes express this clearly. In this chapter, we'll learn when and how to use nested resources.</p>
+
+<h2>When to Nest Resources</h2>
+
+<p>Nest resources when:</p>
+<ul>
+<li>The child <strong>belongs to</strong> the parent</li>
+<li>The child <strong>only makes sense</strong> in the context of the parent</li>
+<li>You need the parent ID in the URL</li>
+</ul>
+
+<p>Examples:</p>
+<ul>
+<li><code>/users/:user_id/snippets</code> - User's snippets</li>
+<li><code>/snippets/:snippet_id/comments</code> - Snippet's comments</li>
+<li><code>/organizations/:org_id/members</code> - Organization's members</li>
+</ul>
+
+<h2>Basic Nested Resources</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>resources "/users", UserController do</p>
+<p>  resources "/snippets", UserSnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>This generates:</p>
+
+<p>| Verb | Path | Controller#Action |</p>
+<p>|------|------|-------------------|</p>
+<p>| GET | /users/:user_id/snippets | UserSnippetController :index |</p>
+<p>| GET | /users/:user_id/snippets/:id | UserSnippetController :show |</p>
+<p>| GET | /users/:user_id/snippets/new | UserSnippetController :new |</p>
+<p>| POST | /users/:user_id/snippets | UserSnippetController :create |</p>
+<p>| GET | /users/:user_id/snippets/:id/edit | UserSnippetController :edit |</p>
+<p>| PUT/PATCH | /users/:user_id/snippets/:id | UserSnippetController :update |</p>
+<p>| DELETE | /users/:user_id/snippets/:id | UserSnippetController :delete |</p>
+
+<h2>Nested Controller</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/user_snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserSnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  # Plug to load and authorize user</p>
+<p>  plug :load_user</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    snippets = Snippets.list_snippets_for_user(conn.assigns.user)</p>
+<p>    render(conn, :index, snippets: snippets)</p>
+<p>  end</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_user_snippet!(conn.assigns.user, id)</p>
+<p>    render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+
+<p>  def new(conn, _params) do</p>
+<p>    changeset = Snippets.change_snippet(%Snippet{})</p>
+<p>    render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"snippet" => snippet_params}) do</p>
+<p>    case Snippets.create_snippet_for_user(conn.assigns.user, snippet_params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Snippet created successfully.")</p>
+<p>        |> redirect(to: ~p"/users/#{conn.assigns.user}/snippets/#{snippet}")</p>
+
+<p>      {:error, changeset} -></p>
+<p>        render(conn, :new, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp load_user(conn, _opts) do</p>
+<p>    user = Accounts.get_user!(conn.params["user_id"])</p>
+<p>    assign(conn, :user, user)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Shallow Nesting</h2>
+
+<p>Avoid deep nesting by using shallow routes:</p>
+
+<figure class="code"><pre><code># Only nest :index and :create
+<p>resources "/users", UserController do</p>
+<p>  resources "/snippets", UserSnippetController, only: [:index, :create]</p>
+<p>end</p>
+
+<h1>Direct routes for specific snippets</h1>
+<p>resources "/snippets", SnippetController, only: [:show, :edit, :update, :delete]</p>
+</code></pre></figure>
+
+<p>Result:</p>
+<ul>
+<li><code>/users/:user_id/snippets</code> - List user's snippets</li>
+<li><code>/users/:user_id/snippets</code> - Create for user</li>
+<li><code>/snippets/:id</code> - View specific snippet</li>
+<li><code>/snippets/:id/edit</code> - Edit specific snippet</li>
+</ul>
+
+<h2>Comments on Snippets</h2>
+
+<figure class="code"><pre><code>resources "/snippets", SnippetController do
+<p>  resources "/comments", CommentController, only: [:index, :create, :delete]</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Controller:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/comment_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.CommentController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias Snippetbox.Comments</p>
+
+<p>  plug :load_snippet</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    comments = Comments.list_comments_for_snippet(conn.assigns.snippet)</p>
+<p>    render(conn, :index, comments: comments)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"comment" => comment_params}) do</p>
+<p>    case Comments.create_comment(conn.assigns.snippet, conn.assigns.current_user, comment_params) do</p>
+<p>      {:ok, _comment} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Comment added.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{conn.assigns.snippet}")</p>
+
+<p>      {:error, changeset} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:error, "Failed to add comment.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{conn.assigns.snippet}")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def delete(conn, %{"id" => id}) do</p>
+<p>    comment = Comments.get_comment!(id)</p>
+
+<p>    if comment.user_id == conn.assigns.current_user.id do</p>
+<p>      Comments.delete_comment(comment)</p>
+<p>      put_flash(conn, :info, "Comment deleted.")</p>
+<p>    else</p>
+<p>      put_flash(conn, :error, "Cannot delete others' comments.")</p>
+<p>    end</p>
+<p>    |> redirect(to: ~p"/snippets/#{conn.assigns.snippet}")</p>
+<p>  end</p>
+
+<p>  defp load_snippet(conn, _opts) do</p>
+<p>    snippet = Snippets.get_snippet!(conn.params["snippet_id"])</p>
+<p>    assign(conn, :snippet, snippet)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Verified Routes with Nested Resources</h2>
+
+<figure class="code"><pre><code># Route helpers
+<p>~p"/users/#{user}/snippets"</p>
+<p>~p"/users/#{user}/snippets/#{snippet}"</p>
+<p>~p"/snippets/#{snippet}/comments"</p>
+</code></pre></figure>
+
+<p>In templates:</p>
+
+<figure class="code"><pre><code><.link href={~p"/users/#{@user}/snippets"}>
+<p>  View <%= @user.name %>'s Snippets</p>
+</.link>
+
+<.link href={~p"/snippets/#{@snippet}/comments"}>
+<p>  <%= length(@snippet.comments) %> comments</p>
+</.link>
+</code></pre></figure>
+
+<h2>Multiple Levels of Nesting</h2>
+
+<p>Avoid more than one level of nesting:</p>
+
+<figure class="code"><pre><code># Bad: Too deep
+<p>resources "/organizations", OrganizationController do</p>
+<p>  resources "/teams", TeamController do</p>
+<p>    resources "/members", MemberController do</p>
+<p>      resources "/tasks", TaskController  # 4 levels deep!</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Good: Flatten where possible</h1>
+<p>resources "/organizations", OrganizationController do</p>
+<p>  resources "/teams", TeamController, only: [:index, :create]</p>
+<p>end</p>
+
+<p>resources "/teams", TeamController, only: [:show, :update, :delete] do</p>
+<p>  resources "/members", MemberController, only: [:index, :create]</p>
+<p>end</p>
+
+<p>resources "/members", MemberController, only: [:show, :delete]</p>
+<p>resources "/tasks", TaskController</p>
+</code></pre></figure>
+
+<h2>Context Functions for Nested Resources</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  # Scoped to user</p>
+<p>  def list_snippets_for_user(user) do</p>
+<p>    Snippet</p>
+<p>    |> where([s], s.user_id == ^user.id)</p>
+<p>    |> order_by([s], desc: s.inserted_at)</p>
+<p>    |> Repo.all()</p>
+<p>  end</p>
+
+<p>  def get_user_snippet!(user, id) do</p>
+<p>    Snippet</p>
+<p>    |> where([s], s.user_id == ^user.id)</p>
+<p>    |> Repo.get!(id)</p>
+<p>  end</p>
+
+<p>  def create_snippet_for_user(user, attrs) do</p>
+<p>    %Snippet{user_id: user.id}</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.insert()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Authorization in Nested Routes</h2>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.UserSnippetController do
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  plug :load_user</p>
+<p>  plug :authorize_user</p>
+
+<p>  # Actions...</p>
+
+<p>  defp load_user(conn, _opts) do</p>
+<p>    user = Accounts.get_user!(conn.params["user_id"])</p>
+<p>    assign(conn, :user, user)</p>
+<p>  end</p>
+
+<p>  defp authorize_user(conn, _opts) do</p>
+<p>    # Only allow viewing own snippets (or admin)</p>
+<p>    current_user = conn.assigns.current_user</p>
+
+<p>    if conn.assigns.user.id == current_user.id || current_user.role == :admin do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "You can only view your own snippets.")</p>
+<p>      |> redirect(to: ~p"/snippets")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: URL as Data Hierarchy</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Nested URLs express data relationships:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> /users/42/snippets/123
+</blockquote>
+<p>></p>
+<blockquote>
+<p>User (id: 42)</p>
+<p> └── Snippet (id: 123)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The URL structure mirrors your data model, making the API intuitive and self-documenting.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/routing.html#resources">Phoenix Resources</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>When to use nested resources</li>
+<li>Creating nested routes with <code>resources do</code></li>
+<li>Shallow nesting to avoid deep URLs</li>
+<li>Controller patterns for nested resources</li>
+<li>Context functions for scoped queries</li>
+<li>Authorization in nested routes</li>
+</ul>
+
+<p>In the next chapter, we'll explore scopes and namespaces.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="07.00-advanced-routing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="07.02-scopes-and-namespaces.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Database Best Practices &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Database Best Practices</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.08-transactions.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="05.00-dynamic-templates.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.9</div>
+        <h1>Chapter 4.9: Database Best Practices</h1>
+
+<p>Building on everything we've learned, this chapter covers best practices for working with databases in Phoenix applications.</p>
+
+<h2>Schema Best Practices</h2>
+
+<h3>Keep Schemas Focused</h3>
+
+<figure class="code"><pre><code># Good: Schema only handles data mapping
+<p>defmodule Snippetbox.Snippets.Snippet do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+<p>    belongs_to :user, User</p>
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  # Only changeset functions in schema</p>
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Business logic goes in context</h1>
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  def publish_snippet(snippet) do</p>
+<p>    # Business logic here</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Use Multiple Changesets</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets.Snippet do
+<p>  # For creating new snippets</p>
+<p>  def create_changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :language])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>    |> validate_length(:title, max: 100)</p>
+<p>    |> validate_length(:content, max: 100_000)</p>
+<p>  end</p>
+
+<p>  # For updating (different rules)</p>
+<p>  def update_changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :language])</p>
+<p>    |> validate_length(:title, max: 100)</p>
+<p>  end</p>
+
+<p>  # For admin operations</p>
+<p>  def admin_changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :is_featured, :is_public])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Query Best Practices</h2>
+
+<h3>Avoid N+1 Queries</h3>
+
+<figure class="code"><pre><code># Bad: N+1 queries
+<p>snippets = Repo.all(Snippet)</p>
+<p>Enum.each(snippets, fn snippet -></p>
+<p>  snippet = Repo.preload(snippet, :user)  # Query for each snippet!</p>
+<p>  IO.puts(snippet.user.name)</p>
+<p>end)</p>
+
+<h1>Good: Single query with preload</h1>
+<p>snippets = Repo.all(from s in Snippet, preload: [:user])</p>
+<p>Enum.each(snippets, fn snippet -></p>
+<p>  IO.puts(snippet.user.name)</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h3>Select Only What You Need</h3>
+
+<figure class="code"><pre><code># Bad: Loads all columns
+<p>Repo.all(Snippet)</p>
+
+<h1>Good: Select specific fields</h1>
+<p>Repo.all(from s in Snippet, select: %{id: s.id, title: s.title})</p>
+
+<h1>Good: Use select when you only need some fields</h1>
+<p>def list_snippet_titles do</p>
+<p>  Repo.all(from s in Snippet, select: s.title)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Use Indexes</h3>
+
+<figure class="code"><pre><code># Migration: Add indexes for frequently queried columns
+<p>create index(:snippets, [:user_id])</p>
+<p>create index(:snippets, [:inserted_at])</p>
+<p>create index(:snippets, [:language])</p>
+
+<h1>Composite index for common queries</h1>
+<p>create index(:snippets, [:user_id, :inserted_at])</p>
+
+<h1>Unique indexes for constraints</h1>
+<p>create unique_index(:users, [:email])</p>
+<p>create unique_index(:snippets, [:user_id, :slug])</p>
+</code></pre></figure>
+
+<h3>Paginate Large Results</h3>
+
+<figure class="code"><pre><code>def list_snippets(opts \\ []) do
+<p>  page = opts[:page] || 1</p>
+<p>  per_page = opts[:per_page] || 20</p>
+
+<p>  query = from s in Snippet,</p>
+<p>    order_by: [desc: s.inserted_at],</p>
+<p>    limit: ^per_page,</p>
+<p>    offset: ^((page - 1) * per_page)</p>
+
+<p>  snippets = Repo.all(query)</p>
+<p>  total = Repo.aggregate(Snippet, :count)</p>
+
+<p>  %{</p>
+<p>    snippets: snippets,</p>
+<p>    page: page,</p>
+<p>    per_page: per_page,</p>
+<p>    total: total,</p>
+<p>    total_pages: ceil(total / per_page)</p>
+<p>  }</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Use Streaming for Large Datasets</h3>
+
+<figure class="code"><pre><code># Bad: Loads all into memory
+<p>Repo.all(Snippet)</p>
+<p>|> Enum.each(&process/1)</p>
+
+<h1>Good: Stream from database</h1>
+<p>Snippet</p>
+<p>|> Repo.stream()</p>
+<p>|> Stream.each(&process/1)</p>
+<p>|> Stream.run()</p>
+
+<h1>With transaction (required for streaming)</h1>
+<p>Repo.transaction(fn -></p>
+<p>  Snippet</p>
+<p>  |> Repo.stream()</p>
+<p>  |> Stream.each(&process/1)</p>
+<p>  |> Stream.run()</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h2>Migration Best Practices</h2>
+
+<h3>Make Migrations Reversible</h3>
+
+<figure class="code"><pre><code># Good: Reversible
+<p>def change do</p>
+<p>  alter table(:snippets) do</p>
+<p>    add :language, :string, default: "text"</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>When not reversible, use up/down</h1>
+<p>def up do</p>
+<p>  execute "CREATE INDEX CONCURRENTLY ..."</p>
+<p>end</p>
+
+<p>def down do</p>
+<p>  execute "DROP INDEX ..."</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Use Safe Migrations in Production</h3>
+
+<figure class="code"><pre><code># Bad: Locks table in production
+<p>def change do</p>
+<p>  alter table(:snippets) do</p>
+<p>    add :views, :integer, default: 0  # DEFAULT locks table</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Good: Add column, then backfill</h1>
+<p>def change do</p>
+<p>  alter table(:snippets) do</p>
+<p>    add :views, :integer  # No default, no lock</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Then backfill in a separate migration or task</h1>
+<p>def up do</p>
+<p>  execute "UPDATE snippets SET views = 0 WHERE views IS NULL"</p>
+
+<p>  alter table(:snippets) do</p>
+<p>    modify :views, :integer, null: false, default: 0</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Never Modify Existing Migrations</h3>
+
+<p>Once deployed, create new migrations for changes:</p>
+
+<figure class="code"><pre><code># Don't edit: 20240115_create_snippets.exs
+
+<h1>Instead create: 20240120_add_views_to_snippets.exs</h1>
+<p>def change do</p>
+<p>  alter table(:snippets) do</p>
+<p>    add :views, :integer, default: 0</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Context Best Practices</h2>
+
+<h3>Keep Functions Pure When Possible</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets do
+<p>  # Pure function: builds query without execution</p>
+<p>  def public_snippets_query do</p>
+<p>    from s in Snippet,</p>
+<p>      where: s.is_public == true,</p>
+<p>      order_by: [desc: s.inserted_at]</p>
+<p>  end</p>
+
+<p>  # Impure: executes query</p>
+<p>  def list_public_snippets do</p>
+<p>    Repo.all(public_snippets_query())</p>
+<p>  end</p>
+
+<p>  # Pure: builds changeset without persisting</p>
+<p>  def change_snippet(snippet, attrs \\ %{}) do</p>
+<p>    Snippet.changeset(snippet, attrs)</p>
+<p>  end</p>
+
+<p>  # Impure: persists to database</p>
+<p>  def create_snippet(attrs) do</p>
+<p>    %Snippet{}</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.insert()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Use Consistent Return Types</h3>
+
+<figure class="code"><pre><code># Good: Consistent {:ok, _} | {:error, _} pattern
+<p>def get_snippet(id) do</p>
+<p>  case Repo.get(Snippet, id) do</p>
+<p>    nil -> {:error, :not_found}</p>
+<p>    snippet -> {:ok, snippet}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>def create_snippet(attrs) do</p>
+<p>  %Snippet{}</p>
+<p>  |> Snippet.changeset(attrs)</p>
+<p>  |> Repo.insert()</p>
+<p>  # Returns {:ok, snippet} | {:error, changeset}</p>
+<p>end</p>
+
+<h1>Or use bang functions for "expected to succeed"</h1>
+<p>def get_snippet!(id) do</p>
+<p>  Repo.get!(Snippet, id)</p>
+<p>  # Raises if not found</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Encapsulate Complex Queries</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets do
+<p>  # Public API</p>
+<p>  def search(term, opts \\ []) do</p>
+<p>    Snippet</p>
+<p>    |> search_by_term(term)</p>
+<p>    |> filter_by_language(opts[:language])</p>
+<p>    |> filter_by_date_range(opts[:from], opts[:to])</p>
+<p>    |> sort_by(opts[:sort])</p>
+<p>    |> paginate(opts[:page], opts[:per_page])</p>
+<p>    |> Repo.all()</p>
+<p>  end</p>
+
+<p>  # Private query builders</p>
+<p>  defp search_by_term(query, nil), do: query</p>
+<p>  defp search_by_term(query, term) do</p>
+<p>    where(query, [s], ilike(s.title, ^"%#{term}%") or ilike(s.content, ^"%#{term}%"))</p>
+<p>  end</p>
+
+<p>  defp filter_by_language(query, nil), do: query</p>
+<p>  defp filter_by_language(query, language) do</p>
+<p>    where(query, [s], s.language == ^language)</p>
+<p>  end</p>
+
+<p>  defp filter_by_date_range(query, nil, nil), do: query</p>
+<p>  defp filter_by_date_range(query, from, to) do</p>
+<p>    query</p>
+<p>    |> maybe_filter_from(from)</p>
+<p>    |> maybe_filter_to(to)</p>
+<p>  end</p>
+
+<p>  defp maybe_filter_from(query, nil), do: query</p>
+<p>  defp maybe_filter_from(query, from), do: where(query, [s], s.inserted_at >= ^from)</p>
+
+<p>  defp maybe_filter_to(query, nil), do: query</p>
+<p>  defp maybe_filter_to(query, to), do: where(query, [s], s.inserted_at <= ^to)</p>
+
+<p>  defp sort_by(query, "oldest"), do: order_by(query, asc: :inserted_at)</p>
+<p>  defp sort_by(query, "popular"), do: order_by(query, desc: :views)</p>
+<p>  defp sort_by(query, _), do: order_by(query, desc: :inserted_at)</p>
+
+<p>  defp paginate(query, page, per_page) do</p>
+<p>    page = page || 1</p>
+<p>    per_page = min(per_page || 20, 100)  # Cap at 100</p>
+
+<p>    query</p>
+<p>    |> limit(^per_page)</p>
+<p>    |> offset(^((page - 1) * per_page))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Performance Tips</h2>
+
+<h3>Use Database-Level Constraints</h3>
+
+<figure class="code"><pre><code># Migration
+<p>create table(:snippets) do</p>
+<p>  add :title, :string, null: false</p>
+<p>  add :views, :integer, default: 0</p>
+<p>end</p>
+
+<h1>Add check constraint</h1>
+<p>create constraint(:snippets, :views_must_be_positive, check: "views >= 0")</p>
+
+<h1>Schema</h1>
+<p>def changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :views])</p>
+<p>  |> check_constraint(:views, name: :views_must_be_positive)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Batch Operations</h3>
+
+<figure class="code"><pre><code># Bad: Individual inserts
+<p>Enum.each(items, fn item -></p>
+<p>  Repo.insert!(%Record{data: item})</p>
+<p>end)</p>
+
+<h1>Good: Batch insert</h1>
+<p>now = DateTime.utc_now()</p>
+<p>entries = Enum.map(items, fn item -></p>
+<p>  %{data: item, inserted_at: now, updated_at: now}</p>
+<p>end)</p>
+
+<p>Repo.insert_all(Record, entries, on_conflict: :nothing)</p>
+</code></pre></figure>
+
+<h3>Use Explain for Debugging</h3>
+
+<figure class="code"><pre><code>query = from s in Snippet,
+<p>  where: s.is_public == true,</p>
+<p>  order_by: [desc: s.inserted_at]</p>
+
+<p>IO.puts(Repo.explain(:all, query))</p>
+<h1>Shows PostgreSQL query plan</h1>
+</code></pre></figure>
+
+<h3>Connection Pool Sizing</h3>
+
+<figure class="code"><pre><code># config/prod.exs
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  pool_size: 10  # Adjust based on load</p>
+
+<h1>Rule of thumb: (cores * 2) + spindle_count</h1>
+<h1>For most web apps: 10-20 connections per node</h1>
+</code></pre></figure>
+
+<h2>Testing Best Practices</h2>
+
+<h3>Use Sandbox Mode</h3>
+
+<figure class="code"><pre><code># test/support/data_case.ex
+<p>setup tags do</p>
+<p>  :ok = Ecto.Adapters.SQL.Sandbox.checkout(Snippetbox.Repo)</p>
+
+<p>  unless tags[:async] do</p>
+<p>    Ecto.Adapters.SQL.Sandbox.mode(Snippetbox.Repo, {:shared, self()})</p>
+<p>  end</p>
+
+<p>  :ok</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Create Test Factories</h3>
+
+<figure class="code"><pre><code># test/support/fixtures/snippets_fixtures.ex
+<p>defmodule Snippetbox.SnippetsFixtures do</p>
+<p>  def snippet_fixture(attrs \\ %{}) do</p>
+<p>    {:ok, snippet} =</p>
+<p>      attrs</p>
+<p>      |> Enum.into(%{</p>
+<p>        title: "Test Snippet",</p>
+<p>        content: "puts 'hello'",</p>
+<p>        language: "ruby"</p>
+<p>      })</p>
+<p>      |> Snippetbox.Snippets.create_snippet()</p>
+
+<p>    snippet</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Test Queries Separately</h3>
+
+<figure class="code"><pre><code># Test query building (no database needed)
+<p>test "public_snippets_query filters by is_public" do</p>
+<p>  query = Snippets.public_snippets_query()</p>
+<p>  assert inspect(query) =~ "is_public"</p>
+<p>end</p>
+
+<h1>Test execution (needs database)</h1>
+<p>test "list_public_snippets returns only public snippets" do</p>
+<p>  public = snippet_fixture(is_public: true)</p>
+<p>  _private = snippet_fixture(is_public: false)</p>
+
+<p>  result = Snippets.list_public_snippets()</p>
+
+<p>  assert length(result) == 1</p>
+<p>  assert hd(result).id == public.id</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Separation of Concerns</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The best practices above follow functional principles:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<ul>
+<li><strong>Pure functions</strong> where possible (query builders)</li>
+<li><strong>Explicit side effects</strong> isolated to Repo calls</li>
+<li><strong>Composition</strong> over inheritance (query pipelines)</li>
+<li><strong>Immutability</strong> through changesets</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes code easier to test, reason about, and maintain.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we covered:</p>
+
+<ul>
+<li>Schema best practices (focused schemas, multiple changesets)</li>
+<li>Query optimization (avoiding N+1, indexes, pagination)</li>
+<li>Migration safety (reversible, production-safe)</li>
+<li>Context organization (pure functions, consistent returns)</li>
+<li>Performance tips (batching, connection pools)</li>
+<li>Testing strategies</li>
+</ul>
+
+<p>This completes our Database with Ecto chapter. In the next chapter, we'll explore Dynamic Templates.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Monitoring Database Performance</h3>
+
+<figure class="code"><pre><code># Enable query logging
+<p>config :snippetbox, Snippetbox.Repo, log: :debug</p>
+
+<h1>Use telemetry for metrics</h1>
+<p>:telemetry.attach(</p>
+<p>  "repo-query-handler",</p>
+<p>  [:snippetbox, :repo, :query],</p>
+<p>  &MyApp.Telemetry.handle_query/4,</p>
+<p>  nil</p>
+<p>)</p>
+</code></pre></figure>
+
+<h3>Common Anti-Patterns to Avoid</h3>
+
+<ol>
+<li><strong>Fat schemas</strong> - Put business logic in contexts, not schemas</li>
+<li><strong>Implicit preloads</strong> - Always explicitly preload associations</li>
+<li><strong>Missing indexes</strong> - Index foreign keys and frequently queried columns</li>
+<li><strong>Large transactions</strong> - Keep transactions short to avoid locks</li>
+<li><strong>Hardcoded queries</strong> - Use parameterized queries to prevent SQL injection</li>
+</ol>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.08-transactions.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="05.00-dynamic-templates.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

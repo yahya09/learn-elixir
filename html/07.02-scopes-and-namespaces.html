@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Scopes and Namespaces &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Scopes and Namespaces</span>
+            </div>
+            <div>
+                &lsaquo; <a href="07.01-nested-resources.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="07.03-custom-routes.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 7.2</div>
+        <h1>Chapter 7.2: Scopes and Namespaces</h1>
+
+<p>Scopes and namespaces help organize routes logically. In this chapter, we'll explore different ways to group and structure routes.</p>
+
+<h2>Understanding Scopes</h2>
+
+<p>A scope groups routes under a common path prefix:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/api", SnippetboxWeb do</p>
+<p>  pipe_through :api</p>
+
+<p>  resources "/snippets", API.SnippetController</p>
+<p>  resources "/users", API.UserController</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Generated routes:</p>
+<ul>
+<li><code>GET /api/snippets</code> → <code>API.SnippetController :index</code></li>
+<li><code>GET /api/users</code> → <code>API.UserController :index</code></li>
+</ul>
+
+<h2>Scope Options</h2>
+
+<h3>Path Prefix</h3>
+
+<figure class="code"><pre><code># Add path prefix
+<p>scope "/admin", SnippetboxWeb.Admin do</p>
+<p>  pipe_through [:browser, :require_admin]</p>
+
+<p>  resources "/users", UserController</p>
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Module Namespace</h3>
+
+<figure class="code"><pre><code># Set module namespace
+<p>scope "/admin", SnippetboxWeb.Admin, as: :admin do</p>
+<p>  pipe_through [:browser, :require_admin]</p>
+
+<p>  resources "/users", UserController</p>
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>This creates:</p>
+<ul>
+<li>Controllers in <code>SnippetboxWeb.Admin</code> namespace</li>
+<li>Route helpers with <code>admin_</code> prefix</li>
+<li>Paths prefixed with <code>/admin</code></li>
+</ul>
+
+<h3>Alias Option</h3>
+
+<figure class="code"><pre><code># Custom alias for route helpers
+<p>scope "/management", SnippetboxWeb.Admin, as: :mgmt do</p>
+<p>  resources "/users", UserController</p>
+<p>end</p>
+
+<h1>Route helper: ~p"/management/users" or mgmt_user_path</h1>
+</code></pre></figure>
+
+<h2>Multiple Scopes</h2>
+
+<h3>API Versioning</h3>
+
+<figure class="code"><pre><code>scope "/api", SnippetboxWeb.API do
+<p>  pipe_through :api</p>
+
+<p>  scope "/v1", V1, as: :v1 do</p>
+<p>    resources "/snippets", SnippetController</p>
+<p>    resources "/users", UserController</p>
+<p>  end</p>
+
+<p>  scope "/v2", V2, as: :v2 do</p>
+<p>    resources "/snippets", SnippetController</p>
+<p>    resources "/users", UserController</p>
+<p>    resources "/tags", TagController  # New in v2</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Generated routes:</p>
+<ul>
+<li><code>GET /api/v1/snippets</code> → <code>SnippetboxWeb.API.V1.SnippetController</code></li>
+<li><code>GET /api/v2/snippets</code> → <code>SnippetboxWeb.API.V2.SnippetController</code></li>
+</ul>
+
+<h3>Admin Section</h3>
+
+<figure class="code"><pre><code># Public routes
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through :browser</p>
+
+<p>  get "/", PageController, :home</p>
+<p>  resources "/snippets", SnippetController, only: [:index, :show]</p>
+<p>end</p>
+
+<h1>Authenticated user routes</h1>
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>  resources "/snippets", SnippetController, only: [:new, :create, :edit, :update, :delete]</p>
+<p>  get "/account", AccountController, :show</p>
+<p>end</p>
+
+<h1>Admin routes</h1>
+<p>scope "/admin", SnippetboxWeb.Admin, as: :admin do</p>
+<p>  pipe_through [:browser, :require_admin]</p>
+
+<p>  get "/dashboard", DashboardController, :index</p>
+<p>  resources "/users", UserController</p>
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Namespaces with Controllers</h2>
+
+<h3>Directory Structure</h3>
+
+<figure class="code"><pre><code>lib/snippetbox_web/controllers/
+<p>├── page_controller.ex</p>
+<p>├── snippet_controller.ex</p>
+<p>├── api/</p>
+<p>│   ├── v1/</p>
+<p>│   │   ├── snippet_controller.ex</p>
+<p>│   │   └── user_controller.ex</p>
+<p>│   └── v2/</p>
+<p>│       ├── snippet_controller.ex</p>
+<p>│       └── user_controller.ex</p>
+<p>└── admin/</p>
+<p>    ├── dashboard_controller.ex</p>
+<p>    ├── user_controller.ex</p>
+<p>    └── snippet_controller.ex</p>
+</code></pre></figure>
+
+<h3>Namespaced Controller</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/admin/user_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Admin.UserController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    users = Accounts.list_users()</p>
+<p>    render(conn, :index, users: users)</p>
+<p>  end</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    user = Accounts.get_user!(id)</p>
+<p>    render(conn, :show, user: user)</p>
+<p>  end</p>
+
+<p>  def delete(conn, %{"id" => id}) do</p>
+<p>    user = Accounts.get_user!(id)</p>
+<p>    {:ok, _} = Accounts.delete_user(user)</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "User deleted successfully.")</p>
+<p>    |> redirect(to: ~p"/admin/users")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Namespaced Views and Templates</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/admin/user_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Admin.UserHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "user_html/*"</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Templates go in:</p>
+<figure class="code"><pre><code>lib/snippetbox_web/controllers/admin/user_html/
+<p>├── index.html.heex</p>
+<p>├── show.html.heex</p>
+<p>└── edit.html.heex</p>
+</code></pre></figure>
+
+<h2>Scope Without Path</h2>
+
+<p>Use <code>scope</code> without a path to group routes with same pipeline:</p>
+
+<figure class="code"><pre><code># No path prefix, just grouping by pipeline
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>  # All these require authentication</p>
+<p>  resources "/snippets", SnippetController, except: [:index, :show]</p>
+<p>  get "/settings", SettingsController, :edit</p>
+<p>  put "/settings", SettingsController, :update</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Host-Based Scopes</h2>
+
+<p>Route based on hostname:</p>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb, host: "api." do
+<p>  pipe_through :api</p>
+<p>  resources "/snippets", API.SnippetController</p>
+<p>end</p>
+
+<p>scope "/", SnippetboxWeb, host: "admin." do</p>
+<p>  pipe_through [:browser, :require_admin]</p>
+<p>  resources "/users", Admin.UserController</p>
+<p>end</p>
+
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through :browser</p>
+<p>  get "/", PageController, :home</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Routes:</p>
+<ul>
+<li><code>api.example.com/snippets</code> → API.SnippetController</li>
+<li><code>admin.example.com/users</code> → Admin.UserController</li>
+<li><code>example.com/</code> → PageController</li>
+</ul>
+
+<h2>Forward to Another Router</h2>
+
+<p>Split large routers into modules:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  # Main routes</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through :browser</p>
+<p>    get "/", PageController, :home</p>
+<p>  end</p>
+
+<p>  # Forward to API router</p>
+<p>  forward "/api", SnippetboxWeb.API.Router</p>
+
+<p>  # Forward to Admin router</p>
+<p>  forward "/admin", SnippetboxWeb.Admin.Router</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/api/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.API.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  pipeline :api do</p>
+<p>    plug :accepts, ["json"]</p>
+<p>  end</p>
+
+<p>  scope "/v1", SnippetboxWeb.API.V1, as: :v1 do</p>
+<p>    pipe_through :api</p>
+<p>    resources "/snippets", SnippetController</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Combining Scopes and Pipelines</h2>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Router do
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  pipeline :browser do</p>
+<p>    plug :accepts, ["html"]</p>
+<p>    plug :fetch_session</p>
+<p>    plug :fetch_live_flash</p>
+<p>    plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>    plug :protect_from_forgery</p>
+<p>    plug :put_secure_browser_headers</p>
+<p>    plug :fetch_current_user</p>
+<p>  end</p>
+
+<p>  pipeline :api do</p>
+<p>    plug :accepts, ["json"]</p>
+<p>    plug :fetch_api_user</p>
+<p>  end</p>
+
+<p>  pipeline :require_authenticated_user do</p>
+<p>    plug :require_authenticated_user</p>
+<p>  end</p>
+
+<p>  pipeline :require_admin do</p>
+<p>    plug :require_role, :admin</p>
+<p>  end</p>
+
+<p>  # Public browser routes</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through :browser</p>
+
+<p>    get "/", PageController, :home</p>
+<p>    resources "/snippets", SnippetController, only: [:index, :show]</p>
+
+<p>    get "/login", SessionController, :new</p>
+<p>    post "/login", SessionController, :create</p>
+<p>    get "/register", UserController, :new</p>
+<p>    post "/register", UserController, :create</p>
+<p>  end</p>
+
+<p>  # Authenticated browser routes</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>    delete "/logout", SessionController, :delete</p>
+<p>    resources "/snippets", SnippetController, only: [:new, :create, :edit, :update, :delete]</p>
+
+<p>    scope "/account", as: :account do</p>
+<p>      get "/", AccountController, :show</p>
+<p>      get "/edit", AccountController, :edit</p>
+<p>      put "/", AccountController, :update</p>
+<p>      get "/password", AccountController, :edit_password</p>
+<p>      put "/password", AccountController, :update_password</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  # Admin routes</p>
+<p>  scope "/admin", SnippetboxWeb.Admin, as: :admin do</p>
+<p>    pipe_through [:browser, :require_authenticated_user, :require_admin]</p>
+
+<p>    get "/", DashboardController, :index</p>
+<p>    resources "/users", UserController</p>
+<p>    resources "/snippets", SnippetController</p>
+<p>  end</p>
+
+<p>  # API routes</p>
+<p>  scope "/api", SnippetboxWeb.API, as: :api do</p>
+<p>    pipe_through :api</p>
+
+<p>    scope "/v1", V1, as: :v1 do</p>
+<p>      resources "/snippets", SnippetController, except: [:new, :edit]</p>
+<p>      resources "/users", UserController, only: [:show]</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Verified Routes with Scopes</h2>
+
+<figure class="code"><pre><code># Standard routes
+<p>~p"/snippets"</p>
+<p>~p"/snippets/#{snippet}"</p>
+
+<h1>Admin routes (with :admin alias)</h1>
+<p>~p"/admin/users"</p>
+<p>~p"/admin/users/#{user}"</p>
+
+<h1>API routes</h1>
+<p>~p"/api/v1/snippets"</p>
+
+<h1>In templates</h1>
+<.link href={~p"/admin/users/#{@user}"}>
+<p>  Edit User</p>
+</.link>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Modular Composition</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Scopes and namespaces enable modular route composition:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Each scope is independent and composable
+<p>scope "/api" do</p>
+<p>  scope "/v1" do ... end</p>
+<p>  scope "/v2" do ... end</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This mirrors functional design where small, focused modules compose into larger systems. Each scope is self-contained and can be tested independently.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/routing.html">Phoenix Routing</a></li>
+<li><a href="https://hexdocs.pm/phoenix/routing.html#scoped-routes">Phoenix Scopes</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating scopes with path prefixes</li>
+<li>Setting module namespaces</li>
+<li>API versioning with scopes</li>
+<li>Organizing controllers and templates by namespace</li>
+<li>Host-based routing</li>
+<li>Forwarding to other routers</li>
+<li>Combining scopes with pipelines</li>
+</ul>
+
+<p>In the next chapter, we'll explore custom routes beyond REST conventions.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="07.01-nested-resources.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="07.03-custom-routes.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

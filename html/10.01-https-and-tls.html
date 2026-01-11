@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>HTTPS and TLS &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; HTTPS and TLS</span>
+            </div>
+            <div>
+                &lsaquo; <a href="10.00-security.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="10.02-csrf-protection.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 10.1</div>
+        <h1>Chapter 10.1: HTTPS and TLS</h1>
+
+<p>HTTPS encrypts communication between browsers and servers. In this chapter, we'll explore how to configure HTTPS in Phoenix.</p>
+
+<h2>Why HTTPS?</h2>
+
+<p>HTTPS provides:</p>
+
+<ul>
+<li><strong>Encryption</strong>: Data can't be read in transit</li>
+<li><strong>Integrity</strong>: Data can't be modified in transit</li>
+<li><strong>Authentication</strong>: Proves server identity</li>
+<li><strong>SEO Benefits</strong>: Google ranks HTTPS sites higher</li>
+<li><strong>Required for Features</strong>: HTTP/2, service workers, many APIs</li>
+</ul>
+
+<h2>Development HTTPS</h2>
+
+<h3>Generating Self-Signed Certificates</h3>
+
+<figure class="code"><pre><code># Create certificates directory
+<p>mkdir -p priv/cert</p>
+
+<h1>Generate self-signed certificate</h1>
+<p>openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 \</p>
+<p>  -subj "/C=US/ST=State/L=City/O=Dev/CN=localhost" \</p>
+<p>  -keyout priv/cert/selfsigned_key.pem \</p>
+<p>  -out priv/cert/selfsigned.pem</p>
+</code></pre></figure>
+
+<h3>Development Configuration</h3>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  https: [</p>
+<p>    port: 4001,</p>
+<p>    cipher_suite: :strong,</p>
+<p>    keyfile: "priv/cert/selfsigned_key.pem",</p>
+<p>    certfile: "priv/cert/selfsigned.pem"</p>
+<p>  ],</p>
+<p>  http: [port: 4000]</p>
+</code></pre></figure>
+
+<h3>Using Phoenix Built-in Certificate</h3>
+
+<p>Phoenix can generate certificates automatically:</p>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  https: [</p>
+<p>    port: 4001,</p>
+<p>    cipher_suite: :strong,</p>
+<p>    certfile: "priv/cert/selfsigned.pem",</p>
+<p>    keyfile: "priv/cert/selfsigned_key.pem"</p>
+<p>  ]</p>
+
+<h1>Or use Phoenix.Endpoint.Cowboy2Adapter to auto-generate</h1>
+</code></pre></figure>
+
+<h2>Production HTTPS</h2>
+
+<h3>Option 1: Reverse Proxy (Recommended)</h3>
+
+<p>Let nginx/Caddy handle TLS:</p>
+
+<figure class="code"><pre><code>[Browser] --HTTPS--> [Nginx/Caddy] --HTTP--> [Phoenix]
+</code></pre></figure>
+
+<h4>Nginx Configuration</h4>
+
+<figure class="code"><pre><code># /etc/nginx/sites-available/snippetbox
+
+<p>upstream phoenix {</p>
+<p>    server 127.0.0.1:4000;</p>
+<p>}</p>
+
+<p>server {</p>
+<p>    listen 80;</p>
+<p>    server_name snippetbox.com;</p>
+<p>    return 301 https://$server_name$request_uri;</p>
+<p>}</p>
+
+<p>server {</p>
+<p>    listen 443 ssl http2;</p>
+<p>    server_name snippetbox.com;</p>
+
+<p>    ssl_certificate /etc/letsencrypt/live/snippetbox.com/fullchain.pem;</p>
+<p>    ssl_certificate_key /etc/letsencrypt/live/snippetbox.com/privkey.pem;</p>
+
+<p>    ssl_protocols TLSv1.2 TLSv1.3;</p>
+<p>    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;</p>
+<p>    ssl_prefer_server_ciphers off;</p>
+
+<p>    # Security headers</p>
+<p>    add_header Strict-Transport-Security "max-age=63072000" always;</p>
+<p>    add_header X-Frame-Options "SAMEORIGIN" always;</p>
+<p>    add_header X-Content-Type-Options "nosniff" always;</p>
+
+<p>    location / {</p>
+<p>        proxy_pass http://phoenix;</p>
+<p>        proxy_http_version 1.1;</p>
+<p>        proxy_set_header Upgrade $http_upgrade;</p>
+<p>        proxy_set_header Connection "upgrade";</p>
+<p>        proxy_set_header Host $host;</p>
+<p>        proxy_set_header X-Real-IP $remote_addr;</p>
+<p>        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;</p>
+<p>        proxy_set_header X-Forwarded-Proto $scheme;</p>
+<p>    end</p>
+<p>}</p>
+</code></pre></figure>
+
+<h4>Phoenix Behind Proxy</h4>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  url: [host: "snippetbox.com", port: 443, scheme: "https"],</p>
+<p>  http: [</p>
+<p>    port: 4000,</p>
+<p>    transport_options: [socket_opts: [:inet6]]</p>
+<p>  ],</p>
+<p>  force_ssl: [rewrite_on: [:x_forwarded_proto]]</p>
+</code></pre></figure>
+
+<h3>Option 2: Direct TLS Termination</h3>
+
+<p>Phoenix handles TLS directly:</p>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  url: [host: "snippetbox.com", port: 443],</p>
+<p>  https: [</p>
+<p>    port: 443,</p>
+<p>    cipher_suite: :strong,</p>
+<p>    certfile: System.get_env("SSL_CERT_PATH"),</p>
+<p>    keyfile: System.get_env("SSL_KEY_PATH"),</p>
+<p>    # For Let's Encrypt</p>
+<p>    cacertfile: System.get_env("SSL_CACERT_PATH")</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h3>Let's Encrypt with Certbot</h3>
+
+<figure class="code"><pre><code># Install certbot
+<p>sudo apt install certbot</p>
+
+<h1>Get certificate (standalone mode)</h1>
+<p>sudo certbot certonly --standalone -d snippetbox.com</p>
+
+<h1>Auto-renewal</h1>
+<p>sudo certbot renew --dry-run</p>
+</code></pre></figure>
+
+<h2>Force HTTPS</h2>
+
+<h3>Using force_ssl</h3>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  force_ssl: [</p>
+<p>    hsts: true,</p>
+<p>    rewrite_on: [:x_forwarded_proto],</p>
+<p>    host: nil  # Use request host</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h3>Custom HTTPS Redirect Plug</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/force_ssl.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.ForceSSL do</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    if secure?(conn) do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_resp_header("location", redirect_url(conn))</p>
+<p>      |> send_resp(301, "")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp secure?(conn) do</p>
+<p>    conn.scheme == :https ||</p>
+<p>      get_req_header(conn, "x-forwarded-proto") == ["https"]</p>
+<p>  end</p>
+
+<p>  defp redirect_url(conn) do</p>
+<p>    "https://#{conn.host}#{conn.request_path}"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>HSTS (HTTP Strict Transport Security)</h2>
+
+<p>HSTS tells browsers to always use HTTPS:</p>
+
+<figure class="code"><pre><code># Enabled by default with force_ssl
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  force_ssl: [hsts: true]</p>
+
+<h1>Custom HSTS configuration</h1>
+<p>force_ssl: [</p>
+<p>  hsts: true,</p>
+<p>  expires: 63_072_000,  # 2 years</p>
+<p>  subdomains: true,</p>
+<p>  preload: true</p>
+<p>]</p>
+</code></pre></figure>
+
+<h3>HSTS Header</h3>
+
+<figure class="code"><pre><code>Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+</code></pre></figure>
+
+<h2>TLS Configuration</h2>
+
+<h3>Cipher Suites</h3>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  https: [</p>
+<p>    port: 443,</p>
+<p>    cipher_suite: :strong,  # Phoenix default strong ciphers</p>
+<p>    # Or custom ciphers:</p>
+<p>    ciphers: [</p>
+<p>      'ECDHE-ECDSA-AES256-GCM-SHA384',</p>
+<p>      'ECDHE-RSA-AES256-GCM-SHA384',</p>
+<p>      'ECDHE-ECDSA-AES128-GCM-SHA256',</p>
+<p>      'ECDHE-RSA-AES128-GCM-SHA256'</p>
+<p>    ],</p>
+<p>    versions: [:"tlsv1.2", :"tlsv1.3"],</p>
+<p>    honor_cipher_order: true</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h3>Cipher Suite Options</h3>
+
+<p>| Option | Description |</p>
+<p>|--------|-------------|</p>
+<p>| <code>:strong</code> | Modern browsers, TLS 1.2+ |</p>
+<p>| <code>:compatible</code> | Older browsers, TLS 1.0+ |</p>
+<p>| Custom list | Fine-grained control |</p>
+
+<h2>Certificate Management</h2>
+
+<h3>Certificate Renewal</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/cert_watcher.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.CertWatcher do</p>
+<p>  use GenServer</p>
+<p>  require Logger</p>
+
+<p>  def start_link(_opts) do</p>
+<p>    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)</p>
+<p>  end</p>
+
+<p>  def init(state) do</p>
+<p>    schedule_check()</p>
+<p>    {:ok, state}</p>
+<p>  end</p>
+
+<p>  def handle_info(:check_certs, state) do</p>
+<p>    check_certificate_expiry()</p>
+<p>    schedule_check()</p>
+<p>    {:noreply, state}</p>
+<p>  end</p>
+
+<p>  defp schedule_check do</p>
+<p>    # Check daily</p>
+<p>    Process.send_after(self(), :check_certs, 24 <em> 60 </em> 60 * 1000)</p>
+<p>  end</p>
+
+<p>  defp check_certificate_expiry do</p>
+<p>    cert_path = System.get_env("SSL_CERT_PATH")</p>
+
+<p>    case File.read(cert_path) do</p>
+<p>      {:ok, pem} -></p>
+<p>        [cert_entry | _] = :public_key.pem_decode(pem)</p>
+<p>        cert = :public_key.pem_entry_decode(cert_entry)</p>
+<p>        validity = elem(cert, 2)</p>
+<p>        not_after = elem(validity, 2)</p>
+
+<p>        days_until_expiry = calculate_days(not_after)</p>
+
+<p>        if days_until_expiry < 30 do</p>
+<p>          Logger.warning("SSL certificate expires in #{days_until_expiry} days!")</p>
+<p>          # Send alert notification</p>
+<p>        end</p>
+
+<p>      {:error, reason} -></p>
+<p>        Logger.error("Could not read certificate: #{reason}")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp calculate_days(_not_after) do</p>
+<p>    # Calculate days until expiry</p>
+<p>    30  # Simplified</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Mixed Content</h2>
+
+<p>Ensure all resources use HTTPS:</p>
+
+<figure class="code"><pre><code><%# Bad - mixed content %>
+<script src="http://example.com/script.js"></script>
+
+<%# Good - protocol-relative (deprecated) %>
+<script src="//example.com/script.js"></script>
+
+<%# Best - explicit HTTPS %>
+<script src="https://example.com/script.js"></script>
+
+<%# Or use local assets %>
+<script src={~p"/assets/app.js"}></script>
+</code></pre></figure>
+
+<h3>Content Security Policy</h3>
+
+<figure class="code"><pre><code># Enforce HTTPS for all resources
+<p>plug :put_secure_browser_headers, %{</p>
+<p>  "content-security-policy" => "upgrade-insecure-requests"</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>Testing HTTPS</h2>
+
+<h3>SSL Labs Test</h3>
+
+<p>Test your TLS configuration at:</p>
+<p>https://www.ssllabs.com/ssltest/</p>
+
+<h3>Local Testing</h3>
+
+<figure class="code"><pre><code># Test TLS connection
+<p>openssl s_client -connect localhost:4001</p>
+
+<h1>Check certificate</h1>
+<p>openssl x509 -in priv/cert/selfsigned.pem -text -noout</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Security as Configuration</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix treats security as declarative configuration:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> config :snippetbox, SnippetboxWeb.Endpoint,
+<p>  force_ssl: [hsts: true],</p>
+<p>  https: [cipher_suite: :strong]</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Rather than imperative security code scattered throughout, security is centralized in configuration, making it easier to audit and maintain.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Why HTTPS is essential</li>
+<li>Development HTTPS setup</li>
+<li>Production HTTPS options</li>
+<li>Reverse proxy configuration</li>
+<li>Force HTTPS with redirects</li>
+<li>HSTS configuration</li>
+<li>TLS cipher suite selection</li>
+<li>Certificate management</li>
+</ul>
+
+<p>In the next chapter, we'll explore CSRF protection.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="10.00-security.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="10.02-csrf-protection.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

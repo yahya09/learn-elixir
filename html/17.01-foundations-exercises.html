@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Foundations Exercises &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Foundations Exercises</span>
+            </div>
+            <div>
+                &lsaquo; <a href="17.00-guided-exercises.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="17.02-database-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 17.1</div>
+        <h1>Chapter 17.1: Foundations Exercises</h1>
+
+<p>These exercises reinforce concepts from Chapters 1-3 covering Elixir basics, Phoenix setup, configuration, and error handling.</p>
+
+<h2>Exercise 1: Pattern Matching</h2>
+
+<p>Create a module that uses pattern matching to parse log entries.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/log_parser.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.LogParser do</p>
+<p>  @doc """</p>
+<p>  Parse a log line into structured data.</p>
+
+<p>  ## Examples</p>
+
+<p>      iex> LogParser.parse("[INFO] 2024-01-15 User logged in")</p>
+<p>      {:ok, %{level: :info, date: "2024-01-15", message: "User logged in"}}</p>
+
+<p>      iex> LogParser.parse("[ERROR] 2024-01-15 Connection failed")</p>
+<p>      {:ok, %{level: :error, date: "2024-01-15", message: "Connection failed"}}</p>
+
+<p>      iex> LogParser.parse("Invalid line")</p>
+<p>      {:error, :invalid_format}</p>
+<p>  """</p>
+<p>  def parse(line) do</p>
+<p>    # Your implementation here</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Hints</h3>
+<ul>
+<li>Use <code>String.split/2</code> to break the line into parts</li>
+<li>Pattern match on the list elements</li>
+<li>Use guards or pattern matching for the log level</li>
+</ul>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def parse("[" <> rest) do
+<p>  case String.split(rest, "] ", parts: 2) do</p>
+<p>    [level, rest] -></p>
+<p>      case String.split(rest, " ", parts: 2) do</p>
+<p>        [date, message] -></p>
+<p>          {:ok, %{</p>
+<p>            level: parse_level(level),</p>
+<p>            date: date,</p>
+<p>            message: message</p>
+<p>          }}</p>
+<p>        _ -></p>
+<p>          {:error, :invalid_format}</p>
+<p>      end</p>
+<p>    _ -></p>
+<p>      {:error, :invalid_format}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>def parse(_), do: {:error, :invalid_format}</p>
+
+<p>defp parse_level("INFO"), do: :info</p>
+<p>defp parse_level("ERROR"), do: :error</p>
+<p>defp parse_level("WARN"), do: :warn</p>
+<p>defp parse_level("DEBUG"), do: :debug</p>
+<p>defp parse_level(_), do: :unknown</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 2: Pipe Operator</h2>
+
+<p>Refactor this code to use the pipe operator:</p>
+
+<figure class="code"><pre><code># Before: nested function calls
+<p>def process_text(text) do</p>
+<p>  String.replace(</p>
+<p>    String.downcase(</p>
+<p>      String.trim(text)</p>
+<p>    ),</p>
+<p>    " ",</p>
+<p>    "-"</p>
+<p>  )</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def process_text(text) do
+<p>  text</p>
+<p>  |> String.trim()</p>
+<p>  |> String.downcase()</p>
+<p>  |> String.replace(" ", "-")</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 3: Custom Plug</h2>
+
+<p>Create a plug that adds a request timing header.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/request_timer.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RequestTimer do</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    # 1. Record start time</p>
+<p>    # 2. Register callback to run before response is sent</p>
+<p>    # 3. Calculate duration and add X-Request-Time header</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Hints</h3>
+<ul>
+<li>Use <code>System.monotonic_time/1</code> for timing</li>
+<li>Use <code>register_before_send/2</code> to add the header</li>
+</ul>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def call(conn, _opts) do
+<p>  start_time = System.monotonic_time(:millisecond)</p>
+
+<p>  register_before_send(conn, fn conn -></p>
+<p>    duration = System.monotonic_time(:millisecond) - start_time</p>
+<p>    put_resp_header(conn, "x-request-time", "#{duration}ms")</p>
+<p>  end)</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 4: Configuration Module</h2>
+
+<p>Create a configuration module that reads settings with defaults and validation.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/config.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Config do</p>
+<p>  @doc """</p>
+<p>  Get a configuration value with type validation.</p>
+
+<p>  ## Examples</p>
+
+<p>      iex> Config.get(:pool_size, :integer, default: 10)</p>
+<p>      {:ok, 10}</p>
+
+<p>      iex> Config.get(:debug, :boolean, default: false)</p>
+<p>      {:ok, false}</p>
+<p>  """</p>
+<p>  def get(key, type, opts \\ []) do</p>
+<p>    # Your implementation here</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def get(key, type, opts \\ []) do
+<p>  env_key = key |> Atom.to_string() |> String.upcase()</p>
+<p>  default = Keyword.get(opts, :default)</p>
+
+<p>  case System.get_env(env_key) do</p>
+<p>    nil -> {:ok, default}</p>
+<p>    value -> cast(value, type)</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp cast(value, :integer) do</p>
+<p>  case Integer.parse(value) do</p>
+<p>    {int, ""} -> {:ok, int}</p>
+<p>    _ -> {:error, "invalid integer"}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp cast(value, :boolean) do</p>
+<p>  case String.downcase(value) do</p>
+<p>    v when v in ["true", "1", "yes"] -> {:ok, true}</p>
+<p>    v when v in ["false", "0", "no"] -> {:ok, false}</p>
+<p>    _ -> {:error, "invalid boolean"}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp cast(value, :string), do: {:ok, value}</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 5: Error Handling</h2>
+
+<p>Create a function that handles multiple error types gracefully.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/file_processor.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.FileProcessor do</p>
+<p>  @doc """</p>
+<p>  Process a file and return its contents transformed.</p>
+
+<p>  Should handle:</p>
+<p>  - File not found</p>
+<p>  - Permission denied</p>
+<p>  - Invalid encoding</p>
+<p>  - Empty file</p>
+<p>  """</p>
+<p>  def process(path) do</p>
+<p>    # Your implementation here</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>def process(path) do
+<p>  with {:ok, content} <- read_file(path),</p>
+<p>       {:ok, content} <- validate_not_empty(content),</p>
+<p>       {:ok, content} <- validate_encoding(content) do</p>
+<p>    {:ok, transform(content)}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp read_file(path) do</p>
+<p>  case File.read(path) do</p>
+<p>    {:ok, content} -> {:ok, content}</p>
+<p>    {:error, :enoent} -> {:error, "File not found: #{path}"}</p>
+<p>    {:error, :eacces} -> {:error, "Permission denied: #{path}"}</p>
+<p>    {:error, reason} -> {:error, "Failed to read file: #{reason}"}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp validate_not_empty(""), do: {:error, "File is empty"}</p>
+<p>defp validate_not_empty(content), do: {:ok, content}</p>
+
+<p>defp validate_encoding(content) do</p>
+<p>  if String.valid?(content) do</p>
+<p>    {:ok, content}</p>
+<p>  else</p>
+<p>    {:error, "Invalid UTF-8 encoding"}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp transform(content) do</p>
+<p>  content</p>
+<p>  |> String.trim()</p>
+<p>  |> String.split("\n")</p>
+<p>  |> Enum.map(&String.trim/1)</p>
+<p>  |> Enum.reject(&(&1 == ""))</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 6: Custom Error Page</h2>
+
+<p>Create a custom error view that renders different templates based on error type.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/error_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  # Implement render/2 that:</p>
+<p>  # - Shows "Page not found" for 404</p>
+<p>  # - Shows "Access denied" for 403</p>
+<p>  # - Shows "Something went wrong" for 500</p>
+<p>  # - Falls back to status message for others</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.ErrorHTML do
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "error_html/*"</p>
+
+<p>  def render("404.html", assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="error-page"></p>
+<p>      <h1>Page Not Found</h1></p>
+<p>      <p>The page you're looking for doesn't exist.</p></p>
+<p>      <.link navigate={~p"/"}>Go Home</.link></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  def render("403.html", assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="error-page"></p>
+<p>      <h1>Access Denied</h1></p>
+<p>      <p>You don't have permission to access this resource.</p></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  def render("500.html", assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="error-page"></p>
+<p>      <h1>Something Went Wrong</h1></p>
+<p>      <p>We're working on fixing this issue.</p></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  def render(template, _assigns) do</p>
+<p>    Phoenix.Controller.status_message_from_template(template)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Challenge: Build a CLI Tool</h2>
+
+<p>Create a simple command-line tool using Elixir that:</p>
+
+<ol>
+<li>Accepts command-line arguments</li>
+<li>Validates input</li>
+<li>Processes data</li>
+<li>Handles errors gracefully</li>
+</ol>
+
+<figure class="code"><figcaption>File: lib/mix/tasks/snippetbox.stats.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Mix.Tasks.Snippetbox.Stats do</p>
+<p>  use Mix.Task</p>
+
+<p>  @shortdoc "Display snippet statistics"</p>
+
+<p>  @moduledoc """</p>
+<p>  Displays statistics about snippets in the database.</p>
+
+<p>  ## Usage</p>
+
+<p>      mix snippetbox.stats</p>
+<p>      mix snippetbox.stats --language elixir</p>
+<p>      mix snippetbox.stats --user user@example.com</p>
+<p>  """</p>
+
+<p>  def run(args) do</p>
+<p>    # Parse args, start app, query database, display results</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>This exercise combines multiple concepts: argument parsing, database queries, and formatted output.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="17.00-guided-exercises.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="17.02-database-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

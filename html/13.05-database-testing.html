@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Database Testing &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Database Testing</span>
+            </div>
+            <div>
+                &lsaquo; <a href="13.04-liveview-testing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="13.06-test-best-practices.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 13.5</div>
+        <h1>Chapter 13.5: Database Testing</h1>
+
+<p>Database testing requires careful handling of state and isolation. In this chapter, we'll explore Ecto testing strategies.</p>
+
+<h2>SQL Sandbox</h2>
+
+<p>The SQL Sandbox wraps each test in a transaction that rolls back:</p>
+
+<figure class="code"><figcaption>File: test/test_helper.exs</figcaption><pre><code class="language-elixir">
+<p>ExUnit.start()</p>
+<p>Ecto.Adapters.SQL.Sandbox.mode(Snippetbox.Repo, :manual)</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: test/support/data_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.DataCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      alias Snippetbox.Repo</p>
+
+<p>      import Ecto</p>
+<p>      import Ecto.Changeset</p>
+<p>      import Ecto.Query</p>
+<p>      import Snippetbox.DataCase</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  setup tags do</p>
+<p>    Snippetbox.DataCase.setup_sandbox(tags)</p>
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  def setup_sandbox(tags) do</p>
+<p>    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Snippetbox.Repo, shared: not tags[:async])</p>
+<p>    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Async vs Shared Mode</h3>
+
+<figure class="code"><pre><code># Async mode: each test has its own connection
+<h1>Tests run in parallel, isolated from each other</h1>
+<p>use Snippetbox.DataCase, async: true</p>
+
+<h1>Shared mode: all tests share one connection</h1>
+<h1>Required for tests that spawn processes (LiveView, etc.)</h1>
+<p>use Snippetbox.DataCase, async: false</p>
+</code></pre></figure>
+
+<h2>Testing Queries</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/snippets_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.SnippetsTest do</p>
+<p>  use Snippetbox.DataCase, async: true</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  import Snippetbox.SnippetsFixtures</p>
+<p>  import Snippetbox.AccountsFixtures</p>
+
+<p>  describe "list_snippets/1" do</p>
+<p>    test "returns empty list when no snippets" do</p>
+<p>      assert Snippets.list_snippets() == []</p>
+<p>    end</p>
+
+<p>    test "returns all snippets" do</p>
+<p>      snippet1 = snippet_fixture()</p>
+<p>      snippet2 = snippet_fixture()</p>
+
+<p>      assert Snippets.list_snippets() == [snippet1, snippet2]</p>
+<p>    end</p>
+
+<p>    test "filters by language" do</p>
+<p>      elixir = snippet_fixture(%{language: "elixir"})</p>
+<p>      _python = snippet_fixture(%{language: "python"})</p>
+
+<p>      assert Snippets.list_snippets(language: "elixir") == [elixir]</p>
+<p>    end</p>
+
+<p>    test "filters by user" do</p>
+<p>      user1 = user_fixture()</p>
+<p>      user2 = user_fixture()</p>
+
+<p>      snippet1 = snippet_fixture(%{user_id: user1.id})</p>
+<p>      _snippet2 = snippet_fixture(%{user_id: user2.id})</p>
+
+<p>      assert Snippets.list_snippets(user_id: user1.id) == [snippet1]</p>
+<p>    end</p>
+
+<p>    test "orders by inserted_at desc" do</p>
+<p>      old = snippet_fixture()</p>
+<p>      # Ensure different timestamp</p>
+<p>      Process.sleep(10)</p>
+<p>      new = snippet_fixture()</p>
+
+<p>      [first, second] = Snippets.list_snippets(order_by: [desc: :inserted_at])</p>
+<p>      assert first.id == new.id</p>
+<p>      assert second.id == old.id</p>
+<p>    end</p>
+
+<p>    test "paginates results" do</p>
+<p>      for _ <- 1..15, do: snippet_fixture()</p>
+
+<p>      page1 = Snippets.list_snippets(page: 1, per_page: 10)</p>
+<p>      page2 = Snippets.list_snippets(page: 2, per_page: 10)</p>
+
+<p>      assert length(page1) == 10</p>
+<p>      assert length(page2) == 5</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "search_snippets/1" do</p>
+<p>    test "searches title" do</p>
+<p>      match = snippet_fixture(%{title: "Elixir GenServer"})</p>
+<p>      _nomatch = snippet_fixture(%{title: "Python Script"})</p>
+
+<p>      assert Snippets.search_snippets("genserver") == [match]</p>
+<p>    end</p>
+
+<p>    test "searches content" do</p>
+<p>      match = snippet_fixture(%{content: "defmodule GenServer do"})</p>
+<p>      _nomatch = snippet_fixture(%{content: "print('hello')"})</p>
+
+<p>      assert Snippets.search_snippets("defmodule") == [match]</p>
+<p>    end</p>
+
+<p>    test "is case insensitive" do</p>
+<p>      snippet = snippet_fixture(%{title: "UPPERCASE TITLE"})</p>
+
+<p>      assert Snippets.search_snippets("uppercase") == [snippet]</p>
+<p>      assert Snippets.search_snippets("UPPERCASE") == [snippet]</p>
+<p>    end</p>
+
+<p>    test "returns empty for no match" do</p>
+<p>      snippet_fixture()</p>
+
+<p>      assert Snippets.search_snippets("nonexistent") == []</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Associations</h2>
+
+<figure class="code"><pre><code>describe "associations" do
+<p>  test "snippet belongs to user" do</p>
+<p>    user = user_fixture()</p>
+<p>    snippet = snippet_fixture(%{user_id: user.id})</p>
+
+<p>    snippet = Repo.preload(snippet, :user)</p>
+<p>    assert snippet.user.id == user.id</p>
+<p>  end</p>
+
+<p>  test "user has many snippets" do</p>
+<p>    user = user_fixture()</p>
+<p>    snippet1 = snippet_fixture(%{user_id: user.id})</p>
+<p>    snippet2 = snippet_fixture(%{user_id: user.id})</p>
+
+<p>    user = Repo.preload(user, :snippets)</p>
+<p>    assert length(user.snippets) == 2</p>
+<p>    assert snippet1 in user.snippets</p>
+<p>    assert snippet2 in user.snippets</p>
+<p>  end</p>
+
+<p>  test "snippet has many comments" do</p>
+<p>    snippet = snippet_fixture()</p>
+<p>    comment1 = comment_fixture(%{snippet_id: snippet.id})</p>
+<p>    comment2 = comment_fixture(%{snippet_id: snippet.id})</p>
+
+<p>    snippet = Repo.preload(snippet, :comments)</p>
+<p>    assert length(snippet.comments) == 2</p>
+<p>  end</p>
+
+<p>  test "deleting snippet deletes comments" do</p>
+<p>    snippet = snippet_fixture()</p>
+<p>    comment = comment_fixture(%{snippet_id: snippet.id})</p>
+
+<p>    Snippets.delete_snippet(snippet)</p>
+
+<p>    assert Repo.get(Comment, comment.id) == nil</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Transactions</h2>
+
+<figure class="code"><pre><code>describe "transactions" do
+<p>  test "creates snippet with tags atomically" do</p>
+<p>    attrs = %{</p>
+<p>      title: "Test",</p>
+<p>      content: "code",</p>
+<p>      language: "elixir",</p>
+<p>      tags: [%{name: "elixir"}, %{name: "tutorial"}]</p>
+<p>    }</p>
+
+<p>    {:ok, snippet} = Snippets.create_snippet_with_tags(attrs)</p>
+
+<p>    snippet = Repo.preload(snippet, :tags)</p>
+<p>    assert length(snippet.tags) == 2</p>
+<p>  end</p>
+
+<p>  test "rolls back on failure" do</p>
+<p>    attrs = %{</p>
+<p>      title: "Test",</p>
+<p>      content: "code",</p>
+<p>      language: "elixir",</p>
+<p>      tags: [%{name: nil}]  # Invalid tag</p>
+<p>    }</p>
+
+<p>    {:error, :tags, _changeset, _} = Snippets.create_snippet_with_tags(attrs)</p>
+
+<p>    # Snippet was not created</p>
+<p>    assert Snippets.list_snippets() == []</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Constraints</h2>
+
+<figure class="code"><pre><code>describe "constraints" do
+<p>  test "email must be unique" do</p>
+<p>    user_fixture(%{email: "test@example.com"})</p>
+
+<p>    {:error, changeset} =</p>
+<p>      Snippetbox.Accounts.register_user(%{</p>
+<p>        email: "test@example.com",</p>
+<p>        password: "validpassword123"</p>
+<p>      })</p>
+
+<p>    assert "has already been taken" in errors_on(changeset).email</p>
+<p>  end</p>
+
+<p>  test "foreign key constraint" do</p>
+<p>    {:error, changeset} =</p>
+<p>      Snippets.create_snippet(%{</p>
+<p>        title: "Test",</p>
+<p>        content: "code",</p>
+<p>        language: "elixir",</p>
+<p>        user_id: 999999  # Non-existent user</p>
+<p>      })</p>
+
+<p>    assert "does not exist" in errors_on(changeset).user</p>
+<p>  end</p>
+
+<p>  test "check constraint" do</p>
+<p>    {:error, changeset} =</p>
+<p>      Snippets.create_snippet(%{</p>
+<p>        title: "Test",</p>
+<p>        content: "code",</p>
+<p>        language: "elixir",</p>
+<p>        view_count: -1  # Check constraint: view_count >= 0</p>
+<p>      })</p>
+
+<p>    assert "must be greater than or equal to 0" in errors_on(changeset).view_count</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Migrations</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/repo_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.RepoTest do</p>
+<p>  use Snippetbox.DataCase, async: false</p>
+
+<p>  describe "migrations" do</p>
+<p>    test "all migrations run successfully" do</p>
+<p>      # This test verifies that the test database was migrated</p>
+<p>      assert {:ok, _} = Ecto.Adapters.SQL.query(Repo, "SELECT 1")</p>
+<p>    end</p>
+
+<p>    test "snippets table exists with expected columns" do</p>
+<p>      {:ok, result} = Ecto.Adapters.SQL.query(Repo, """</p>
+<p>        SELECT column_name, data_type</p>
+<p>        FROM information_schema.columns</p>
+<p>        WHERE table_name = 'snippets'</p>
+<p>        ORDER BY ordinal_position</p>
+<p>      """)</p>
+
+<p>      columns = Enum.map(result.rows, fn [name, _type] -> name end)</p>
+
+<p>      assert "id" in columns</p>
+<p>      assert "title" in columns</p>
+<p>      assert "content" in columns</p>
+<p>      assert "language" in columns</p>
+<p>      assert "inserted_at" in columns</p>
+<p>      assert "updated_at" in columns</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing with Seeds</h2>
+
+<figure class="code"><figcaption>File: test/support/seeds.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.TestSeeds do</p>
+<p>  alias Snippetbox.Repo</p>
+<p>  alias Snippetbox.Accounts.User</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  def seed_users(count \\ 5) do</p>
+<p>    for i <- 1..count do</p>
+<p>      %User{}</p>
+<p>      |> User.registration_changeset(%{</p>
+<p>        email: "user#{i}@test.com",</p>
+<p>        password: "password123456"</p>
+<p>      })</p>
+<p>      |> Repo.insert!()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def seed_snippets(user, count \\ 10) do</p>
+<p>    for i <- 1..count do</p>
+<p>      %Snippet{}</p>
+<p>      |> Snippet.changeset(%{</p>
+<p>        title: "Snippet #{i}",</p>
+<p>        content: "Code #{i}",</p>
+<p>        language: Enum.random(~w(elixir python javascript)),</p>
+<p>        user_id: user.id</p>
+<p>      })</p>
+<p>      |> Repo.insert!()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Usage in tests</h1>
+<p>defmodule Snippetbox.PaginationTest do</p>
+<p>  use Snippetbox.DataCase</p>
+
+<p>  alias Snippetbox.TestSeeds</p>
+
+<p>  setup do</p>
+<p>    [user | _] = TestSeeds.seed_users(1)</p>
+<p>    TestSeeds.seed_snippets(user, 50)</p>
+<p>    %{user: user}</p>
+<p>  end</p>
+
+<p>  test "paginates through all snippets" do</p>
+<p>    page1 = Snippets.list_snippets(page: 1, per_page: 20)</p>
+<p>    page2 = Snippets.list_snippets(page: 2, per_page: 20)</p>
+<p>    page3 = Snippets.list_snippets(page: 3, per_page: 20)</p>
+
+<p>    assert length(page1) == 20</p>
+<p>    assert length(page2) == 20</p>
+<p>    assert length(page3) == 10</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Fixtures</h2>
+
+<figure class="code"><figcaption>File: test/support/fixtures/snippets_fixtures.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.SnippetsFixtures do</p>
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  def unique_snippet_title, do: "snippet#{System.unique_integer()}"</p>
+
+<p>  def valid_snippet_attributes(attrs \\ %{}) do</p>
+<p>    Enum.into(attrs, %{</p>
+<p>      title: unique_snippet_title(),</p>
+<p>      content: "defmodule Test do\nend",</p>
+<p>      language: "elixir"</p>
+<p>    })</p>
+<p>  end</p>
+
+<p>  def snippet_fixture(attrs \\ %{}) do</p>
+<p>    user_id = attrs[:user_id] || Snippetbox.AccountsFixtures.user_fixture().id</p>
+
+<p>    {:ok, snippet} =</p>
+<p>      attrs</p>
+<p>      |> Enum.into(%{user_id: user_id})</p>
+<p>      |> valid_snippet_attributes()</p>
+<p>      |> Snippets.create_snippet()</p>
+
+<p>    snippet</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Aggregations</h2>
+
+<figure class="code"><pre><code>describe "aggregations" do
+<p>  test "count_snippets/0" do</p>
+<p>    assert Snippets.count_snippets() == 0</p>
+
+<p>    snippet_fixture()</p>
+<p>    snippet_fixture()</p>
+<p>    snippet_fixture()</p>
+
+<p>    assert Snippets.count_snippets() == 3</p>
+<p>  end</p>
+
+<p>  test "count_by_language/0" do</p>
+<p>    snippet_fixture(%{language: "elixir"})</p>
+<p>    snippet_fixture(%{language: "elixir"})</p>
+<p>    snippet_fixture(%{language: "python"})</p>
+
+<p>    counts = Snippets.count_by_language()</p>
+
+<p>    assert counts["elixir"] == 2</p>
+<p>    assert counts["python"] == 1</p>
+<p>  end</p>
+
+<p>  test "total_views/0" do</p>
+<p>    snippet_fixture(%{view_count: 100})</p>
+<p>    snippet_fixture(%{view_count: 50})</p>
+
+<p>    assert Snippets.total_views() == 150</p>
+<p>  end</p>
+
+<p>  test "most_viewed/1" do</p>
+<p>    low = snippet_fixture(%{view_count: 10})</p>
+<p>    high = snippet_fixture(%{view_count: 100})</p>
+<p>    medium = snippet_fixture(%{view_count: 50})</p>
+
+<p>    [first, second] = Snippets.most_viewed(2)</p>
+
+<p>    assert first.id == high.id</p>
+<p>    assert second.id == medium.id</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Complex Queries</h2>
+
+<figure class="code"><pre><code>describe "complex queries" do
+<p>  test "snippets_with_comment_count" do</p>
+<p>    snippet1 = snippet_fixture()</p>
+<p>    snippet2 = snippet_fixture()</p>
+
+<p>    comment_fixture(%{snippet_id: snippet1.id})</p>
+<p>    comment_fixture(%{snippet_id: snippet1.id})</p>
+<p>    comment_fixture(%{snippet_id: snippet2.id})</p>
+
+<p>    results = Snippets.list_with_comment_counts()</p>
+
+<p>    snippet1_result = Enum.find(results, &(&1.id == snippet1.id))</p>
+<p>    snippet2_result = Enum.find(results, &(&1.id == snippet2.id))</p>
+
+<p>    assert snippet1_result.comment_count == 2</p>
+<p>    assert snippet2_result.comment_count == 1</p>
+<p>  end</p>
+
+<p>  test "recent_with_authors" do</p>
+<p>    user = user_fixture(%{name: "Test User"})</p>
+<p>    snippet = snippet_fixture(%{user_id: user.id})</p>
+
+<p>    [result] = Snippets.recent_with_authors(10)</p>
+
+<p>    assert result.id == snippet.id</p>
+<p>    assert result.user.name == "Test User"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Isolated Test State</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The SQL Sandbox provides isolation without shared mutable state:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Each test starts with a clean database
+<p>setup do</p>
+<p>  Ecto.Adapters.SQL.Sandbox.checkout(Repo)</p>
+<p>  :ok</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Changes are wrapped in a transaction</p>
+<p>test "creates data" do</p>
+<p>  snippet_fixture()  # Only visible to this test</p>
+<p>  assert Snippets.count() == 1</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Transaction is rolled back after test</p>
+<p># Next test sees empty database</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This ensures tests are independent and reproducible.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>SQL Sandbox for test isolation</li>
+<li>Testing queries and filters</li>
+<li>Testing associations</li>
+<li>Testing transactions</li>
+<li>Testing constraints</li>
+<li>Testing migrations</li>
+<li>Using fixtures effectively</li>
+<li>Testing aggregations and complex queries</li>
+</ul>
+
+<p>In the next chapter, we'll explore test coverage and best practices.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="13.04-liveview-testing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="13.06-test-best-practices.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

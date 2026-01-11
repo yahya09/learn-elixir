@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Testing Plugs &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Testing Plugs</span>
+            </div>
+            <div>
+                &lsaquo; <a href="06.04-common-plug-patterns.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="07.00-advanced-routing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 6.5</div>
+        <h1>Chapter 6.5: Testing Plugs</h1>
+
+<p>Plugs should be tested independently. In this chapter, we'll learn how to write unit tests for both function and module plugs.</p>
+
+<h2>Testing Setup</h2>
+
+<p>Create a test helper for plug testing:</p>
+
+<figure class="code"><figcaption>File: test/support/plug_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.PlugCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      import Plug.Conn</p>
+<p>      import Phoenix.ConnTest</p>
+<p>      import SnippetboxWeb.PlugCase</p>
+
+<p>      @endpoint SnippetboxWeb.Endpoint</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def conn_with_session do</p>
+<p>    Phoenix.ConnTest.build_conn()</p>
+<p>    |> Plug.Test.init_test_session(%{})</p>
+<p>  end</p>
+
+<p>  def conn_with_user(user) do</p>
+<p>    conn_with_session()</p>
+<p>    |> Plug.Conn.assign(:current_user, user)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Function Plugs</h2>
+
+<h3>Basic Function Plug Test</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/auth_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.AuthTest do</p>
+<p>  use SnippetboxWeb.PlugCase, async: true</p>
+
+<p>  alias SnippetboxWeb.Plugs.Auth</p>
+
+<p>  describe "fetch_current_user/2" do</p>
+<p>    test "assigns nil when no user in session" do</p>
+<p>      conn = conn_with_session()</p>
+<p>      conn = Auth.fetch_current_user(conn, [])</p>
+
+<p>      assert conn.assigns.current_user == nil</p>
+<p>    end</p>
+
+<p>    test "assigns user when user_id in session" do</p>
+<p>      user = user_fixture()</p>
+
+<p>      conn =</p>
+<p>        conn_with_session()</p>
+<p>        |> put_session(:user_id, user.id)</p>
+<p>        |> Auth.fetch_current_user([])</p>
+
+<p>      assert conn.assigns.current_user.id == user.id</p>
+<p>    end</p>
+
+<p>    test "assigns nil when user_id is invalid" do</p>
+<p>      conn =</p>
+<p>        conn_with_session()</p>
+<p>        |> put_session(:user_id, -1)</p>
+<p>        |> Auth.fetch_current_user([])</p>
+
+<p>      assert conn.assigns.current_user == nil</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "require_authenticated_user/2" do</p>
+<p>    test "continues when user is logged in" do</p>
+<p>      user = user_fixture()</p>
+<p>      conn = conn_with_user(user)</p>
+
+<p>      result = Auth.require_authenticated_user(conn, [])</p>
+
+<p>      refute result.halted</p>
+<p>    end</p>
+
+<p>    test "redirects when no user" do</p>
+<p>      conn =</p>
+<p>        conn_with_session()</p>
+<p>        |> assign(:current_user, nil)</p>
+<p>        |> Auth.require_authenticated_user([])</p>
+
+<p>      assert conn.halted</p>
+<p>      assert redirected_to(conn) == "/login"</p>
+<p>      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "must log in"</p>
+<p>    end</p>
+
+<p>    test "stores return path for GET requests" do</p>
+<p>      conn =</p>
+<p>        conn_with_session()</p>
+<p>        |> Map.put(:method, "GET")</p>
+<p>        |> Map.put(:request_path, "/snippets/123")</p>
+<p>        |> assign(:current_user, nil)</p>
+<p>        |> Auth.require_authenticated_user([])</p>
+
+<p>      assert get_session(conn, :return_to) == "/snippets/123"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Module Plugs</h2>
+
+<h3>Testing init/1 and call/2</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/request_logger_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RequestLoggerTest do</p>
+<p>  use SnippetboxWeb.PlugCase, async: true</p>
+
+<p>  import ExUnit.CaptureLog</p>
+
+<p>  alias SnippetboxWeb.Plugs.RequestLogger</p>
+
+<p>  describe "init/1" do</p>
+<p>    test "sets default log level to :info" do</p>
+<p>      opts = RequestLogger.init([])</p>
+<p>      assert opts.level == :info</p>
+<p>    end</p>
+
+<p>    test "accepts custom log level" do</p>
+<p>      opts = RequestLogger.init(level: :debug)</p>
+<p>      assert opts.level == :debug</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "call/2" do</p>
+<p>    test "logs request after response is sent" do</p>
+<p>      opts = RequestLogger.init(level: :info)</p>
+
+<p>      log =</p>
+<p>        capture_log(fn -></p>
+<p>          build_conn(:get, "/test")</p>
+<p>          |> RequestLogger.call(opts)</p>
+<p>          |> send_resp(200, "OK")</p>
+<p>        end)</p>
+
+<p>      assert log =~ "GET /test"</p>
+<p>      assert log =~ "200"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Testing Rate Limiter</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/rate_limiter_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RateLimiterTest do</p>
+<p>  use SnippetboxWeb.PlugCase, async: false  # Not async due to shared state</p>
+
+<p>  alias SnippetboxWeb.Plugs.RateLimiter</p>
+
+<p>  setup do</p>
+<p>    # Reset rate limit state before each test</p>
+<p>    :ets.delete_all_objects(:rate_limits)</p>
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  describe "call/2" do</p>
+<p>    test "allows requests within limit" do</p>
+<p>      opts = RateLimiter.init(max_requests: 5, window_ms: 60_000)</p>
+
+<p>      conn = build_conn(:get, "/api/test")</p>
+<p>      conn = RateLimiter.call(conn, opts)</p>
+
+<p>      refute conn.halted</p>
+<p>      assert get_resp_header(conn, "x-ratelimit-remaining") == ["4"]</p>
+<p>    end</p>
+
+<p>    test "blocks requests over limit" do</p>
+<p>      opts = RateLimiter.init(max_requests: 2, window_ms: 60_000)</p>
+
+<p>      # Make 3 requests</p>
+<p>      conn1 = build_conn(:get, "/api/test") |> RateLimiter.call(opts)</p>
+<p>      conn2 = build_conn(:get, "/api/test") |> RateLimiter.call(opts)</p>
+<p>      conn3 = build_conn(:get, "/api/test") |> RateLimiter.call(opts)</p>
+
+<p>      refute conn1.halted</p>
+<p>      refute conn2.halted</p>
+<p>      assert conn3.halted</p>
+<p>      assert conn3.status == 429</p>
+<p>    end</p>
+
+<p>    test "sets retry-after header when rate limited" do</p>
+<p>      opts = RateLimiter.init(max_requests: 1, window_ms: 60_000)</p>
+
+<p>      build_conn(:get, "/api/test") |> RateLimiter.call(opts)</p>
+<p>      conn = build_conn(:get, "/api/test") |> RateLimiter.call(opts)</p>
+
+<p>      assert get_resp_header(conn, "retry-after") == ["60"]</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Testing CORS Plug</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/cors_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.CORSTest do</p>
+<p>  use SnippetboxWeb.PlugCase, async: true</p>
+
+<p>  alias SnippetboxWeb.Plugs.CORS</p>
+
+<p>  describe "call/2" do</p>
+<p>    test "sets CORS headers for allowed origin" do</p>
+<p>      opts = CORS.init(origins: ["http://localhost:3000"])</p>
+
+<p>      conn =</p>
+<p>        build_conn(:get, "/api/test")</p>
+<p>        |> put_req_header("origin", "http://localhost:3000")</p>
+<p>        |> CORS.call(opts)</p>
+
+<p>      assert get_resp_header(conn, "access-control-allow-origin") == ["http://localhost:3000"]</p>
+<p>    end</p>
+
+<p>    test "does not set CORS headers for disallowed origin" do</p>
+<p>      opts = CORS.init(origins: ["http://localhost:3000"])</p>
+
+<p>      conn =</p>
+<p>        build_conn(:get, "/api/test")</p>
+<p>        |> put_req_header("origin", "http://evil.com")</p>
+<p>        |> CORS.call(opts)</p>
+
+<p>      assert get_resp_header(conn, "access-control-allow-origin") == []</p>
+<p>    end</p>
+
+<p>    test "handles preflight OPTIONS request" do</p>
+<p>      opts = CORS.init(origins: ["*"])</p>
+
+<p>      conn =</p>
+<p>        build_conn(:options, "/api/test")</p>
+<p>        |> put_req_header("origin", "http://localhost:3000")</p>
+<p>        |> CORS.call(opts)</p>
+
+<p>      assert conn.status == 204</p>
+<p>      assert conn.halted</p>
+<p>      assert get_resp_header(conn, "access-control-max-age") == ["86400"]</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Authorization Plugs</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/authorize_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.AuthorizeTest do</p>
+<p>  use SnippetboxWeb.PlugCase, async: true</p>
+
+<p>  alias SnippetboxWeb.Plugs.Authorize</p>
+
+<p>  describe "require_role/2" do</p>
+<p>    test "allows user with matching role" do</p>
+<p>      user = %{id: 1, role: :admin}</p>
+<p>      conn = conn_with_user(user)</p>
+
+<p>      result = Authorize.require_role(conn, [:admin])</p>
+
+<p>      refute result.halted</p>
+<p>    end</p>
+
+<p>    test "allows user with one of multiple roles" do</p>
+<p>      user = %{id: 1, role: :moderator}</p>
+<p>      conn = conn_with_user(user)</p>
+
+<p>      result = Authorize.require_role(conn, [:admin, :moderator])</p>
+
+<p>      refute result.halted</p>
+<p>    end</p>
+
+<p>    test "blocks user without matching role" do</p>
+<p>      user = %{id: 1, role: :user}</p>
+<p>      conn = conn_with_user(user)</p>
+
+<p>      result = Authorize.require_role(conn, [:admin])</p>
+
+<p>      assert result.halted</p>
+<p>      assert result.status == 403</p>
+<p>    end</p>
+
+<p>    test "blocks when no user" do</p>
+<p>      conn = conn_with_session() |> assign(:current_user, nil)</p>
+
+<p>      result = Authorize.require_role(conn, [:admin])</p>
+
+<p>      assert result.halted</p>
+<p>      assert result.status == 403</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Plugs with Mocks</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/api_auth_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.APIAuthTest do</p>
+<p>  use SnippetboxWeb.PlugCase, async: true</p>
+<p>  import Mox</p>
+
+<p>  alias SnippetboxWeb.Plugs.APIAuth</p>
+
+<p>  setup :verify_on_exit!</p>
+
+<p>  describe "fetch_api_user/2" do</p>
+<p>    test "authenticates valid token" do</p>
+<p>      user = %{id: 1, email: "test@example.com"}</p>
+
+<p>      # Mock token verification</p>
+<p>      expect(SnippetboxWeb.TokenMock, :verify, fn "valid-token" -></p>
+<p>        {:ok, %{"sub" => user.id}}</p>
+<p>      end)</p>
+
+<p>      expect(Snippetbox.AccountsMock, :get_user, fn 1 -> user end)</p>
+
+<p>      conn =</p>
+<p>        build_conn(:get, "/api/test")</p>
+<p>        |> put_req_header("authorization", "Bearer valid-token")</p>
+<p>        |> APIAuth.fetch_api_user([])</p>
+
+<p>      refute conn.halted</p>
+<p>      assert conn.assigns.current_user == user</p>
+<p>    end</p>
+
+<p>    test "rejects invalid token" do</p>
+<p>      expect(SnippetboxWeb.TokenMock, :verify, fn "invalid-token" -></p>
+<p>        {:error, :invalid}</p>
+<p>      end)</p>
+
+<p>      conn =</p>
+<p>        build_conn(:get, "/api/test")</p>
+<p>        |> put_req_header("authorization", "Bearer invalid-token")</p>
+<p>        |> APIAuth.fetch_api_user([])</p>
+
+<p>      assert conn.halted</p>
+<p>      assert conn.status == 401</p>
+<p>    end</p>
+
+<p>    test "rejects missing token" do</p>
+<p>      conn =</p>
+<p>        build_conn(:get, "/api/test")</p>
+<p>        |> APIAuth.fetch_api_user([])</p>
+
+<p>      assert conn.halted</p>
+<p>      assert conn.status == 401</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Integration Testing Plugs</h2>
+
+<p>Test plugs in the context of a full request:</p>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/snippet_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  describe "protected routes" do</p>
+<p>    test "redirect to login when not authenticated", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/snippets/new")</p>
+
+<p>      assert redirected_to(conn) == "/login"</p>
+<p>      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "must log in"</p>
+<p>    end</p>
+
+<p>    test "accessible when authenticated", %{conn: conn} do</p>
+<p>      user = user_fixture()</p>
+<p>      conn = log_in_user(conn, user)</p>
+
+<p>      conn = get(conn, ~p"/snippets/new")</p>
+
+<p>      assert html_response(conn, 200) =~ "New Snippet"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "admin routes" do</p>
+<p>    test "forbidden for non-admin users", %{conn: conn} do</p>
+<p>      user = user_fixture(role: :user)</p>
+<p>      conn = log_in_user(conn, user)</p>
+
+<p>      conn = get(conn, ~p"/admin/users")</p>
+
+<p>      assert html_response(conn, 403) =~ "Forbidden"</p>
+<p>    end</p>
+
+<p>    test "accessible for admin users", %{conn: conn} do</p>
+<p>      admin = user_fixture(role: :admin)</p>
+<p>      conn = log_in_user(conn, admin)</p>
+
+<p>      conn = get(conn, ~p"/admin/users")</p>
+
+<p>      assert html_response(conn, 200) =~ "Users"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Test Helpers</h2>
+
+<figure class="code"><figcaption>File: test/support/conn_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ConnCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      import Plug.Conn</p>
+<p>      import Phoenix.ConnTest</p>
+<p>      import SnippetboxWeb.ConnCase</p>
+
+<p>      @endpoint SnippetboxWeb.Endpoint</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  setup tags do</p>
+<p>    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Snippetbox.Repo)</p>
+
+<p>    unless tags[:async] do</p>
+<p>      Ecto.Adapters.SQL.Sandbox.mode(Snippetbox.Repo, {:shared, self()})</p>
+<p>    end</p>
+
+<p>    {:ok, conn: Phoenix.ConnTest.build_conn()}</p>
+<p>  end</p>
+
+<p>  def log_in_user(conn, user) do</p>
+<p>    conn</p>
+<p>    |> Phoenix.ConnTest.init_test_session(%{})</p>
+<p>    |> Plug.Conn.put_session(:user_id, user.id)</p>
+<p>    |> Plug.Conn.assign(:current_user, user)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Testing Pure Functions</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Plugs are essentially pure functions (ignoring side effects):</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> input_conn → plug → output_conn
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes them trivially testable:</p>
+<ul>
+<li>Create input conn with specific state</li>
+<li>Call plug function</li>
+<li>Assert on output conn properties</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>No mocking of external services needed for most plug tests.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Setting up plug test helpers</li>
+<li>Testing function plugs</li>
+<li>Testing module plugs (init and call)</li>
+<li>Testing authentication and authorization</li>
+<li>Using mocks for external dependencies</li>
+<li>Integration testing plugs</li>
+</ul>
+
+<p>This completes the Plugs and Middleware chapter. In the next chapter, we'll explore Advanced Routing.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="06.04-common-plug-patterns.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="07.00-advanced-routing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

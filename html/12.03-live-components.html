@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Live Components &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Live Components</span>
+            </div>
+            <div>
+                &lsaquo; <a href="12.02-liveview-forms.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="12.04-real-time-features.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 12.3</div>
+        <h1>Chapter 12.3: Live Components</h1>
+
+<p>Live Components provide encapsulation and reusability for LiveView. In this chapter, we'll explore stateful and stateless components.</p>
+
+<h2>Stateless Function Components</h2>
+
+<p>Simple, reusable presentation components:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/snippet_components.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetComponents do</p>
+<p>  use Phoenix.Component</p>
+
+<p>  attr :snippet, :map, required: true</p>
+
+<p>  def snippet_card(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="border rounded-lg p-4 hover:shadow-lg transition"></p>
+<p>      <h3 class="font-bold text-lg"><%= @snippet.title %></h3></p>
+<p>      <p class="text-sm text-gray-500"><%= @snippet.language %></p></p>
+<p>      <pre class="mt-2 bg-gray-100 p-2 rounded overflow-auto"></p>
+<p>        <code><%= @snippet.content %></code></p>
+<p>      </pre></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  attr :snippets, :list, required: true</p>
+<p>  attr :on_click, :any, default: nil</p>
+
+<p>  def snippet_list(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="grid grid-cols-1 md:grid-cols-2 gap-4"></p>
+<p>      <%= for snippet <- @snippets do %></p>
+<p>        <div phx-click={@on_click && @on_click.(snippet)}></p>
+<p>          <.snippet_card snippet={snippet} /></p>
+<p>        </div></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Stateful Live Components</h2>
+
+<p>Components with their own state and event handling:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/components/comment_form_component.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.CommentFormComponent do</p>
+<p>  use SnippetboxWeb, :live_component</p>
+
+<p>  alias Snippetbox.Comments</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div></p>
+<p>      <.form</p>
+<p>        for={@form}</p>
+<p>        id="comment-form"</p>
+<p>        phx-target={@myself}</p>
+<p>        phx-change="validate"</p>
+<p>        phx-submit="save"</p>
+<p>      ></p>
+<p>        <.input</p>
+<p>          field={@form[:content]}</p>
+<p>          type="textarea"</p>
+<p>          label="Comment"</p>
+<p>          rows={3}</p>
+<p>        /></p>
+<p>        <.button class="mt-2">Post Comment</.button></p>
+<p>      </.form></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def update(assigns, socket) do</p>
+<p>    changeset = Comments.change_comment(%Comment{})</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(assigns)</p>
+<p>     |> assign_form(changeset)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("validate", %{"comment" => params}, socket) do</p>
+<p>    changeset =</p>
+<p>      %Comment{}</p>
+<p>      |> Comments.change_comment(params)</p>
+<p>      |> Map.put(:action, :validate)</p>
+
+<p>    {:noreply, assign_form(socket, changeset)}</p>
+<p>  end</p>
+
+<p>  def handle_event("save", %{"comment" => params}, socket) do</p>
+<p>    params = Map.put(params, "snippet_id", socket.assigns.snippet_id)</p>
+
+<p>    case Comments.create_comment(params) do</p>
+<p>      {:ok, comment} -></p>
+<p>        send(self(), {:comment_created, comment})</p>
+<p>        {:noreply, assign_form(socket, Comments.change_comment(%Comment{}))}</p>
+
+<p>      {:error, changeset} -></p>
+<p>        {:noreply, assign_form(socket, changeset)}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp assign_form(socket, changeset) do</p>
+<p>    assign(socket, :form, to_form(changeset))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Using Live Components</h2>
+
+<figure class="code"><pre><code><%# In parent LiveView template %>
+
+<%# Stateless function component %>
+<.snippet_card snippet={@snippet} />
+
+<%# Stateful live component %>
+<.live_component
+<p>  module={SnippetboxWeb.CommentFormComponent}</p>
+<p>  id="comment-form"</p>
+<p>  snippet_id={@snippet.id}</p>
+<p>/></p>
+
+<%# With update callback %>
+<.live_component
+<p>  module={SnippetboxWeb.SnippetLive.FormComponent}</p>
+<p>  id={@snippet.id || :new}</p>
+<p>  title={@page_title}</p>
+<p>  action={@live_action}</p>
+<p>  snippet={@snippet}</p>
+<p>  patch={~p"/snippets"}</p>
+<p>/></p>
+</code></pre></figure>
+
+<h2>Component Communication</h2>
+
+<h3>Child → Parent</h3>
+
+<figure class="code"><pre><code># In child component
+<p>defp notify_parent(msg) do</p>
+<p>  send(self(), {__MODULE__, msg})</p>
+<p>end</p>
+
+<p>def handle_event("save", params, socket) do</p>
+<p>  case create_item(params) do</p>
+<p>    {:ok, item} -></p>
+<p>      notify_parent({:saved, item})</p>
+<p>      {:noreply, socket}</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>In parent LiveView</h1>
+<p>@impl true</p>
+<p>def handle_info({SnippetboxWeb.FormComponent, {:saved, item}}, socket) do</p>
+<p>  {:noreply, stream_insert(socket, :items, item)}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Parent → Child</h3>
+
+<figure class="code"><pre><code># Parent sends data via assigns
+<.live_component
+<p>  module={FormComponent}</p>
+<p>  id="form"</p>
+<p>  item={@selected_item}</p>
+<p>  mode={@form_mode}</p>
+<p>/></p>
+
+<h1>Child receives in update/2</h1>
+<p>@impl true</p>
+<p>def update(%{item: item, mode: mode} = assigns, socket) do</p>
+<p>  {:ok,</p>
+<p>   socket</p>
+<p>   |> assign(assigns)</p>
+<p>   |> assign_form(change_item(item))}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>send_update</h3>
+
+<figure class="code"><pre><code># Parent can send updates to child
+<p>send_update(FormComponent, id: "form", reset: true)</p>
+
+<h1>Child handles in update/2</h1>
+<p>@impl true</p>
+<p>def update(%{reset: true} = assigns, socket) do</p>
+<p>  {:ok,</p>
+<p>   socket</p>
+<p>   |> assign(assigns)</p>
+<p>   |> assign_form(change_item(%Item{}))}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Component with Slots</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/modal_component.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Components.Modal do</p>
+<p>  use Phoenix.Component</p>
+
+<p>  attr :id, :string, required: true</p>
+<p>  attr :show, :boolean, default: false</p>
+<p>  attr :on_cancel, JS, default: %JS{}</p>
+<p>  slot :inner_block, required: true</p>
+
+<p>  def modal(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div</p>
+<p>      id={@id}</p>
+<p>      phx-mounted={@show && show_modal(@id)}</p>
+<p>      phx-remove={hide_modal(@id)}</p>
+<p>      data-cancel={JS.exec(@on_cancel, "phx-remove")}</p>
+<p>      class="relative z-50 hidden"</p>
+<p>    ></p>
+<p>      <div</p>
+<p>        id={"#{@id}-bg"}</p>
+<p>        class="bg-zinc-50/90 fixed inset-0 transition-opacity"</p>
+<p>        aria-hidden="true"</p>
+<p>      /></p>
+<p>      <div</p>
+<p>        class="fixed inset-0 overflow-y-auto"</p>
+<p>        aria-labelledby={"#{@id}-title"}</p>
+<p>        aria-describedby={"#{@id}-description"}</p>
+<p>        role="dialog"</p>
+<p>        aria-modal="true"</p>
+<p>        tabindex="0"</p>
+<p>      ></p>
+<p>        <div class="flex min-h-full items-center justify-center"></p>
+<p>          <div class="w-full max-w-3xl p-4 sm:p-6 lg:py-8"></p>
+<p>            <.focus_wrap</p>
+<p>              id={"#{@id}-container"}</p>
+<p>              phx-window-keydown={JS.exec("data-cancel", to: "##{@id}")}</p>
+<p>              phx-key="escape"</p>
+<p>              phx-click-away={JS.exec("data-cancel", to: "##{@id}")}</p>
+<p>              class="shadow-zinc-700/10 ring-zinc-700/10 relative hidden rounded-2xl bg-white p-14 shadow-lg ring-1 transition"</p>
+<p>            ></p>
+<p>              <div class="absolute top-6 right-5"></p>
+<p>                <button</p>
+<p>                  phx-click={JS.exec("data-cancel", to: "##{@id}")}</p>
+<p>                  type="button"</p>
+<p>                  class="-m-3 flex-none p-3 opacity-20 hover:opacity-40"</p>
+<p>                ></p>
+<p>                  <.icon name="hero-x-mark-solid" class="h-5 w-5" /></p>
+<p>                </button></p>
+<p>              </div></p>
+<p>              <div id={"#{@id}-content"}></p>
+<p>                <%= render_slot(@inner_block) %></p>
+<p>              </div></p>
+<p>            </.focus_wrap></p>
+<p>          </div></p>
+<p>        </div></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  defp show_modal(js \\ %JS{}, id) do</p>
+<p>    js</p>
+<p>    |> JS.show(to: "##{id}")</p>
+<p>    |> JS.show(</p>
+<p>      to: "##{id}-bg",</p>
+<p>      transition: {"transition-all ease-out duration-300", "opacity-0", "opacity-100"}</p>
+<p>    )</p>
+<p>    |> JS.show(</p>
+<p>      to: "##{id}-container",</p>
+<p>      transition: {"transition-all ease-out duration-300", "opacity-0 translate-y-4", "opacity-100 translate-y-0"}</p>
+<p>    )</p>
+<p>    |> JS.focus_first(to: "##{id}-content")</p>
+<p>  end</p>
+
+<p>  defp hide_modal(js \\ %JS{}, id) do</p>
+<p>    js</p>
+<p>    |> JS.hide(</p>
+<p>      to: "##{id}-bg",</p>
+<p>      transition: {"transition-all ease-in duration-200", "opacity-100", "opacity-0"}</p>
+<p>    )</p>
+<p>    |> JS.hide(</p>
+<p>      to: "##{id}-container",</p>
+<p>      transition: {"transition-all ease-in duration-200", "opacity-100 translate-y-0", "opacity-0 translate-y-4"}</p>
+<p>    )</p>
+<p>    |> JS.hide(to: "##{id}", transition: {"block", "block", "hidden"})</p>
+<p>    |> JS.pop_focus()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Reusable Table Component</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/data_table.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Components.DataTable do</p>
+<p>  use Phoenix.Component</p>
+
+<p>  attr :id, :string, required: true</p>
+<p>  attr :rows, :list, required: true</p>
+<p>  attr :row_id, :any, default: nil</p>
+<p>  attr :row_click, :any, default: nil</p>
+
+<p>  slot :col, required: true do</p>
+<p>    attr :label, :string</p>
+<p>    attr :class, :string</p>
+<p>  end</p>
+
+<p>  slot :action</p>
+
+<p>  def data_table(assigns) do</p>
+<p>    assigns =</p>
+<p>      with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do</p>
+<p>        assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)</p>
+<p>      end</p>
+
+<p>    ~H"""</p>
+<p>    <div class="overflow-x-auto"></p>
+<p>      <table class="w-full"></p>
+<p>        <thead class="text-sm text-left text-zinc-500 border-b"></p>
+<p>          <tr></p>
+<p>            <th :for={col <- @col} class={["p-3 font-medium", col[:class]]}></p>
+<p>              <%= col[:label] %></p>
+<p>            </th></p>
+<p>            <th :if={@action != []} class="p-3"></p>
+<p>              <span class="sr-only">Actions</span></p>
+<p>            </th></p>
+<p>          </tr></p>
+<p>        </thead></p>
+<p>        <tbody</p>
+<p>          id={@id}</p>
+<p>          phx-update={match?(%Phoenix.LiveView.LiveStream{}, @rows) && "stream"}</p>
+<p>          class="text-sm divide-y divide-zinc-100"</p>
+<p>        ></p>
+<p>          <tr</p>
+<p>            :for={row <- @rows}</p>
+<p>            id={@row_id && @row_id.(row)}</p>
+<p>            class="hover:bg-zinc-50"</p>
+<p>          ></p>
+<p>            <td</p>
+<p>              :for={{col, i} <- Enum.with_index(@col)}</p>
+<p>              phx-click={@row_click && @row_click.(row)}</p>
+<p>              class={["p-3", col[:class], @row_click && "cursor-pointer"]}</p>
+<p>            ></p>
+<p>              <%= render_slot(col, @row_id && elem(row, 1) || row) %></p>
+<p>            </td></p>
+<p>            <td :if={@action != []} class="p-3 text-right"></p>
+<p>              <span :for={action <- @action}></p>
+<p>                <%= render_slot(action, @row_id && elem(row, 1) || row) %></p>
+<p>              </span></p>
+<p>            </td></p>
+<p>          </tr></p>
+<p>        </tbody></p>
+<p>      </table></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Usage</h3>
+
+<figure class="code"><pre><code><.data_table id="snippets" rows={@streams.snippets} row_click={fn {_id, s} -> JS.navigate(~p"/snippets/#{s}") end}>
+<p>  <:col :let={snippet} label="Title"><%= snippet.title %></:col></p>
+<p>  <:col :let={snippet} label="Language"><%= snippet.language %></:col></p>
+<p>  <:col :let={snippet} label="Created" class="text-gray-500"></p>
+<p>    <%= format_date(snippet.inserted_at) %></p>
+<p>  </:col></p>
+<p>  <:action :let={snippet}></p>
+<p>    <.link patch={~p"/snippets/#{snippet}/edit"}>Edit</.link></p>
+<p>  </:action></p>
+</.data_table>
+</code></pre></figure>
+
+<h2>Component Lifecycle</h2>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.TimerComponent do
+<p>  use SnippetboxWeb, :live_component</p>
+
+<p>  @impl true</p>
+<p>  def mount(socket) do</p>
+<p>    # Called once when component is first mounted</p>
+<p>    {:ok, assign(socket, count: 0)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def update(assigns, socket) do</p>
+<p>    # Called on initial mount and when parent sends new assigns</p>
+<p>    {:ok, assign(socket, assigns)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div></p>
+<p>      Count: <%= @count %></p>
+<p>      <button phx-click="tick" phx-target={@myself}>Tick</button></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("tick", _params, socket) do</p>
+<p>    {:noreply, update(socket, :count, &(&1 + 1))}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Component as Isolated State Machine</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each Live Component is an isolated state machine:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # State: socket.assigns
+<p># Events: handle_event/3</p>
+<p># Transitions: return {:noreply, updated_socket}</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Components are isolated:</p>
+<p># - Their own state</p>
+<p># - Their own event handlers</p>
+<p># - Communication through explicit messages</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This isolation makes components predictable and testable.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Stateless function components</li>
+<li>Stateful live components</li>
+<li>Component communication patterns</li>
+<li>Components with slots</li>
+<li>Reusable table components</li>
+<li>Component lifecycle</li>
+</ul>
+
+<p>In the next chapter, we'll explore real-time features.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="12.02-liveview-forms.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="12.04-real-time-features.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

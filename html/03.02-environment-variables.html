@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Environment Variables &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Environment Variables</span>
+            </div>
+            <div>
+                &lsaquo; <a href="03.01-managing-configuration.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="03.03-custom-error-responses.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 3.2</div>
+        <h1>Chapter 3.2: Environment Variables</h1>
+
+<p>Environment variables are essential for keeping secrets out of your codebase and configuring applications across different deployment environments. In this chapter, we'll learn how to work with environment variables in Phoenix.</p>
+
+<h2>Why Environment Variables?</h2>
+
+<p>Environment variables solve several problems:</p>
+
+<ol>
+<li><strong>Security</strong>: Secrets aren't committed to version control</li>
+<li><strong>Flexibility</strong>: Same code deploys to different environments</li>
+<li><strong>12-Factor App</strong>: Standard practice for cloud-native applications</li>
+<li><strong>Separation</strong>: Configuration separate from code</li>
+</ol>
+
+<h2>Reading Environment Variables</h2>
+
+<p>In Elixir, use <code>System.get_env/1</code>:</p>
+
+<figure class="code"><pre><code># Get environment variable (returns nil if not set)
+<p>System.get_env("DATABASE_URL")</p>
+
+<h1>Get with default</h1>
+<p>System.get_env("PORT") || "4000"</p>
+
+<h1>Get and convert type</h1>
+<p>String.to_integer(System.get_env("PORT") || "4000")</p>
+</code></pre></figure>
+
+<h2>The runtime.exs File</h2>
+
+<code>config/runtime.exs</code> runs at application start, making it ideal for environment variables:
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<p>if config_env() == :prod do</p>
+<p>  # Required variables - raise if missing</p>
+<p>  database_url =</p>
+<p>    System.get_env("DATABASE_URL") ||</p>
+<p>      raise """</p>
+<p>      DATABASE_URL environment variable is missing.</p>
+<p>      Example: ecto://USER:PASS@HOST/DATABASE</p>
+<p>      """</p>
+
+<p>  secret_key_base =</p>
+<p>    System.get_env("SECRET_KEY_BASE") ||</p>
+<p>      raise """</p>
+<p>      SECRET_KEY_BASE environment variable is missing.</p>
+<p>      Generate with: mix phx.gen.secret</p>
+<p>      """</p>
+
+<p>  # Optional variables with defaults</p>
+<p>  pool_size = String.to_integer(System.get_env("POOL_SIZE") || "10")</p>
+<p>  port = String.to_integer(System.get_env("PORT") || "4000")</p>
+<p>  host = System.get_env("PHX_HOST") || "localhost"</p>
+
+<p>  # Apply configuration</p>
+<p>  config :snippetbox, Snippetbox.Repo,</p>
+<p>    url: database_url,</p>
+<p>    pool_size: pool_size,</p>
+<p>    ssl: true</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    url: [host: host, port: 443, scheme: "https"],</p>
+<p>    http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: port],</p>
+<p>    secret_key_base: secret_key_base</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Common Environment Variables</h2>
+
+<h3>Database Configuration</h3>
+
+<figure class="code"><pre><code># Single DATABASE_URL (recommended)
+<h1>Format: ecto://USER:PASSWORD@HOST:PORT/DATABASE</h1>
+<p>database_url = System.get_env("DATABASE_URL")</p>
+
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  url: database_url,</p>
+<p>  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")</p>
+
+<h1>Or individual variables</h1>
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  username: System.get_env("DB_USER"),</p>
+<p>  password: System.get_env("DB_PASSWORD"),</p>
+<p>  hostname: System.get_env("DB_HOST"),</p>
+<p>  database: System.get_env("DB_NAME"),</p>
+<p>  port: String.to_integer(System.get_env("DB_PORT") || "5432")</p>
+</code></pre></figure>
+
+<h3>Application Secrets</h3>
+
+<figure class="code"><pre><code># Secret key for sessions and tokens
+<p>secret_key_base = System.get_env("SECRET_KEY_BASE")</p>
+
+<h1>Live view signing salt</h1>
+<p>live_view_salt = System.get_env("LIVE_VIEW_SIGNING_SALT")</p>
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  secret_key_base: secret_key_base,</p>
+<p>  live_view: [signing_salt: live_view_salt]</p>
+</code></pre></figure>
+
+<h3>External Services</h3>
+
+<figure class="code"><pre><code># Email (SMTP)
+<p>config :snippetbox, Snippetbox.Mailer,</p>
+<p>  adapter: Swoosh.Adapters.SMTP,</p>
+<p>  relay: System.get_env("SMTP_HOST"),</p>
+<p>  port: String.to_integer(System.get_env("SMTP_PORT") || "587"),</p>
+<p>  username: System.get_env("SMTP_USERNAME"),</p>
+<p>  password: System.get_env("SMTP_PASSWORD")</p>
+
+<h1>AWS S3</h1>
+<p>config :ex_aws,</p>
+<p>  access_key_id: System.get_env("AWS_ACCESS_KEY_ID"),</p>
+<p>  secret_access_key: System.get_env("AWS_SECRET_ACCESS_KEY"),</p>
+<p>  region: System.get_env("AWS_REGION") || "us-east-1"</p>
+
+<h1>Stripe</h1>
+<p>config :stripity_stripe,</p>
+<p>  api_key: System.get_env("STRIPE_SECRET_KEY")</p>
+</code></pre></figure>
+
+<h2>Development Environment Variables</h2>
+
+<h3>Using .env Files</h3>
+
+<p>Create a <code>.env</code> file for development (add to <code>.gitignore</code>!):</p>
+
+<figure class="code"><figcaption>File: .env</figcaption><pre><code class="language-bash">
+<p>export DATABASE_URL="ecto://postgres:postgres@localhost/snippetbox_dev"</p>
+<p>export SECRET_KEY_BASE="dev-only-secret-key-for-local-development"</p>
+<p>export SMTP_HOST="localhost"</p>
+<p>export SMTP_PORT="1025"</p>
+</code></pre></figure>
+
+<p>Load before starting the server:</p>
+
+<figure class="code"><pre><code>$ source .env && mix phx.server
+</code></pre></figure>
+
+<p>Or use direnv for automatic loading:</p>
+
+<figure class="code"><pre><code># Install direnv and allow the directory
+<p>$ brew install direnv</p>
+<p>$ direnv allow .</p>
+</code></pre></figure>
+
+<h3>Using dotenvy</h3>
+
+<p>Add the <code>dotenvy</code> library for automatic <code>.env</code> loading in development:</p>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">defp deps do
+<p>  [</p>
+<p>    {:dotenvy, "~> 0.8", only: [:dev, :test]}</p>
+<p>  ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Load .env file in dev/test</h1>
+<p>if config_env() in [:dev, :test] do</p>
+<p>  Dotenvy.source([".env", ".env.#{config_env()}"])</p>
+<p>end</p>
+
+<h1>Rest of configuration...</h1>
+</code></pre></figure>
+
+<h3>Sample .env File</h3>
+
+<figure class="code"><figcaption>File: .env.sample (commit this to git)</figcaption><pre><code class="language-bash">
+<h1>Database</h1>
+<p>DATABASE_URL=ecto://postgres:postgres@localhost/snippetbox_dev</p>
+
+<h1>Application</h1>
+<p>SECRET_KEY_BASE=generate-with-mix-phx.gen.secret</p>
+<p>PHX_HOST=localhost</p>
+<p>PORT=4000</p>
+
+<h1>Email (use Mailhog for development)</h1>
+<p>SMTP_HOST=localhost</p>
+<p>SMTP_PORT=1025</p>
+
+<h1>External Services (get from service dashboards)</h1>
+<h1>STRIPE_SECRET_KEY=sk_test_...</h1>
+<h1>AWS_ACCESS_KEY_ID=...</h1>
+<h1>AWS_SECRET_ACCESS_KEY=...</h1>
+</code></pre></figure>
+
+<h2>Type Conversion Helpers</h2>
+
+<p>Create helpers for common conversions:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/env.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Env do</p>
+<p>  @moduledoc """</p>
+<p>  Environment variable helpers with type conversion.</p>
+<p>  """</p>
+
+<p>  @doc """</p>
+<p>  Get required environment variable. Raises if missing.</p>
+<p>  """</p>
+<p>  def get!(name) do</p>
+<p>    System.get_env(name) ||</p>
+<p>      raise "Environment variable #{name} is required"</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Get optional environment variable with default.</p>
+<p>  """</p>
+<p>  def get(name, default \\ nil) do</p>
+<p>    System.get_env(name) || default</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Get environment variable as integer.</p>
+<p>  """</p>
+<p>  def get_integer(name, default) do</p>
+<p>    case System.get_env(name) do</p>
+<p>      nil -> default</p>
+<p>      val -> String.to_integer(val)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Get environment variable as boolean.</p>
+<p>  """</p>
+<p>  def get_boolean(name, default \\ false) do</p>
+<p>    case System.get_env(name) do</p>
+<p>      nil -> default</p>
+<p>      "true" -> true</p>
+<p>      "1" -> true</p>
+<p>      _ -> false</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Get environment variable as list (comma-separated).</p>
+<p>  """</p>
+<p>  def get_list(name, default \\ []) do</p>
+<p>    case System.get_env(name) do</p>
+<p>      nil -> default</p>
+<p>      val -> String.split(val, ",", trim: true)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Use in runtime.exs:</p>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<p>if config_env() == :prod do</p>
+<p>  import Snippetbox.Env</p>
+
+<p>  config :snippetbox, Snippetbox.Repo,</p>
+<p>    url: get!("DATABASE_URL"),</p>
+<p>    pool_size: get_integer("POOL_SIZE", 10),</p>
+<p>    ssl: get_boolean("DATABASE_SSL", true)</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    secret_key_base: get!("SECRET_KEY_BASE"),</p>
+<p>    http: [port: get_integer("PORT", 4000)]</p>
+
+<p>  config :snippetbox,</p>
+<p>    allowed_origins: get_list("ALLOWED_ORIGINS", ["https://snippetbox.com"])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Validating Environment at Startup</h2>
+
+<p>Validate all required variables early:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/env.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Env do</p>
+<p>  # ... previous functions ...</p>
+
+<p>  @required_vars ~w(</p>
+<p>    DATABASE_URL</p>
+<p>    SECRET_KEY_BASE</p>
+<p>    PHX_HOST</p>
+<p>  )</p>
+
+<p>  @optional_vars ~w(</p>
+<p>    PORT</p>
+<p>    POOL_SIZE</p>
+<p>    SMTP_HOST</p>
+<p>  )</p>
+
+<p>  def validate! do</p>
+<p>    missing =</p>
+<p>      @required_vars</p>
+<p>      |> Enum.filter(&is_nil(System.get_env(&1)))</p>
+
+<p>    if missing != [] do</p>
+<p>      raise """</p>
+<p>      Missing required environment variables:</p>
+<p>      #{Enum.join(missing, "\n")}</p>
+
+<p>      See .env.sample for required variables.</p>
+<p>      """</p>
+<p>    end</p>
+
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  def print_config do</p>
+<p>    IO.puts("\n=== Environment Configuration ===")</p>
+
+<p>    for var <- @required_vars ++ @optional_vars do</p>
+<p>      value = System.get_env(var)</p>
+<p>      masked = mask_sensitive(var, value)</p>
+<p>      status = if value, do: "✓", else: "✗"</p>
+<p>      IO.puts("#{status} #{var}: #{masked}")</p>
+<p>    end</p>
+
+<p>    IO.puts("================================\n")</p>
+<p>  end</p>
+
+<p>  defp mask_sensitive(name, nil), do: "(not set)"</p>
+<p>  defp mask_sensitive(name, value) do</p>
+<p>    if String.contains?(name, ["SECRET", "PASSWORD", "KEY"]) do</p>
+<p>      String.slice(value, 0, 4) <> "<em>*</em>*"</p>
+<p>    else</p>
+<p>      value</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Call from application:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>def start(_type, _args) do</p>
+<p>  # Validate environment in production</p>
+<p>  if Application.get_env(:snippetbox, :env) == :prod do</p>
+<p>    Snippetbox.Env.validate!()</p>
+<p>  end</p>
+
+<p>  # Debug: print config (remove in production)</p>
+<p>  if Application.get_env(:snippetbox, :env) == :dev do</p>
+<p>    Snippetbox.Env.print_config()</p>
+<p>  end</p>
+
+<p>  children = [</p>
+<p>    # ...</p>
+<p>  ]</p>
+
+<p>  Supervisor.start_link(children, opts)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Platform-Specific Configuration</h2>
+
+<h3>Heroku</h3>
+
+<figure class="code"><pre><code># Heroku sets DATABASE_URL automatically
+<h1>Other config via heroku config:set</h1>
+
+<h1>File: config/runtime.exs</h1>
+<p>if config_env() == :prod do</p>
+<p>  # Heroku provides PORT</p>
+<p>  port = String.to_integer(System.get_env("PORT") || "4000")</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: port],</p>
+<p>    url: [host: System.get_env("PHX_HOST"), port: 443, scheme: "https"]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Docker</h3>
+
+<figure class="code"><figcaption>File: Dockerfile</figcaption><pre><code class="language-dockerfile">
+<p>ENV PORT=4000</p>
+<p>ENV MIX_ENV=prod</p>
+
+<h1>Set at runtime</h1>
+<h1>docker run -e DATABASE_URL=... -e SECRET_KEY_BASE=... app</h1>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: docker-compose.yml</figcaption><pre><code class="language-yaml">
+<p>services:</p>
+<p>  web:</p>
+<p>    build: .</p>
+<p>    environment:</p>
+<p>      - DATABASE_URL=ecto://postgres:postgres@db/snippetbox</p>
+<p>      - SECRET_KEY_BASE=${SECRET_KEY_BASE}</p>
+<p>      - PHX_HOST=localhost</p>
+<p>    env_file:</p>
+<p>      - .env.production</p>
+</code></pre></figure>
+
+<h3>Fly.io</h3>
+
+<figure class="code"><pre><code># Set secrets
+<p>$ fly secrets set DATABASE_URL="..."</p>
+<p>$ fly secrets set SECRET_KEY_BASE="..."</p>
+
+<h1>View secrets</h1>
+<p>$ fly secrets list</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">if config_env() == :prod do
+<p>  # Fly.io provides FLY_APP_NAME</p>
+<p>  app_name = System.get_env("FLY_APP_NAME")</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    url: [host: "#{app_name}.fly.dev", port: 443, scheme: "https"]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Secrets Management</h2>
+
+<h3>Using Mix Secrets (Development)</h3>
+
+<figure class="code"><pre><code># Encrypt secrets
+<p>$ mix phx.gen.secret > priv/secrets/secret_key_base.txt</p>
+<p>$ mix archive.install hex mix_encrypt</p>
+
+<h1>Use encrypted secrets in config</h1>
+</code></pre></figure>
+
+<h3>Using External Secret Managers</h3>
+
+<figure class="code"><pre><code># AWS Secrets Manager
+<p>defmodule Snippetbox.Secrets do</p>
+<p>  def get_secret(name) do</p>
+<p>    {:ok, response} = ExAws.SecretsManager.get_secret_value(name)</p>
+<p>    |> ExAws.request()</p>
+
+<p>    response["SecretString"]</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>HashiCorp Vault</h1>
+<p>defmodule Snippetbox.Secrets do</p>
+<p>  def get_secret(path) do</p>
+<p>    {:ok, response} = Vault.read(path)</p>
+<p>    response.data</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Fail Fast</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Notice how we raise on missing required config:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> database_url =
+<p>  System.get_env("DATABASE_URL") ||</p>
+<p>    raise "DATABASE_URL is required"</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This follows the "fail fast" principle:</p>
+<ul>
+<li><strong>Early detection</strong>: Problems caught at startup, not runtime</li>
+<li><strong>Clear errors</strong>: Descriptive message tells exactly what's wrong</li>
+<li><strong>No silent failures</strong>: App won't start in broken state</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In functional programming, we prefer explicit failures over implicit ones. A crash with a clear message is better than subtle bugs from nil values.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://ferd.ca/the-zen-of-erlang.html">Let It Crash Philosophy</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Why environment variables are important</li>
+<li>Using <code>runtime.exs</code> for environment configuration</li>
+<li>Common environment variable patterns</li>
+<li>Loading <code>.env</code> files in development</li>
+<li>Type conversion helpers</li>
+<li>Validating environment at startup</li>
+<li>Platform-specific configuration</li>
+</ul>
+
+<p>In the next chapter, we'll learn how to create custom error responses.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Environment Variable Naming</h3>
+
+<p>Follow these conventions:</p>
+
+<p>| Type | Convention | Example |</p>
+<p>|------|------------|---------|</p>
+<p>| Database | <code>DATABASE_*</code> | <code>DATABASE_URL</code> |</p>
+<p>| Application | <code>APP_<em></code> or <code>PHX_</em></code> | <code>PHX_HOST</code> |</p>
+<p>| Services | <code>SERVICE_*</code> | <code>STRIPE_SECRET_KEY</code> |</p>
+<p>| Features | <code>ENABLE_*</code> | <code>ENABLE_SIGNUP</code> |</p>
+
+<h3>Never Commit Secrets</h3>
+
+<p>Add to <code>.gitignore</code>:</p>
+
+<figure class="code"><pre><code># Environment files
+<p>.env</p>
+<p>.env.local</p>
+<p>.env.*.local</p>
+
+<h1>Secrets</h1>
+<p>*.pem</p>
+<p>*.key</p>
+<p>secrets/</p>
+</code></pre></figure>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Node.js (dotenv)</strong>:
+<figure class="code"><pre><code>require('dotenv').config()
+<p>const dbUrl = process.env.DATABASE_URL</p>
+</code></pre></figure>
+
+<strong>Python (python-decouple)</strong>:
+<figure class="code"><pre><code>from decouple import config
+<p>DATABASE_URL = config('DATABASE_URL')</p>
+</code></pre></figure>
+
+<strong>Ruby (dotenv)</strong>:
+<figure class="code"><pre><code>Dotenv.load
+<p>ENV['DATABASE_URL']</p>
+</code></pre></figure>
+
+<strong>Elixir</strong>:
+<figure class="code"><pre><code>System.get_env("DATABASE_URL")
+</code></pre></figure>
+
+<p>All frameworks follow similar patterns, but Elixir's <code>runtime.exs</code> provides a clean separation of compile-time vs runtime configuration.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="03.01-managing-configuration.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="03.03-custom-error-responses.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

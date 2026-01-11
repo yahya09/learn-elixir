@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Ecto Queries &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Ecto Queries</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.05-crud-operations.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.07-associations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.6</div>
+        <h1>Chapter 4.6: Ecto Queries</h1>
+
+<p>Ecto provides a powerful query DSL for building database queries. In this chapter, we'll learn how to write queries from simple selects to complex joins.</p>
+
+<h2>Query Basics</h2>
+
+<h3>Import and Alias</h3>
+
+<figure class="code"><pre><code>import Ecto.Query
+<p>alias Snippetbox.Repo</p>
+<p>alias Snippetbox.Snippets.Snippet</p>
+</code></pre></figure>
+
+<h3>Query Syntax</h3>
+
+<p>Ecto supports two query syntaxes:</p>
+
+<figure class="code"><pre><code># Keyword syntax (more readable)
+<p>from s in Snippet,</p>
+<p>  where: s.is_public == true,</p>
+<p>  order_by: [desc: s.inserted_at],</p>
+<p>  limit: 10</p>
+
+<h1>Pipe syntax (more composable)</h1>
+<p>Snippet</p>
+<p>|> where([s], s.is_public == true)</p>
+<p>|> order_by([s], desc: s.inserted_at)</p>
+<p>|> limit(10)</p>
+</code></pre></figure>
+
+<p>Both produce identical SQL.</p>
+
+<h2>Selecting Data</h2>
+
+<h3>Select All Fields</h3>
+
+<figure class="code"><pre><code># Default: returns full structs
+<p>Repo.all(from s in Snippet)</p>
+<h1>=> [%Snippet{id: 1, title: "...", ...}, ...]</h1>
+</code></pre></figure>
+
+<h3>Select Specific Fields</h3>
+
+<figure class="code"><pre><code># Select as map
+<p>Repo.all(from s in Snippet, select: %{id: s.id, title: s.title})</p>
+<h1>=> [%{id: 1, title: "Hello"}, ...]</h1>
+
+<h1>Select as tuple</h1>
+<p>Repo.all(from s in Snippet, select: {s.id, s.title})</p>
+<h1>=> [{1, "Hello"}, {2, "World"}, ...]</h1>
+
+<h1>Select single field</h1>
+<p>Repo.all(from s in Snippet, select: s.title)</p>
+<h1>=> ["Hello", "World", ...]</h1>
+
+<h1>Select with expressions</h1>
+<p>Repo.all(from s in Snippet,</p>
+<p>  select: %{</p>
+<p>    id: s.id,</p>
+<p>    title: s.title,</p>
+<p>    length: fragment("length(?)", s.content)</p>
+<p>  }</p>
+<p>)</p>
+</code></pre></figure>
+
+<h3>Select Into Struct</h3>
+
+<figure class="code"><pre><code>Repo.all(from s in Snippet,
+<p>  select: %Snippet{id: s.id, title: s.title}</p>
+<p>)</p>
+</code></pre></figure>
+
+<h2>Filtering with Where</h2>
+
+<h3>Basic Conditions</h3>
+
+<figure class="code"><pre><code># Equality
+<p>from s in Snippet, where: s.is_public == true</p>
+
+<h1>Not equal</h1>
+<p>from s in Snippet, where: s.language != "text"</p>
+
+<h1>Comparison</h1>
+<p>from s in Snippet, where: s.views_count > 100</p>
+
+<h1>NULL check</h1>
+<p>from s in Snippet, where: is_nil(s.expires_at)</p>
+<p>from s in Snippet, where: not is_nil(s.expires_at)</p>
+</code></pre></figure>
+
+<h3>Using Variables (Pinning)</h3>
+
+<figure class="code"><pre><code>language = "elixir"
+<p>min_views = 100</p>
+
+<h1>Pin external values with ^</h1>
+<p>from s in Snippet,</p>
+<p>  where: s.language == ^language,</p>
+<p>  where: s.views_count >= ^min_views</p>
+</code></pre></figure>
+
+<h3>Multiple Conditions</h3>
+
+<figure class="code"><pre><code># AND (multiple where clauses)
+<p>from s in Snippet,</p>
+<p>  where: s.is_public == true,</p>
+<p>  where: s.views_count > 100</p>
+
+<h1>Explicit AND</h1>
+<p>from s in Snippet,</p>
+<p>  where: s.is_public == true and s.views_count > 100</p>
+
+<h1>OR</h1>
+<p>from s in Snippet,</p>
+<p>  where: s.language == "elixir" or s.language == "ruby"</p>
+</code></pre></figure>
+
+<h3>IN Operator</h3>
+
+<figure class="code"><pre><code>languages = ["elixir", "ruby", "python"]
+
+<p>from s in Snippet,</p>
+<p>  where: s.language in ^languages</p>
+
+<h1>NOT IN</h1>
+<p>from s in Snippet,</p>
+<p>  where: s.language not in ^languages</p>
+</code></pre></figure>
+
+<h3>LIKE Queries</h3>
+
+<figure class="code"><pre><code># Contains
+<p>from s in Snippet,</p>
+<p>  where: like(s.title, "%elixir%")</p>
+
+<h1>Case-insensitive (PostgreSQL)</h1>
+<p>from s in Snippet,</p>
+<p>  where: ilike(s.title, "%elixir%")</p>
+
+<h1>Dynamic pattern</h1>
+<p>search = "%#{term}%"</p>
+<p>from s in Snippet, where: ilike(s.title, ^search)</p>
+</code></pre></figure>
+
+<h3>Date/Time Comparisons</h3>
+
+<figure class="code"><pre><code>now = DateTime.utc_now()
+
+<h1>Not expired</h1>
+<p>from s in Snippet,</p>
+<p>  where: is_nil(s.expires_at) or s.expires_at > ^now</p>
+
+<h1>Created in last 7 days</h1>
+<p>week_ago = DateTime.add(now, -7, :day)</p>
+<p>from s in Snippet,</p>
+<p>  where: s.inserted_at > ^week_ago</p>
+</code></pre></figure>
+
+<h2>Ordering</h2>
+
+<figure class="code"><pre><code># Ascending (default)
+<p>from s in Snippet, order_by: s.title</p>
+
+<h1>Descending</h1>
+<p>from s in Snippet, order_by: [desc: s.inserted_at]</p>
+
+<h1>Multiple columns</h1>
+<p>from s in Snippet, order_by: [asc: s.language, desc: s.views_count]</p>
+
+<h1>With NULL handling</h1>
+<p>from s in Snippet, order_by: [asc_nulls_last: s.expires_at]</p>
+</code></pre></figure>
+
+<h2>Limiting and Offset</h2>
+
+<figure class="code"><pre><code># Basic pagination
+<p>from s in Snippet,</p>
+<p>  order_by: [desc: s.inserted_at],</p>
+<p>  limit: 20,</p>
+<p>  offset: 40  # Page 3 (0-indexed)</p>
+
+<h1>Dynamic values</h1>
+<p>page = 3</p>
+<p>per_page = 20</p>
+<p>from s in Snippet,</p>
+<p>  limit: ^per_page,</p>
+<p>  offset: ^((page - 1) * per_page)</p>
+</code></pre></figure>
+
+<h2>Grouping and Aggregates</h2>
+
+<figure class="code"><pre><code># Count by language
+<p>from s in Snippet,</p>
+<p>  group_by: s.language,</p>
+<p>  select: {s.language, count(s.id)}</p>
+<h1>=> [{"elixir", 42}, {"ruby", 30}, ...]</h1>
+
+<h1>With having</h1>
+<p>from s in Snippet,</p>
+<p>  group_by: s.language,</p>
+<p>  having: count(s.id) > 10,</p>
+<p>  select: {s.language, count(s.id)}</p>
+
+<h1>Multiple aggregates</h1>
+<p>from s in Snippet,</p>
+<p>  group_by: s.language,</p>
+<p>  select: %{</p>
+<p>    language: s.language,</p>
+<p>    count: count(s.id),</p>
+<p>    total_views: sum(s.views_count),</p>
+<p>    avg_views: avg(s.views_count)</p>
+<p>  }</p>
+</code></pre></figure>
+
+<h2>Joins</h2>
+
+<h3>Basic Join</h3>
+
+<figure class="code"><pre><code># Inner join
+<p>from s in Snippet,</p>
+<p>  join: u in User, on: s.user_id == u.id,</p>
+<p>  select: {s.title, u.name}</p>
+
+<h1>With association</h1>
+<p>from s in Snippet,</p>
+<p>  join: u in assoc(s, :user),</p>
+<p>  select: {s.title, u.name}</p>
+</code></pre></figure>
+
+<h3>Join Types</h3>
+
+<figure class="code"><pre><code># Left join (include snippets without users)
+<p>from s in Snippet,</p>
+<p>  left_join: u in assoc(s, :user),</p>
+<p>  select: {s.title, u.name}  # u.name may be nil</p>
+
+<h1>Right join</h1>
+<p>from u in User,</p>
+<p>  right_join: s in assoc(u, :snippets),</p>
+<p>  select: {u.name, s.title}</p>
+</code></pre></figure>
+
+<h3>Multiple Joins</h3>
+
+<figure class="code"><pre><code>from s in Snippet,
+<p>  join: u in assoc(s, :user),</p>
+<p>  join: t in assoc(s, :tags),</p>
+<p>  where: t.name == "elixir",</p>
+<p>  select: %{title: s.title, author: u.name}</p>
+</code></pre></figure>
+
+<h3>Named Bindings</h3>
+
+<figure class="code"><pre><code>from s in Snippet,
+<p>  join: u in assoc(s, :user), as: :author,</p>
+<p>  join: t in assoc(s, :tags), as: :tag,</p>
+<p>  where: as(:tag).name == "elixir",</p>
+<p>  select: %{title: s.title, author: as(:author).name}</p>
+</code></pre></figure>
+
+<h2>Composing Queries</h2>
+
+<h3>Pipe Syntax</h3>
+
+<figure class="code"><pre><code>Snippet
+<p>|> where([s], s.is_public == true)</p>
+<p>|> where([s], s.language == "elixir")</p>
+<p>|> order_by([s], desc: s.inserted_at)</p>
+<p>|> limit(10)</p>
+<p>|> Repo.all()</p>
+</code></pre></figure>
+
+<h3>Building Queries Dynamically</h3>
+
+<figure class="code"><pre><code>def list_snippets(opts \\ []) do
+<p>  Snippet</p>
+<p>  |> filter_by_language(opts[:language])</p>
+<p>  |> filter_by_public(opts[:public_only])</p>
+<p>  |> filter_by_user(opts[:user_id])</p>
+<p>  |> sort_by(opts[:sort])</p>
+<p>  |> paginate(opts[:page], opts[:per_page])</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+
+<p>defp filter_by_language(query, nil), do: query</p>
+<p>defp filter_by_language(query, language) do</p>
+<p>  where(query, [s], s.language == ^language)</p>
+<p>end</p>
+
+<p>defp filter_by_public(query, true) do</p>
+<p>  where(query, [s], s.is_public == true)</p>
+<p>end</p>
+<p>defp filter_by_public(query, _), do: query</p>
+
+<p>defp filter_by_user(query, nil), do: query</p>
+<p>defp filter_by_user(query, user_id) do</p>
+<p>  where(query, [s], s.user_id == ^user_id)</p>
+<p>end</p>
+
+<p>defp sort_by(query, "oldest"), do: order_by(query, [s], asc: s.inserted_at)</p>
+<p>defp sort_by(query, "popular"), do: order_by(query, [s], desc: s.views_count)</p>
+<p>defp sort_by(query, _), do: order_by(query, [s], desc: s.inserted_at)</p>
+
+<p>defp paginate(query, page, per_page) do</p>
+<p>  page = page || 1</p>
+<p>  per_page = per_page || 20</p>
+
+<p>  query</p>
+<p>  |> limit(^per_page)</p>
+<p>  |> offset(^((page - 1) * per_page))</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Query as Starting Point</h3>
+
+<figure class="code"><pre><code># Base query
+<p>def base_query do</p>
+<p>  from s in Snippet,</p>
+<p>    where: s.is_public == true,</p>
+<p>    where: is_nil(s.expires_at) or s.expires_at > ^DateTime.utc_now()</p>
+<p>end</p>
+
+<h1>Build on base</h1>
+<p>def recent_snippets do</p>
+<p>  base_query()</p>
+<p>  |> order_by([s], desc: s.inserted_at)</p>
+<p>  |> limit(10)</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+
+<p>def popular_snippets do</p>
+<p>  base_query()</p>
+<p>  |> order_by([s], desc: s.views_count)</p>
+<p>  |> limit(10)</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Subqueries</h2>
+
+<figure class="code"><pre><code># Subquery for popular snippet IDs
+<p>popular_ids = from s in Snippet,</p>
+<p>  where: s.views_count > 1000,</p>
+<p>  select: s.id</p>
+
+<h1>Use in main query</h1>
+<p>from s in Snippet,</p>
+<p>  where: s.id in subquery(popular_ids)</p>
+</code></pre></figure>
+
+<h2>Raw SQL Fragments</h2>
+
+<figure class="code"><pre><code># Fragment for database-specific functions
+<p>from s in Snippet,</p>
+<p>  where: fragment("length(?) > ?", s.content, 1000)</p>
+
+<h1>Select with fragment</h1>
+<p>from s in Snippet,</p>
+<p>  select: %{</p>
+<p>    title: s.title,</p>
+<p>    word_count: fragment("array_length(string_to_array(?, ' '), 1)", s.content)</p>
+<p>  }</p>
+
+<h1>Full-text search (PostgreSQL)</h1>
+<p>from s in Snippet,</p>
+<p>  where: fragment("to_tsvector('english', ?) @@ plainto_tsquery('english', ?)",</p>
+<p>                  s.content, ^search_term)</p>
+</code></pre></figure>
+
+<h2>Explain Query</h2>
+
+<p>Debug query performance:</p>
+
+<figure class="code"><pre><code>query = from s in Snippet,
+<p>  where: s.is_public == true,</p>
+<p>  order_by: [desc: s.inserted_at]</p>
+
+<p>Repo.explain(:all, query)</p>
+<h1>Prints PostgreSQL EXPLAIN output</h1>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Query as Data Structure</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Ecto queries are data structures, not executed immediately:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> query = from s in Snippet, where: s.is_public == true
+<p># query is just a struct, no database hit yet</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Repo.all(query)</p>
+<p># NOW the query executes</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This enables:</p>
+<ul>
+<li><strong>Composition</strong>: Build complex queries from simple parts</li>
+<li><strong>Reuse</strong>: Define base queries and extend them</li>
+<li><strong>Inspection</strong>: Examine queries before execution</li>
+<li><strong>Testing</strong>: Test query construction without database</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Query.html">Ecto.Query</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Query syntax (keyword and pipe)</li>
+<li>Selecting specific fields</li>
+<li>Filtering with <code>where</code> and various operators</li>
+<li>Ordering, limiting, and pagination</li>
+<li>Grouping and aggregates</li>
+<li>Joins and associations</li>
+<li>Composing queries dynamically</li>
+<li>Subqueries and raw SQL fragments</li>
+</ul>
+
+<p>In the next chapter, we'll explore associations between schemas.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Query Debugging</h3>
+
+<figure class="code"><pre><code># Inspect generated SQL
+<p>query = from s in Snippet, where: s.is_public == true</p>
+<p>Ecto.Adapters.SQL.to_sql(:all, Repo, query)</p>
+<h1>=> {"SELECT ... FROM snippets WHERE is_public = $1", [true]}</h1>
+
+<h1>Log all queries in config</h1>
+<p>config :snippetbox, Snippetbox.Repo, log: :debug</p>
+</code></pre></figure>
+
+<h3>Comparing to Other ORMs</h3>
+
+<strong>ActiveRecord (Rails)</strong>:
+<figure class="code"><pre><code>Snippet.where(is_public: true)
+<p>       .order(inserted_at: :desc)</p>
+<p>       .limit(10)</p>
+</code></pre></figure>
+
+<strong>Django</strong>:
+<figure class="code"><pre><code>Snippet.objects.filter(is_public=True) \
+<p>       .order_by('-inserted_at')[:10]</p>
+</code></pre></figure>
+
+<strong>SQLAlchemy</strong>:
+<figure class="code"><pre><code>session.query(Snippet)
+<p>       .filter(Snippet.is_public == True)</p>
+<p>       .order_by(Snippet.inserted_at.desc())</p>
+<p>       .limit(10)</p>
+</code></pre></figure>
+
+<strong>Ecto</strong>:
+<figure class="code"><pre><code>from s in Snippet,
+<p>  where: s.is_public == true,</p>
+<p>  order_by: [desc: s.inserted_at],</p>
+<p>  limit: 10</p>
+</code></pre></figure>
+
+<p>Ecto's query syntax is more SQL-like, making it easier to understand the generated SQL.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.05-crud-operations.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.07-associations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

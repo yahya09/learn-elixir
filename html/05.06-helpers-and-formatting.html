@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Helpers and Formatting &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Helpers and Formatting</span>
+            </div>
+            <div>
+                &lsaquo; <a href="05.05-layouts.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="06.00-plugs-and-middleware.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 5.6</div>
+        <h1>Chapter 5.6: Helpers and Formatting</h1>
+
+<p>View helpers transform data for display. In this chapter, we'll create helpers for common formatting tasks like dates, numbers, text, and more.</p>
+
+<h2>Where to Put Helpers</h2>
+
+<h3>View-Specific Helpers</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "snippet_html/*"</p>
+
+<p>  # Snippet-specific helpers</p>
+<p>  def language_label(language) do</p>
+<p>    # ...</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Shared Helpers</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/helpers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Helpers do</p>
+<p>  @moduledoc """</p>
+<p>  Shared view helpers available in all templates.</p>
+<p>  """</p>
+
+<p>  def format_date(datetime) do</p>
+<p>    # ...</p>
+<p>  end</p>
+
+<p>  def truncate(text, length) do</p>
+<p>    # ...</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Import in lib/snippetbox_web.ex</h1>
+<p>defp html_helpers do</p>
+<p>  quote do</p>
+<p>    import SnippetboxWeb.Helpers</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Date and Time Formatting</h2>
+
+<h3>Basic Date Formatting</h3>
+
+<figure class="code"><pre><code>def format_date(nil), do: ""
+
+<p>def format_date(datetime) do</p>
+<p>  Calendar.strftime(datetime, "%B %d, %Y")</p>
+<p>end</p>
+
+<p>def format_datetime(nil), do: ""</p>
+
+<p>def format_datetime(datetime) do</p>
+<p>  Calendar.strftime(datetime, "%B %d, %Y at %I:%M %p")</p>
+<p>end</p>
+
+<p>def format_date_short(nil), do: ""</p>
+
+<p>def format_date_short(datetime) do</p>
+<p>  Calendar.strftime(datetime, "%b %d, %Y")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Relative Time</h3>
+
+<figure class="code"><pre><code>def time_ago(nil), do: ""
+
+<p>def time_ago(datetime) do</p>
+<p>  diff = DateTime.diff(DateTime.utc_now(), datetime, :second)</p>
+
+<p>  cond do</p>
+<p>    diff < 0 -> "in the future"</p>
+<p>    diff < 5 -> "just now"</p>
+<p>    diff < 60 -> "#{diff} seconds ago"</p>
+<p>    diff < 120 -> "1 minute ago"</p>
+<p>    diff < 3600 -> "#{div(diff, 60)} minutes ago"</p>
+<p>    diff < 7200 -> "1 hour ago"</p>
+<p>    diff < 86400 -> "#{div(diff, 3600)} hours ago"</p>
+<p>    diff < 172800 -> "yesterday"</p>
+<p>    diff < 604800 -> "#{div(diff, 86400)} days ago"</p>
+<p>    diff < 1209600 -> "1 week ago"</p>
+<p>    diff < 2592000 -> "#{div(diff, 604800)} weeks ago"</p>
+<p>    true -> format_date(datetime)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Time Until</h3>
+
+<figure class="code"><pre><code>def time_until(nil), do: ""
+
+<p>def time_until(datetime) do</p>
+<p>  diff = DateTime.diff(datetime, DateTime.utc_now(), :second)</p>
+
+<p>  cond do</p>
+<p>    diff < 0 -> "expired"</p>
+<p>    diff < 60 -> "in #{diff} seconds"</p>
+<p>    diff < 3600 -> "in #{div(diff, 60)} minutes"</p>
+<p>    diff < 86400 -> "in #{div(diff, 3600)} hours"</p>
+<p>    diff < 604800 -> "in #{div(diff, 86400)} days"</p>
+<p>    true -> format_date(datetime)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>ISO 8601 for HTML</h3>
+
+<figure class="code"><pre><code>def iso_date(nil), do: ""
+
+<p>def iso_date(datetime) do</p>
+<p>  DateTime.to_iso8601(datetime)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code><time datetime={iso_date(@snippet.inserted_at)}>
+<p>  <%= time_ago(@snippet.inserted_at) %></p>
+</time>
+</code></pre></figure>
+
+<h2>Number Formatting</h2>
+
+<h3>Basic Number Formatting</h3>
+
+<figure class="code"><pre><code>def format_number(nil), do: "0"
+<p>def format_number(num) when is_integer(num) do</p>
+<p>  Number.Delimited.number_to_delimited(num, precision: 0)</p>
+<p>end</p>
+<p>def format_number(num) when is_float(num) do</p>
+<p>  Number.Delimited.number_to_delimited(num, precision: 2)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Compact Number Format</h3>
+
+<figure class="code"><pre><code>def compact_number(nil), do: "0"
+<p>def compact_number(num) when num >= 1_000_000_000 do</p>
+<p>  "#{Float.round(num / 1_000_000_000, 1)}B"</p>
+<p>end</p>
+<p>def compact_number(num) when num >= 1_000_000 do</p>
+<p>  "#{Float.round(num / 1_000_000, 1)}M"</p>
+<p>end</p>
+<p>def compact_number(num) when num >= 1_000 do</p>
+<p>  "#{Float.round(num / 1_000, 1)}K"</p>
+<p>end</p>
+<p>def compact_number(num), do: to_string(num)</p>
+</code></pre></figure>
+
+<h3>Percentage</h3>
+
+<figure class="code"><pre><code>def percentage(value, total) when total > 0 do
+<p>  pct = Float.round(value / total * 100, 1)</p>
+<p>  "#{pct}%"</p>
+<p>end</p>
+<p>def percentage(_, _), do: "0%"</p>
+</code></pre></figure>
+
+<h3>File Size</h3>
+
+<figure class="code"><pre><code>def file_size(bytes) when bytes >= 1_073_741_824 do
+<p>  "#{Float.round(bytes / 1_073_741_824, 2)} GB"</p>
+<p>end</p>
+<p>def file_size(bytes) when bytes >= 1_048_576 do</p>
+<p>  "#{Float.round(bytes / 1_048_576, 2)} MB"</p>
+<p>end</p>
+<p>def file_size(bytes) when bytes >= 1024 do</p>
+<p>  "#{Float.round(bytes / 1024, 2)} KB"</p>
+<p>end</p>
+<p>def file_size(bytes), do: "#{bytes} bytes"</p>
+</code></pre></figure>
+
+<h2>Text Formatting</h2>
+
+<h3>Truncation</h3>
+
+<figure class="code"><pre><code>def truncate(nil, _), do: ""
+<p>def truncate(text, max_length) when is_binary(text) do</p>
+<p>  if String.length(text) > max_length do</p>
+<p>    text</p>
+<p>    |> String.slice(0, max_length)</p>
+<p>    |> String.trim_trailing()</p>
+<p>    |> Kernel.<>("...")</p>
+<p>  else</p>
+<p>    text</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Word Truncation</h3>
+
+<figure class="code"><pre><code>def truncate_words(nil, _), do: ""
+<p>def truncate_words(text, max_words) do</p>
+<p>  words = String.split(text)</p>
+
+<p>  if length(words) > max_words do</p>
+<p>    words</p>
+<p>    |> Enum.take(max_words)</p>
+<p>    |> Enum.join(" ")</p>
+<p>    |> Kernel.<>("...")</p>
+<p>  else</p>
+<p>    text</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Pluralization</h3>
+
+<figure class="code"><pre><code>def pluralize(1, singular, _plural), do: "1 #{singular}"
+<p>def pluralize(count, _singular, plural), do: "#{count} #{plural}"</p>
+
+<h1>Usage:</h1>
+<h1>pluralize(1, "snippet", "snippets") => "1 snippet"</h1>
+<h1>pluralize(5, "snippet", "snippets") => "5 snippets"</h1>
+</code></pre></figure>
+
+<h3>Title Case</h3>
+
+<figure class="code"><pre><code>def title_case(nil), do: ""
+<p>def title_case(text) do</p>
+<p>  text</p>
+<p>  |> String.split()</p>
+<p>  |> Enum.map(&String.capitalize/1)</p>
+<p>  |> Enum.join(" ")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Slug Generation</h3>
+
+<figure class="code"><pre><code>def slugify(nil), do: ""
+<p>def slugify(text) do</p>
+<p>  text</p>
+<p>  |> String.downcase()</p>
+<p>  |> String.replace(~r/[^a-z0-9\s-]/, "")</p>
+<p>  |> String.replace(~r/[\s-]+/, "-")</p>
+<p>  |> String.trim("-")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Line Highlighting</h3>
+
+<figure class="code"><pre><code>def highlight_line(content, line_number) do
+<p>  content</p>
+<p>  |> String.split("\n")</p>
+<p>  |> Enum.with_index(1)</p>
+<p>  |> Enum.map(fn {line, num} -></p>
+<p>    if num == line_number do</p>
+<p>      ~s(<span class="highlighted">#{html_escape(line)}</span>)</p>
+<p>    else</p>
+<p>      html_escape(line)</p>
+<p>    end</p>
+<p>  end)</p>
+<p>  |> Enum.join("\n")</p>
+<p>  |> raw()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>URL Helpers</h2>
+
+<h3>External Link</h3>
+
+<figure class="code"><pre><code>def external_link(url, text) do
+<p>  assigns = %{url: url, text: text}</p>
+
+<p>  ~H"""</p>
+<p>  <a href={@url} target="_blank" rel="noopener noreferrer"></p>
+<p>    <%= @text %></p>
+<p>    <svg class="external-icon" viewBox="0 0 20 20" fill="currentColor"></p>
+<p>      <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /></p>
+<p>      <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></p>
+<p>    </svg></p>
+<p>  </a></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Autolink URLs</h3>
+
+<figure class="code"><pre><code>def autolink(text) do
+<p>  url_regex = ~r/https?:\/\/[^\s<]+/</p>
+
+<p>  Regex.replace(url_regex, text, fn url -></p>
+<p>    ~s(<a href="#{url}" target="_blank" rel="noopener">#{url}</a>)</p>
+<p>  end)</p>
+<p>  |> raw()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Code Helpers</h2>
+
+<h3>Syntax Highlighting Classes</h3>
+
+<figure class="code"><pre><code>def language_class(language) do
+<p>  case language do</p>
+<p>    "elixir" -> "language-elixir"</p>
+<p>    "ruby" -> "language-ruby"</p>
+<p>    "python" -> "language-python"</p>
+<p>    "javascript" -> "language-javascript"</p>
+<p>    "js" -> "language-javascript"</p>
+<p>    "typescript" -> "language-typescript"</p>
+<p>    "ts" -> "language-typescript"</p>
+<p>    "go" -> "language-go"</p>
+<p>    "rust" -> "language-rust"</p>
+<p>    _ -> "language-plaintext"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Line Numbers</h3>
+
+<figure class="code"><pre><code>def with_line_numbers(code) do
+<p>  code</p>
+<p>  |> String.split("\n")</p>
+<p>  |> Enum.with_index(1)</p>
+<p>  |> Enum.map(fn {line, num} -></p>
+<p>    ~s(<span class="line-num">#{num}</span>#{html_escape(line)})</p>
+<p>  end)</p>
+<p>  |> Enum.join("\n")</p>
+<p>  |> raw()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Boolean Display</h2>
+
+<figure class="code"><pre><code>def yes_no(true), do: "Yes"
+<p>def yes_no(false), do: "No"</p>
+<p>def yes_no(nil), do: "No"</p>
+
+<p>def check_mark(true), do: "✓"</p>
+<p>def check_mark(false), do: "✗"</p>
+<p>def check_mark(nil), do: "—"</p>
+
+<p>def status_badge(true), do: ~s(<span class="badge badge-success">Active</span>) |> raw()</p>
+<p>def status_badge(false), do: ~s(<span class="badge badge-secondary">Inactive</span>) |> raw()</p>
+</code></pre></figure>
+
+<h2>Conditional Formatting</h2>
+
+<figure class="code"><pre><code>def highlight_if(text, condition) do
+<p>  if condition do</p>
+<p>    ~s(<mark>#{html_escape(text)}</mark>) |> raw()</p>
+<p>  else</p>
+<p>    text</p>
+<p>  end</p>
+<p>end</p>
+
+<p>def class_if(class, condition) do</p>
+<p>  if condition, do: class, else: ""</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Complete Helpers Module</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/helpers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Helpers do</p>
+<p>  @moduledoc """</p>
+<p>  View helpers for formatting and display.</p>
+<p>  """</p>
+
+<p>  import Phoenix.HTML</p>
+
+<p>  # Date/Time</p>
+<p>  def format_date(nil), do: ""</p>
+<p>  def format_date(dt), do: Calendar.strftime(dt, "%B %d, %Y")</p>
+
+<p>  def time_ago(nil), do: ""</p>
+<p>  def time_ago(datetime) do</p>
+<p>    diff = DateTime.diff(DateTime.utc_now(), datetime, :second)</p>
+<p>    cond do</p>
+<p>      diff < 60 -> "just now"</p>
+<p>      diff < 3600 -> "#{div(diff, 60)}m ago"</p>
+<p>      diff < 86400 -> "#{div(diff, 3600)}h ago"</p>
+<p>      diff < 604800 -> "#{div(diff, 86400)}d ago"</p>
+<p>      true -> format_date(datetime)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  # Numbers</p>
+<p>  def compact_number(n) when n >= 1_000_000, do: "#{Float.round(n/1_000_000, 1)}M"</p>
+<p>  def compact_number(n) when n >= 1_000, do: "#{Float.round(n/1_000, 1)}K"</p>
+<p>  def compact_number(n), do: to_string(n)</p>
+
+<p>  # Text</p>
+<p>  def truncate(nil, _), do: ""</p>
+<p>  def truncate(text, len) do</p>
+<p>    if String.length(text) > len do</p>
+<p>      String.slice(text, 0, len) <> "..."</p>
+<p>    else</p>
+<p>      text</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def pluralize(1, s, _), do: "1 #{s}"</p>
+<p>  def pluralize(n, _, p), do: "#{n} #{p}"</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pure Formatting Functions</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>View helpers are pure functions:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> time_ago(datetime) → string
+<p>truncate(text, length) → string</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Same input always produces same output. This makes them:</p>
+<ul>
+<li>Easy to test</li>
+<li>Easy to reason about</li>
+<li>Cacheable when needed</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix_html/Phoenix.HTML.html">Phoenix.HTML</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Date and time formatting helpers</li>
+<li>Number formatting (compact, file size, percentage)</li>
+<li>Text formatting (truncation, pluralization)</li>
+<li>URL and code helpers</li>
+<li>Boolean display helpers</li>
+<li>Organizing helpers in modules</li>
+</ul>
+
+<p>This completes the Dynamic Templates chapter. In the next chapter, we'll explore Plugs and middleware.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Testing Helpers</h3>
+
+<figure class="code"><pre><code># test/snippetbox_web/helpers_test.exs
+
+<p>defmodule SnippetboxWeb.HelpersTest do</p>
+<p>  use ExUnit.Case</p>
+<p>  import SnippetboxWeb.Helpers</p>
+
+<p>  describe "time_ago/1" do</p>
+<p>    test "returns 'just now' for recent times" do</p>
+<p>      now = DateTime.utc_now()</p>
+<p>      assert time_ago(now) == "just now"</p>
+<p>    end</p>
+
+<p>    test "returns minutes ago" do</p>
+<p>      past = DateTime.add(DateTime.utc_now(), -300, :second)</p>
+<p>      assert time_ago(past) == "5m ago"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "truncate/2" do</p>
+<p>    test "truncates long text" do</p>
+<p>      assert truncate("Hello World", 5) == "Hello..."</p>
+<p>    end</p>
+
+<p>    test "returns short text unchanged" do</p>
+<p>      assert truncate("Hi", 5) == "Hi"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="05.05-layouts.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="06.00-plugs-and-middleware.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

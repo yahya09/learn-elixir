@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Associations &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Associations</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.06-ecto-queries.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.08-transactions.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.7</div>
+        <h1>Chapter 4.7: Associations</h1>
+
+<p>Associations define relationships between schemas. In this chapter, we'll learn how to set up and work with belongs_to, has_many, has_one, and many_to_many associations.</p>
+
+<h2>Association Types</h2>
+
+<p>| Association | Description | Example |</p>
+<p>|-------------|-------------|---------|</p>
+<p>| <code>belongs_to</code> | Many-to-one | Snippet belongs to User |</p>
+<p>| <code>has_many</code> | One-to-many | User has many Snippets |</p>
+<p>| <code>has_one</code> | One-to-one | User has one Profile |</p>
+<p>| <code>many_to_many</code> | Many-to-many | Snippet has many Tags |</p>
+
+<h2>belongs_to</h2>
+
+<p>A snippet belongs to a user:</p>
+
+<h3>Migration</h3>
+
+<figure class="code"><figcaption>File: priv/repo/migrations/20240115100000_create_snippets.exs</figcaption><pre><code class="language-elixir">
+<p>def change do</p>
+<p>  create table(:snippets) do</p>
+<p>    add :title, :string, null: false</p>
+<p>    add :content, :text, null: false</p>
+<p>    add :user_id, references(:users, on_delete: :delete_all), null: false</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  create index(:snippets, [:user_id])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Schema</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets.Snippet do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+
+<p>    belongs_to :user, Snippetbox.Accounts.User</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :user_id])</p>
+<p>    |> validate_required([:title, :content, :user_id])</p>
+<p>    |> foreign_key_constraint(:user_id)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Usage</h3>
+
+<figure class="code"><pre><code># Create with user_id
+<p>{:ok, snippet} = Snippets.create_snippet(%{</p>
+<p>  title: "Hello",</p>
+<p>  content: "World",</p>
+<p>  user_id: user.id</p>
+<p>})</p>
+
+<h1>Access user (requires preload)</h1>
+<p>snippet = Repo.get!(Snippet, 1) |> Repo.preload(:user)</p>
+<p>snippet.user.name  # => "Alice"</p>
+</code></pre></figure>
+
+<h2>has_many</h2>
+
+<p>A user has many snippets:</p>
+
+<h3>Schema</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/user.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts.User do</p>
+<p>  use Ecto.Schema</p>
+
+<p>  schema "users" do</p>
+<p>    field :email, :string</p>
+<p>    field :name, :string</p>
+
+<p>    has_many :snippets, Snippetbox.Snippets.Snippet</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Usage</h3>
+
+<figure class="code"><pre><code># Get user with snippets
+<p>user = Repo.get!(User, 1) |> Repo.preload(:snippets)</p>
+<p>user.snippets  # => [%Snippet{...}, %Snippet{...}]</p>
+
+<h1>Count snippets</h1>
+<p>length(user.snippets)</p>
+
+<h1>Query through association</h1>
+<p>from s in Snippet,</p>
+<p>  where: s.user_id == ^user.id,</p>
+<p>  order_by: [desc: s.inserted_at]</p>
+</code></pre></figure>
+
+<h2>has_one</h2>
+
+<p>A user has one profile:</p>
+
+<h3>Migration</h3>
+
+<figure class="code"><pre><code>def change do
+<p>  create table(:profiles) do</p>
+<p>    add :bio, :text</p>
+<p>    add :website, :string</p>
+<p>    add :user_id, references(:users, on_delete: :delete_all), null: false</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  create unique_index(:profiles, [:user_id])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Schemas</h3>
+
+<figure class="code"><pre><code># User
+<p>schema "users" do</p>
+<p>  field :email, :string</p>
+<p>  has_one :profile, Snippetbox.Accounts.Profile</p>
+<p>  timestamps()</p>
+<p>end</p>
+
+<h1>Profile</h1>
+<p>schema "profiles" do</p>
+<p>  field :bio, :string</p>
+<p>  field :website, :string</p>
+<p>  belongs_to :user, Snippetbox.Accounts.User</p>
+<p>  timestamps()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Usage</h3>
+
+<figure class="code"><pre><code>user = Repo.get!(User, 1) |> Repo.preload(:profile)
+<p>user.profile.bio  # => "Elixir developer..."</p>
+</code></pre></figure>
+
+<h2>many_to_many</h2>
+
+<p>Snippets can have many tags, and tags can belong to many snippets:</p>
+
+<h3>Migration (Join Table)</h3>
+
+<figure class="code"><pre><code># Create tags table
+<p>def change do</p>
+<p>  create table(:tags) do</p>
+<p>    add :name, :string, null: false</p>
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  create unique_index(:tags, [:name])</p>
+<p>end</p>
+
+<h1>Create join table</h1>
+<p>def change do</p>
+<p>  create table(:snippet_tags, primary_key: false) do</p>
+<p>    add :snippet_id, references(:snippets, on_delete: :delete_all), null: false</p>
+<p>    add :tag_id, references(:tags, on_delete: :delete_all), null: false</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  create index(:snippet_tags, [:snippet_id])</p>
+<p>  create index(:snippet_tags, [:tag_id])</p>
+<p>  create unique_index(:snippet_tags, [:snippet_id, :tag_id])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Schemas</h3>
+
+<figure class="code"><pre><code># Snippet
+<p>schema "snippets" do</p>
+<p>  field :title, :string</p>
+<p>  many_to_many :tags, Snippetbox.Tags.Tag, join_through: "snippet_tags"</p>
+<p>  timestamps()</p>
+<p>end</p>
+
+<h1>Tag</h1>
+<p>schema "tags" do</p>
+<p>  field :name, :string</p>
+<p>  many_to_many :snippets, Snippetbox.Snippets.Snippet, join_through: "snippet_tags"</p>
+<p>  timestamps()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Usage</h3>
+
+<figure class="code"><pre><code># Preload tags
+<p>snippet = Repo.get!(Snippet, 1) |> Repo.preload(:tags)</p>
+<p>snippet.tags  # => [%Tag{name: "elixir"}, %Tag{name: "phoenix"}]</p>
+
+<h1>Associate tags with put_assoc</h1>
+<p>def add_tags(snippet, tag_names) do</p>
+<p>  tags = Repo.all(from t in Tag, where: t.name in ^tag_names)</p>
+
+<p>  snippet</p>
+<p>  |> Repo.preload(:tags)</p>
+<p>  |> Ecto.Changeset.change()</p>
+<p>  |> Ecto.Changeset.put_assoc(:tags, tags)</p>
+<p>  |> Repo.update()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Preloading Associations</h2>
+
+<h3>Basic Preload</h3>
+
+<figure class="code"><pre><code># After fetching
+<p>snippet = Repo.get!(Snippet, 1)</p>
+<p>snippet = Repo.preload(snippet, :user)</p>
+
+<h1>In query</h1>
+<p>snippets = Repo.all(from s in Snippet, preload: [:user])</p>
+
+<h1>Multiple associations</h1>
+<p>snippet = Repo.preload(snippet, [:user, :tags])</p>
+</code></pre></figure>
+
+<h3>Nested Preloading</h3>
+
+<figure class="code"><pre><code># Preload nested associations
+<p>snippets = Repo.all(</p>
+<p>  from s in Snippet,</p>
+<p>  preload: [comments: :author]</p>
+<p>)</p>
+
+<h1>Deep nesting</h1>
+<p>snippets = Repo.all(</p>
+<p>  from s in Snippet,</p>
+<p>  preload: [:user, comments: [author: :profile]]</p>
+<p>)</p>
+</code></pre></figure>
+
+<h3>Preload with Query</h3>
+
+<figure class="code"><pre><code># Custom query for preloaded data
+<p>recent_comments = from c in Comment,</p>
+<p>  order_by: [desc: c.inserted_at],</p>
+<p>  limit: 5</p>
+
+<p>snippet = Repo.preload(snippet, comments: recent_comments)</p>
+</code></pre></figure>
+
+<h3>Join Preload</h3>
+
+<p>More efficient for single records:</p>
+
+<figure class="code"><pre><code># Loads in single query with join
+<p>snippet = Repo.one(</p>
+<p>  from s in Snippet,</p>
+<p>  where: s.id == ^id,</p>
+<p>  join: u in assoc(s, :user),</p>
+<p>  preload: [user: u]</p>
+<p>)</p>
+</code></pre></figure>
+
+<h2>Creating Associated Records</h2>
+
+<h3>With Foreign Key</h3>
+
+<figure class="code"><pre><code>def create_snippet(user, attrs) do
+<p>  %Snippet{}</p>
+<p>  |> Snippet.changeset(attrs)</p>
+<p>  |> Ecto.Changeset.put_change(:user_id, user.id)</p>
+<p>  |> Repo.insert()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>With build_assoc</h3>
+
+<figure class="code"><pre><code>def create_snippet(user, attrs) do
+<p>  user</p>
+<p>  |> Ecto.build_assoc(:snippets)</p>
+<p>  |> Snippet.changeset(attrs)</p>
+<p>  |> Repo.insert()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>With put_assoc</h3>
+
+<figure class="code"><pre><code>def create_user_with_profile(user_attrs, profile_attrs) do
+<p>  %User{}</p>
+<p>  |> User.changeset(user_attrs)</p>
+<p>  |> Ecto.Changeset.put_assoc(:profile, %Profile{} |> Profile.changeset(profile_attrs))</p>
+<p>  |> Repo.insert()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>With cast_assoc</h3>
+
+<p>For nested forms:</p>
+
+<figure class="code"><pre><code># Schema
+<p>schema "users" do</p>
+<p>  field :email, :string</p>
+<p>  has_one :profile, Profile</p>
+<p>end</p>
+
+<p>def changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:email])</p>
+<p>  |> cast_assoc(:profile, with: &Profile.changeset/2)</p>
+<p>end</p>
+
+<h1>Usage</h1>
+<p>User.changeset(%User{}, %{</p>
+<p>  email: "alice@example.com",</p>
+<p>  profile: %{bio: "Developer", website: "https://alice.dev"}</p>
+<p>})</p>
+</code></pre></figure>
+
+<h2>Deleting with Associations</h2>
+
+<h3>on_delete Options</h3>
+
+<figure class="code"><pre><code># In migration
+<p>add :user_id, references(:users, on_delete: :nothing)      # Default</p>
+<p>add :user_id, references(:users, on_delete: :delete_all)   # Cascade delete</p>
+<p>add :user_id, references(:users, on_delete: :nilify_all)   # Set NULL</p>
+<p>add :user_id, references(:users, on_delete: :restrict)     # Prevent deletion</p>
+</code></pre></figure>
+
+<h3>Manual Deletion</h3>
+
+<figure class="code"><pre><code>def delete_user(user) do
+<p>  # Delete associated records first</p>
+<p>  Repo.delete_all(from s in Snippet, where: s.user_id == ^user.id)</p>
+
+<p>  # Then delete user</p>
+<p>  Repo.delete(user)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>With Transaction</h3>
+
+<figure class="code"><pre><code>def delete_user_with_data(user) do
+<p>  Ecto.Multi.new()</p>
+<p>  |> Ecto.Multi.delete_all(:snippets, from(s in Snippet, where: s.user_id == ^user.id))</p>
+<p>  |> Ecto.Multi.delete_all(:comments, from(c in Comment, where: c.user_id == ^user.id))</p>
+<p>  |> Ecto.Multi.delete(:user, user)</p>
+<p>  |> Repo.transaction()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Self-Referential Associations</h2>
+
+<p>Comments that can reply to other comments:</p>
+
+<figure class="code"><pre><code>schema "comments" do
+<p>  field :content, :string</p>
+
+<p>  belongs_to :parent, __MODULE__, foreign_key: :parent_id</p>
+<p>  has_many :replies, __MODULE__, foreign_key: :parent_id</p>
+
+<p>  belongs_to :snippet, Snippet</p>
+<p>  belongs_to :user, User</p>
+
+<p>  timestamps()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Polymorphic-like Associations</h2>
+
+<p>Ecto doesn't support polymorphic associations directly. Use separate tables or a type field:</p>
+
+<figure class="code"><pre><code># Separate tables approach
+<p>schema "snippet_comments" do</p>
+<p>  belongs_to :snippet, Snippet</p>
+<p>  belongs_to :user, User</p>
+<p>  field :content, :string</p>
+<p>end</p>
+
+<p>schema "post_comments" do</p>
+<p>  belongs_to :post, Post</p>
+<p>  belongs_to :user, User</p>
+<p>  field :content, :string</p>
+<p>end</p>
+
+<h1>Or type field approach</h1>
+<p>schema "comments" do</p>
+<p>  field :content, :string</p>
+<p>  field :commentable_type, :string  # "snippet" or "post"</p>
+<p>  field :commentable_id, :integer</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Explicit Data Loading</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Unlike ORMs with lazy loading, Ecto requires explicit preloading:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> snippet = Repo.get!(Snippet, 1)
+<p>snippet.user  # => #Ecto.Association.NotLoaded<...></p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>snippet = Repo.preload(snippet, :user)</p>
+<p>snippet.user  # => %User{...}</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li><strong>No N+1 queries</strong>: You decide when to load</li>
+<li><strong>Predictable</strong>: Know exactly what data you have</li>
+<li><strong>Explicit</strong>: Data dependencies are visible</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The trade-off is more explicit code, but better performance and fewer surprises.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/associations.html">Ecto Associations</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li><code>belongs_to</code> for many-to-one relationships</li>
+<li><code>has_many</code> for one-to-many relationships</li>
+<li><code>has_one</code> for one-to-one relationships</li>
+<li><code>many_to_many</code> with join tables</li>
+<li>Preloading associated data</li>
+<li>Creating and deleting associated records</li>
+</ul>
+
+<p>In the next chapter, we'll explore database transactions and Ecto.Multi.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Association Options</h3>
+
+<figure class="code"><pre><code># Custom foreign key
+<p>belongs_to :author, User, foreign_key: :author_id</p>
+
+<h1>Custom association name</h1>
+<p>has_many :authored_snippets, Snippet, foreign_key: :author_id</p>
+
+<h1>Where clause</h1>
+<p>has_many :public_snippets, Snippet, where: [is_public: true]</p>
+
+<h1>Defaults (for has_one)</h1>
+<p>has_one :profile, Profile, defaults: [bio: "No bio yet"]</p>
+</code></pre></figure>
+
+<h3>Comparing to Other ORMs</h3>
+
+<strong>ActiveRecord</strong>:
+<figure class="code"><pre><code>class Snippet < ApplicationRecord
+<p>  belongs_to :user</p>
+<p>  # Lazy loading by default</p>
+<p>end</p>
+
+<p>snippet.user  # Loads automatically</p>
+</code></pre></figure>
+
+<strong>Django</strong>:
+<figure class="code"><pre><code>class Snippet(models.Model):
+<p>    user = models.ForeignKey(User)</p>
+<p>    # Lazy loading by default</p>
+
+<p>snippet.user  # Loads automatically</p>
+</code></pre></figure>
+
+<strong>Ecto</strong>:
+<figure class="code"><pre><code>schema "snippets" do
+<p>  belongs_to :user, User</p>
+<p>end</p>
+
+<h1>Must explicitly preload</h1>
+<p>snippet = Repo.preload(snippet, :user)</p>
+</code></pre></figure>
+
+<p>Ecto's explicit approach prevents accidental N+1 queries.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.06-ecto-queries.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.08-transactions.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

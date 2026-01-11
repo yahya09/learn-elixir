@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Template Actions &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Template Actions</span>
+            </div>
+            <div>
+                &lsaquo; <a href="05.01-displaying-data.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="05.03-iterating-collections.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 5.2</div>
+        <h1>Chapter 5.2: Template Actions</h1>
+
+<p>In this chapter, we'll create templates for all CRUD actions - index, show, new, edit, and form handling.</p>
+
+<h2>Standard CRUD Templates</h2>
+
+<p>A typical resource needs these templates:</p>
+
+<p>| Template | Purpose | Data |</p>
+<p>|----------|---------|------|</p>
+<p>| <code>index.html.heex</code> | List all records | <code>@snippets</code> |</p>
+<p>| <code>show.html.heex</code> | Display one record | <code>@snippet</code> |</p>
+<p>| <code>new.html.heex</code> | Form for new record | <code>@changeset</code> |</p>
+<p>| <code>edit.html.heex</code> | Form to edit record | <code>@snippet</code>, <code>@changeset</code> |</p>
+<p>| <code>_form.html.heex</code> | Shared form partial | <code>@changeset</code>, <code>@action</code> |</p>
+
+<h2>Index Template</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/index.html.heex %>
+
+<div class="page-header">
+<p>  <h1>Snippets</h1></p>
+<p>  <.link href={~p"/snippets/new"} class="btn btn-primary"></p>
+<p>    New Snippet</p>
+<p>  </.link></p>
+</div>
+
+<div class="filters">
+<p>  <form action={~p"/snippets"} method="get"></p>
+<p>    <select name="language" onchange="this.form.submit()"></p>
+<p>      <option value="">All Languages</option></p>
+<p>      <%= for lang <- ["elixir", "ruby", "python", "javascript"] do %></p>
+<p>        <option value={lang} selected={@language == lang}><%= lang %></option></p>
+<p>      <% end %></p>
+<p>    </select></p>
+<p>  </form></p>
+</div>
+
+<%= if Enum.empty?(@snippets) do %>
+<p>  <div class="empty-state"></p>
+<p>    <h2>No snippets found</h2></p>
+<p>    <p>Create your first snippet to get started.</p></p>
+<p>    <.link href={~p"/snippets/new"} class="btn">Create Snippet</.link></p>
+<p>  </div></p>
+<% else %>
+<p>  <table class="table"></p>
+<p>    <thead></p>
+<p>      <tr></p>
+<p>        <th>Title</th></p>
+<p>        <th>Language</th></p>
+<p>        <th>Created</th></p>
+<p>        <th>Actions</th></p>
+<p>      </tr></p>
+<p>    </thead></p>
+<p>    <tbody></p>
+<p>      <%= for snippet <- @snippets do %></p>
+<p>        <tr></p>
+<p>          <td></p>
+<p>            <.link href={~p"/snippets/#{snippet}"}><%= snippet.title %></.link></p>
+<p>          </td></p>
+<p>          <td><%= snippet.language %></td></p>
+<p>          <td><%= time_ago(snippet.inserted_at) %></td></p>
+<p>          <td class="actions"></p>
+<p>            <.link href={~p"/snippets/#{snippet}/edit"}>Edit</.link></p>
+<p>            <.link href={~p"/snippets/#{snippet}"} method="delete"</p>
+<p>                   data-confirm="Are you sure?"></p>
+<p>              Delete</p>
+<p>            </.link></p>
+<p>          </td></p>
+<p>        </tr></p>
+<p>      <% end %></p>
+<p>    </tbody></p>
+<p>  </table></p>
+<% end %>
+
+<%= if @total_pages > 1 do %>
+<p>  <nav class="pagination"></p>
+<p>    <%= if @page > 1 do %></p>
+<p>      <.link href={~p"/snippets?#{[page: @page - 1, language: @language]}"}></p>
+<p>        Previous</p>
+<p>      </.link></p>
+<p>    <% end %></p>
+
+<p>    <span>Page <%= @page %> of <%= @total_pages %></span></p>
+
+<p>    <%= if @page < @total_pages do %></p>
+<p>      <.link href={~p"/snippets?#{[page: @page + 1, language: @language]}"}></p>
+<p>        Next</p>
+<p>      </.link></p>
+<p>    <% end %></p>
+<p>  </nav></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Show Template</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/show.html.heex %>
+
+<article class="snippet-detail">
+<p>  <header></p>
+<p>    <div class="title-row"></p>
+<p>      <h1><%= @snippet.title %></h1></p>
+<p>      <%= if @snippet.is_public do %></p>
+<p>        <span class="badge badge-success">Public</span></p>
+<p>      <% else %></p>
+<p>        <span class="badge badge-secondary">Private</span></p>
+<p>      <% end %></p>
+<p>    </div></p>
+
+<p>    <div class="meta"></p>
+<p>      <span class="language"></p>
+<p>        <strong>Language:</strong> <%= @snippet.language %></p>
+<p>      </span></p>
+<p>      <span class="created"></p>
+<p>        <strong>Created:</strong></p>
+<p>        <time datetime={DateTime.to_iso8601(@snippet.inserted_at)}></p>
+<p>          <%= format_date(@snippet.inserted_at) %></p>
+<p>        </time></p>
+<p>      </span></p>
+<p>      <%= if @snippet.expires_at do %></p>
+<p>        <span class="expires"></p>
+<p>          <strong>Expires:</strong></p>
+<p>          <time datetime={DateTime.to_iso8601(@snippet.expires_at)}></p>
+<p>            <%= format_date(@snippet.expires_at) %></p>
+<p>          </time></p>
+<p>        </span></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>  </header></p>
+
+<p>  <section class="content"></p>
+<p>    <div class="code-header"></p>
+<p>      <span><%= @snippet.language %></span></p>
+<p>      <button class="btn-copy" data-clipboard-target="#snippet-code"></p>
+<p>        Copy</p>
+<p>      </button></p>
+<p>    </div></p>
+<p>    <pre id="snippet-code"><code class={"language-#{@snippet.language}"}><%= @snippet.content %></code></pre></p>
+<p>  </section></p>
+
+<p>  <footer class="actions"></p>
+<p>    <.link href={~p"/snippets/#{@snippet}/edit"} class="btn btn-secondary"></p>
+<p>      Edit</p>
+<p>    </.link></p>
+<p>    <.link href={~p"/snippets/#{@snippet}"} method="delete"</p>
+<p>           class="btn btn-danger"</p>
+<p>           data-confirm="Are you sure you want to delete this snippet?"></p>
+<p>      Delete</p>
+<p>    </.link></p>
+<p>    <.link href={~p"/snippets"} class="btn btn-outline"></p>
+<p>      Back to Snippets</p>
+<p>    </.link></p>
+<p>  </footer></p>
+</article>
+</code></pre></figure>
+
+<h2>New Template</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/new.html.heex %>
+
+<div class="page-header">
+<p>  <h1>New Snippet</h1></p>
+</div>
+
+<.form for={@changeset} action={~p"/snippets"} class="snippet-form">
+<p>  <%= render "_form.html", changeset: @changeset %></p>
+
+<p>  <div class="form-actions"></p>
+<p>    <button type="submit" class="btn btn-primary">Create Snippet</button></p>
+<p>    <.link href={~p"/snippets"} class="btn btn-outline">Cancel</.link></p>
+<p>  </div></p>
+</.form>
+</code></pre></figure>
+
+<h2>Edit Template</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/edit.html.heex %>
+
+<div class="page-header">
+<p>  <h1>Edit Snippet</h1></p>
+</div>
+
+<.form for={@changeset} action={~p"/snippets/#{@snippet}"} method="put" class="snippet-form">
+<p>  <%= render "_form.html", changeset: @changeset %></p>
+
+<p>  <div class="form-actions"></p>
+<p>    <button type="submit" class="btn btn-primary">Update Snippet</button></p>
+<p>    <.link href={~p"/snippets/#{@snippet}"} class="btn btn-outline">Cancel</.link></p>
+<p>  </div></p>
+</.form>
+
+<div class="danger-zone">
+<p>  <h3>Danger Zone</h3></p>
+<p>  <.link href={~p"/snippets/#{@snippet}"} method="delete"</p>
+<p>         class="btn btn-danger"</p>
+<p>         data-confirm="This action cannot be undone. Are you sure?"></p>
+<p>    Delete this snippet</p>
+<p>  </.link></p>
+</div>
+</code></pre></figure>
+
+<h2>Form Partial</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/_form.html.heex %>
+
+<%= if @changeset.action do %>
+<p>  <div class="alert alert-danger"></p>
+<p>    <p>Oops, something went wrong! Please check the errors below.</p></p>
+<p>  </div></p>
+<% end %>
+
+<div class="form-group">
+<p>  <label for="snippet_title">Title</label></p>
+<p>  <input type="text"</p>
+<p>         name="snippet[title]"</p>
+<p>         id="snippet_title"</p>
+<p>         value={@changeset.changes[:title] || @changeset.data.title}</p>
+<p>         class={"form-control #{if @changeset.errors[:title], do: "is-invalid"}"}</p>
+<p>         required /></p>
+<p>  <%= if error = @changeset.errors[:title] do %></p>
+<p>    <span class="invalid-feedback"><%= translate_error(error) %></span></p>
+<p>  <% end %></p>
+</div>
+
+<div class="form-group">
+<p>  <label for="snippet_language">Language</label></p>
+<p>  <select name="snippet[language]"</p>
+<p>          id="snippet_language"</p>
+<p>          class="form-control"></p>
+<p>    <%= for lang <- Snippetbox.Snippets.Snippet.supported_languages() do %></p>
+<p>      <option value={lang}</p>
+<p>              selected={(@changeset.changes[:language] || @changeset.data.language) == lang}></p>
+<p>        <%= lang %></p>
+<p>      </option></p>
+<p>    <% end %></p>
+<p>  </select></p>
+</div>
+
+<div class="form-group">
+<p>  <label for="snippet_content">Content</label></p>
+<p>  <textarea name="snippet[content]"</p>
+<p>            id="snippet_content"</p>
+<p>            rows="15"</p>
+<p>            class={"form-control #{if @changeset.errors[:content], do: "is-invalid"}"}</p>
+<p>            required><%= @changeset.changes[:content] || @changeset.data.content %></textarea></p>
+<p>  <%= if error = @changeset.errors[:content] do %></p>
+<p>    <span class="invalid-feedback"><%= translate_error(error) %></span></p>
+<p>  <% end %></p>
+</div>
+
+<div class="form-group">
+<p>  <label for="snippet_expires_at">Expires At (optional)</label></p>
+<p>  <input type="datetime-local"</p>
+<p>         name="snippet[expires_at]"</p>
+<p>         id="snippet_expires_at"</p>
+<p>         value={format_datetime_local(@changeset.changes[:expires_at] || @changeset.data.expires_at)}</p>
+<p>         class="form-control" /></p>
+</div>
+
+<div class="form-check">
+<p>  <input type="hidden" name="snippet[is_public]" value="false" /></p>
+<p>  <input type="checkbox"</p>
+<p>         name="snippet[is_public]"</p>
+<p>         id="snippet_is_public"</p>
+<p>         value="true"</p>
+<p>         checked={@changeset.changes[:is_public] || @changeset.data.is_public}</p>
+<p>         class="form-check-input" /></p>
+<p>  <label for="snippet_is_public" class="form-check-label"></p>
+<p>    Make this snippet public</p>
+<p>  </label></p>
+</div>
+</code></pre></figure>
+
+<h2>Controller Actions</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  def index(conn, params) do</p>
+<p>    page = String.to_integer(params["page"] || "1")</p>
+<p>    language = params["language"]</p>
+
+<p>    %{snippets: snippets, total_pages: total_pages} =</p>
+<p>      Snippets.list_snippets(page: page, language: language)</p>
+
+<p>    render(conn, :index,</p>
+<p>      snippets: snippets,</p>
+<p>      page: page,</p>
+<p>      total_pages: total_pages,</p>
+<p>      language: language</p>
+<p>    )</p>
+<p>  end</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+
+<p>  def new(conn, _params) do</p>
+<p>    changeset = Snippets.change_snippet(%Snippet{})</p>
+<p>    render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"snippet" => snippet_params}) do</p>
+<p>    case Snippets.create_snippet(snippet_params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Snippet created successfully.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>      {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>        render(conn, :new, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def edit(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    changeset = Snippets.change_snippet(snippet)</p>
+<p>    render(conn, :edit, snippet: snippet, changeset: changeset)</p>
+<p>  end</p>
+
+<p>  def update(conn, %{"id" => id, "snippet" => snippet_params}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+
+<p>    case Snippets.update_snippet(snippet, snippet_params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Snippet updated successfully.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>      {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>        render(conn, :edit, snippet: snippet, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def delete(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    {:ok, _snippet} = Snippets.delete_snippet(snippet)</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "Snippet deleted successfully.")</p>
+<p>    |> redirect(to: ~p"/snippets")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>View Helpers</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "snippet_html/*"</p>
+
+<p>  def format_date(nil), do: ""</p>
+<p>  def format_date(datetime) do</p>
+<p>    Calendar.strftime(datetime, "%B %d, %Y at %H:%M")</p>
+<p>  end</p>
+
+<p>  def format_datetime_local(nil), do: ""</p>
+<p>  def format_datetime_local(datetime) do</p>
+<p>    datetime</p>
+<p>    |> DateTime.to_naive()</p>
+<p>    |> NaiveDateTime.to_iso8601()</p>
+<p>    |> String.slice(0, 16)</p>
+<p>  end</p>
+
+<p>  def time_ago(datetime) do</p>
+<p>    diff = DateTime.diff(DateTime.utc_now(), datetime, :second)</p>
+
+<p>    cond do</p>
+<p>      diff < 60 -> "just now"</p>
+<p>      diff < 3600 -> "#{div(diff, 60)} minutes ago"</p>
+<p>      diff < 86400 -> "#{div(diff, 3600)} hours ago"</p>
+<p>      diff < 604800 -> "#{div(diff, 86400)} days ago"</p>
+<p>      true -> format_date(datetime)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def translate_error({msg, opts}) do</p>
+<p>    Enum.reduce(opts, msg, fn {key, value}, acc -></p>
+<p>      String.replace(acc, "%{#{key}}", fn _ -> to_string(value) end)</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Templates as Functions</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each template is essentially a function:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> index(assigns) → HTML
+<p>show(assigns) → HTML</p>
+<p>_form(assigns) → HTML fragment</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The partial <code>_form</code> is a shared function used by both <code>new</code> and <code>edit</code> templates, following the DRY principle through function composition.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/Mix.Tasks.Phx.Gen.Html.html">Phoenix Generators</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we created:</p>
+
+<ul>
+<li>Index template with filtering and pagination</li>
+<li>Show template with detailed record display</li>
+<li>New and Edit templates with forms</li>
+<li>Shared form partial</li>
+<li>Supporting controller and view code</li>
+</ul>
+
+<p>In the next chapter, we'll focus on iterating over collections with more advanced patterns.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="05.01-displaying-data.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="05.03-iterating-collections.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

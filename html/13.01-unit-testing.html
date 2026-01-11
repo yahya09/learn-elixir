@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Unit Testing &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Unit Testing</span>
+            </div>
+            <div>
+                &lsaquo; <a href="13.00-testing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="13.02-controller-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 13.1</div>
+        <h1>Chapter 13.1: Unit Testing</h1>
+
+<p>Unit tests verify individual functions and modules in isolation. In this chapter, we'll explore ExUnit fundamentals and testing strategies.</p>
+
+<h2>ExUnit Basics</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/calculator_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.CalculatorTest do</p>
+<p>  use ExUnit.Case, async: true</p>
+
+<p>  alias Snippetbox.Calculator</p>
+
+<p>  describe "add/2" do</p>
+<p>    test "adds two positive numbers" do</p>
+<p>      assert Calculator.add(1, 2) == 3</p>
+<p>    end</p>
+
+<p>    test "adds negative numbers" do</p>
+<p>      assert Calculator.add(-1, -2) == -3</p>
+<p>    end</p>
+
+<p>    test "adds zero" do</p>
+<p>      assert Calculator.add(5, 0) == 5</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "divide/2" do</p>
+<p>    test "divides two numbers" do</p>
+<p>      assert Calculator.divide(10, 2) == {:ok, 5.0}</p>
+<p>    end</p>
+
+<p>    test "returns error for division by zero" do</p>
+<p>      assert Calculator.divide(10, 0) == {:error, :division_by_zero}</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Context Modules</h2>
+
+<h3>Snippets Context</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox/snippets_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.SnippetsTest do</p>
+<p>  use Snippetbox.DataCase, async: true</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  import Snippetbox.SnippetsFixtures</p>
+<p>  import Snippetbox.AccountsFixtures</p>
+
+<p>  describe "list_snippets/0" do</p>
+<p>    test "returns all snippets" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert Snippets.list_snippets() == [snippet]</p>
+<p>    end</p>
+
+<p>    test "returns empty list when no snippets" do</p>
+<p>      assert Snippets.list_snippets() == []</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "list_snippets/1 with options" do</p>
+<p>    test "filters by language" do</p>
+<p>      elixir_snippet = snippet_fixture(%{language: "elixir"})</p>
+<p>      _python_snippet = snippet_fixture(%{language: "python"})</p>
+
+<p>      assert Snippets.list_snippets(language: "elixir") == [elixir_snippet]</p>
+<p>    end</p>
+
+<p>    test "orders by inserted_at desc" do</p>
+<p>      old = snippet_fixture()</p>
+<p>      new = snippet_fixture()</p>
+
+<p>      assert Snippets.list_snippets(order_by: [desc: :inserted_at]) == [new, old]</p>
+<p>    end</p>
+
+<p>    test "limits results" do</p>
+<p>      snippet_fixture()</p>
+<p>      snippet_fixture()</p>
+<p>      snippet_fixture()</p>
+
+<p>      assert length(Snippets.list_snippets(limit: 2)) == 2</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "get_snippet!/1" do</p>
+<p>    test "returns the snippet with given id" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert Snippets.get_snippet!(snippet.id) == snippet</p>
+<p>    end</p>
+
+<p>    test "raises for invalid id" do</p>
+<p>      assert_raise Ecto.NoResultsError, fn -></p>
+<p>        Snippets.get_snippet!(123)</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "get_snippet/1" do</p>
+<p>    test "returns snippet for valid id" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert Snippets.get_snippet(snippet.id) == snippet</p>
+<p>    end</p>
+
+<p>    test "returns nil for invalid id" do</p>
+<p>      assert Snippets.get_snippet(123) == nil</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create_snippet/1" do</p>
+<p>    test "with valid data creates a snippet" do</p>
+<p>      valid_attrs = %{</p>
+<p>        title: "Test Snippet",</p>
+<p>        content: "defmodule Test do\nend",</p>
+<p>        language: "elixir"</p>
+<p>      }</p>
+
+<p>      assert {:ok, %Snippet{} = snippet} = Snippets.create_snippet(valid_attrs)</p>
+<p>      assert snippet.title == "Test Snippet"</p>
+<p>      assert snippet.content == "defmodule Test do\nend"</p>
+<p>      assert snippet.language == "elixir"</p>
+<p>    end</p>
+
+<p>    test "with invalid data returns error changeset" do</p>
+<p>      assert {:error, %Ecto.Changeset{}} = Snippets.create_snippet(%{})</p>
+<p>    end</p>
+
+<p>    test "requires title" do</p>
+<p>      attrs = %{content: "code", language: "elixir"}</p>
+<p>      assert {:error, changeset} = Snippets.create_snippet(attrs)</p>
+<p>      assert "can't be blank" in errors_on(changeset).title</p>
+<p>    end</p>
+
+<p>    test "validates title length" do</p>
+<p>      attrs = %{title: String.duplicate("a", 101), content: "code", language: "elixir"}</p>
+<p>      assert {:error, changeset} = Snippets.create_snippet(attrs)</p>
+<p>      assert "should be at most 100 character(s)" in errors_on(changeset).title</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create_snippet/2 with user" do</p>
+<p>    test "associates snippet with user" do</p>
+<p>      user = user_fixture()</p>
+<p>      attrs = %{title: "My Snippet", content: "code", language: "elixir"}</p>
+
+<p>      assert {:ok, snippet} = Snippets.create_snippet(user, attrs)</p>
+<p>      assert snippet.user_id == user.id</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "update_snippet/2" do</p>
+<p>    test "with valid data updates the snippet" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      update_attrs = %{title: "Updated Title"}</p>
+
+<p>      assert {:ok, %Snippet{} = updated} = Snippets.update_snippet(snippet, update_attrs)</p>
+<p>      assert updated.title == "Updated Title"</p>
+<p>    end</p>
+
+<p>    test "with invalid data returns error changeset" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert {:error, %Ecto.Changeset{}} = Snippets.update_snippet(snippet, %{title: ""})</p>
+<p>      assert snippet == Snippets.get_snippet!(snippet.id)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "delete_snippet/1" do</p>
+<p>    test "deletes the snippet" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert {:ok, %Snippet{}} = Snippets.delete_snippet(snippet)</p>
+<p>      assert_raise Ecto.NoResultsError, fn -> Snippets.get_snippet!(snippet.id) end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "change_snippet/1" do</p>
+<p>    test "returns a changeset" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert %Ecto.Changeset{} = Snippets.change_snippet(snippet)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "search_snippets/1" do</p>
+<p>    test "finds snippets by title" do</p>
+<p>      snippet = snippet_fixture(%{title: "Elixir GenServer Example"})</p>
+<p>      _other = snippet_fixture(%{title: "Python Script"})</p>
+
+<p>      assert Snippets.search_snippets("genserver") == [snippet]</p>
+<p>    end</p>
+
+<p>    test "finds snippets by content" do</p>
+<p>      snippet = snippet_fixture(%{content: "defmodule MyGenServer do"})</p>
+<p>      _other = snippet_fixture(%{content: "print('hello')"})</p>
+
+<p>      assert Snippets.search_snippets("defmodule") == [snippet]</p>
+<p>    end</p>
+
+<p>    test "is case insensitive" do</p>
+<p>      snippet = snippet_fixture(%{title: "UPPERCASE TITLE"})</p>
+
+<p>      assert Snippets.search_snippets("uppercase") == [snippet]</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "count_snippets/0" do</p>
+<p>    test "returns count of all snippets" do</p>
+<p>      snippet_fixture()</p>
+<p>      snippet_fixture()</p>
+<p>      snippet_fixture()</p>
+
+<p>      assert Snippets.count_snippets() == 3</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Changesets</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/snippets/snippet_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets.SnippetTest do</p>
+<p>  use Snippetbox.DataCase, async: true</p>
+
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  describe "changeset/2" do</p>
+<p>    test "valid changeset" do</p>
+<p>      attrs = %{title: "Test", content: "code", language: "elixir"}</p>
+<p>      changeset = Snippet.changeset(%Snippet{}, attrs)</p>
+
+<p>      assert changeset.valid?</p>
+<p>    end</p>
+
+<p>    test "requires title" do</p>
+<p>      changeset = Snippet.changeset(%Snippet{}, %{})</p>
+<p>      refute changeset.valid?</p>
+<p>      assert "can't be blank" in errors_on(changeset).title</p>
+<p>    end</p>
+
+<p>    test "requires content" do</p>
+<p>      changeset = Snippet.changeset(%Snippet{}, %{title: "Test"})</p>
+<p>      refute changeset.valid?</p>
+<p>      assert "can't be blank" in errors_on(changeset).content</p>
+<p>    end</p>
+
+<p>    test "validates language inclusion" do</p>
+<p>      attrs = %{title: "Test", content: "code", language: "invalid"}</p>
+<p>      changeset = Snippet.changeset(%Snippet{}, attrs)</p>
+
+<p>      refute changeset.valid?</p>
+<p>      assert "is invalid" in errors_on(changeset).language</p>
+<p>    end</p>
+
+<p>    test "trims whitespace from title" do</p>
+<p>      attrs = %{title: "  Test  ", content: "code", language: "elixir"}</p>
+<p>      changeset = Snippet.changeset(%Snippet{}, attrs)</p>
+
+<p>      assert get_change(changeset, :title) == "Test"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "expiration_changeset/2" do</p>
+<p>    test "sets expires_at" do</p>
+<p>      snippet = %Snippet{id: 1}</p>
+<p>      changeset = Snippet.expiration_changeset(snippet, %{expires_in: 3600})</p>
+
+<p>      expires_at = get_change(changeset, :expires_at)</p>
+<p>      assert DateTime.diff(expires_at, DateTime.utc_now()) >= 3599</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Pure Functions</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/helpers/string_helper_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Helpers.StringHelperTest do</p>
+<p>  use ExUnit.Case, async: true</p>
+
+<p>  alias Snippetbox.Helpers.StringHelper</p>
+
+<p>  describe "truncate/2" do</p>
+<p>    test "truncates long strings" do</p>
+<p>      assert StringHelper.truncate("Hello World", 5) == "Hello..."</p>
+<p>    end</p>
+
+<p>    test "leaves short strings unchanged" do</p>
+<p>      assert StringHelper.truncate("Hi", 10) == "Hi"</p>
+<p>    end</p>
+
+<p>    test "handles empty string" do</p>
+<p>      assert StringHelper.truncate("", 5) == ""</p>
+<p>    end</p>
+
+<p>    test "handles exact length" do</p>
+<p>      assert StringHelper.truncate("Hello", 5) == "Hello"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "slugify/1" do</p>
+<p>    test "converts to lowercase" do</p>
+<p>      assert StringHelper.slugify("Hello World") == "hello-world"</p>
+<p>    end</p>
+
+<p>    test "replaces spaces with hyphens" do</p>
+<p>      assert StringHelper.slugify("foo bar baz") == "foo-bar-baz"</p>
+<p>    end</p>
+
+<p>    test "removes special characters" do</p>
+<p>      assert StringHelper.slugify("Hello! @World#") == "hello-world"</p>
+<p>    end</p>
+
+<p>    test "handles multiple spaces" do</p>
+<p>      assert StringHelper.slugify("foo   bar") == "foo-bar"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "word_count/1" do</p>
+<p>    test "counts words" do</p>
+<p>      assert StringHelper.word_count("Hello World") == 2</p>
+<p>    end</p>
+
+<p>    test "handles empty string" do</p>
+<p>      assert StringHelper.word_count("") == 0</p>
+<p>    end</p>
+
+<p>    test "handles multiple spaces" do</p>
+<p>      assert StringHelper.word_count("foo   bar   baz") == 3</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing with Pattern Matching</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/parser_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.ParserTest do</p>
+<p>  use ExUnit.Case, async: true</p>
+
+<p>  alias Snippetbox.Parser</p>
+
+<p>  describe "parse_language/1" do</p>
+<p>    test "parses elixir files" do</p>
+<p>      assert {:ok, "elixir"} = Parser.parse_language("example.ex")</p>
+<p>      assert {:ok, "elixir"} = Parser.parse_language("example.exs")</p>
+<p>    end</p>
+
+<p>    test "parses javascript files" do</p>
+<p>      assert {:ok, "javascript"} = Parser.parse_language("app.js")</p>
+<p>      assert {:ok, "javascript"} = Parser.parse_language("component.jsx")</p>
+<p>    end</p>
+
+<p>    test "returns error for unknown extensions" do</p>
+<p>      assert {:error, :unknown_language} = Parser.parse_language("file.xyz")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "parse_metadata/1" do</p>
+<p>    test "extracts title from first line comment" do</p>
+<p>      code = """</p>
+<p>      # Title: My Snippet</p>
+<p>      defmodule Test do</p>
+<p>      end</p>
+<p>      """</p>
+
+<p>      assert %{title: "My Snippet"} = Parser.parse_metadata(code)</p>
+<p>    end</p>
+
+<p>    test "returns nil for missing metadata" do</p>
+<p>      code = "defmodule Test do\nend"</p>
+<p>      assert %{title: nil} = Parser.parse_metadata(code)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing with Setup</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/accounts_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.AccountsTest do</p>
+<p>  use Snippetbox.DataCase, async: true</p>
+
+<p>  alias Snippetbox.Accounts</p>
+<p>  alias Snippetbox.Accounts.User</p>
+
+<p>  import Snippetbox.AccountsFixtures</p>
+
+<p>  # Shared setup for all tests in describe block</p>
+<p>  describe "users" do</p>
+<p>    setup do</p>
+<p>      %{user: user_fixture()}</p>
+<p>    end</p>
+
+<p>    test "get_user!/1 returns the user", %{user: user} do</p>
+<p>      assert Accounts.get_user!(user.id) == user</p>
+<p>    end</p>
+
+<p>    test "get_user_by_email/1 returns the user", %{user: user} do</p>
+<p>      assert Accounts.get_user_by_email(user.email) == user</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  # Setup that returns multiple values</p>
+<p>  describe "user relationships" do</p>
+<p>    setup do</p>
+<p>      user = user_fixture()</p>
+<p>      snippet = Snippetbox.SnippetsFixtures.snippet_fixture(%{user_id: user.id})</p>
+<p>      %{user: user, snippet: snippet}</p>
+<p>    end</p>
+
+<p>    test "user has snippets", %{user: user, snippet: snippet} do</p>
+<p>      user = Accounts.get_user_with_snippets(user.id)</p>
+<p>      assert snippet in user.snippets</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Assertions</h2>
+
+<h3>Common Assertions</h3>
+
+<figure class="code"><pre><code># Equality
+<p>assert result == expected</p>
+<p>refute result == unexpected</p>
+
+<h1>Pattern matching</h1>
+<p>assert {:ok, value} = function()</p>
+<p>assert %User{email: email} = user</p>
+
+<h1>Truthiness</h1>
+<p>assert truthy_value</p>
+<p>refute falsy_value</p>
+
+<h1>In collections</h1>
+<p>assert item in list</p>
+<p>refute item in list</p>
+
+<h1>Raise exceptions</h1>
+<p>assert_raise Ecto.NoResultsError, fn -> Accounts.get_user!(0) end</p>
+<p>assert_raise ArgumentError, "invalid argument", fn -> raise ArgumentError, "invalid argument" end</p>
+
+<h1>Receive messages</h1>
+<p>assert_receive {:message, data}, 1000  # timeout in ms</p>
+<p>refute_receive {:message, _}, 100</p>
+
+<h1>Approximate equality (for floats)</h1>
+<p>assert_in_delta 1.0, 1.001, 0.01</p>
+</code></pre></figure>
+
+<h3>Custom Assertions</h3>
+
+<figure class="code"><figcaption>File: test/support/assertions.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.TestAssertions do</p>
+<p>  import ExUnit.Assertions</p>
+
+<p>  def assert_valid_changeset(changeset) do</p>
+<p>    assert changeset.valid?, "Expected changeset to be valid, got errors: #{inspect(errors_on(changeset))}"</p>
+<p>  end</p>
+
+<p>  def assert_invalid_changeset(changeset) do</p>
+<p>    refute changeset.valid?, "Expected changeset to be invalid"</p>
+<p>  end</p>
+
+<p>  def assert_error_on(changeset, field, message) do</p>
+<p>    errors = errors_on(changeset)</p>
+<p>    assert message in Map.get(errors, field, []),</p>
+<p>           "Expected error '#{message}' on #{field}, got: #{inspect(errors)}"</p>
+<p>  end</p>
+
+<p>  defp errors_on(changeset) do</p>
+<p>    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} -></p>
+<p>      Regex.replace(~r"%{(\w+)}", msg, fn _, key -></p>
+<p>        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()</p>
+<p>      end)</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Usage</h1>
+<p>import Snippetbox.TestAssertions</p>
+
+<p>test "validates email format" do</p>
+<p>  changeset = User.changeset(%User{}, %{email: "invalid"})</p>
+<p>  assert_error_on(changeset, :email, "must have the @ sign and no spaces")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Doctest</h2>
+
+<p>Test examples in documentation:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/helpers/string_helper.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Helpers.StringHelper do</p>
+<p>  @doc """</p>
+<p>  Truncates a string to the specified length.</p>
+
+<p>  ## Examples</p>
+
+<p>      iex> Snippetbox.Helpers.StringHelper.truncate("Hello World", 5)</p>
+<p>      "Hello..."</p>
+
+<p>      iex> Snippetbox.Helpers.StringHelper.truncate("Hi", 10)</p>
+<p>      "Hi"</p>
+<p>  """</p>
+<p>  def truncate(string, max_length) when byte_size(string) <= max_length do</p>
+<p>    string</p>
+<p>  end</p>
+
+<p>  def truncate(string, max_length) do</p>
+<p>    String.slice(string, 0, max_length) <> "..."</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>File: test/snippetbox/helpers/string_helper_test.exs</h1>
+
+<p>defmodule Snippetbox.Helpers.StringHelperTest do</p>
+<p>  use ExUnit.Case, async: true</p>
+
+<p>  # Run doctests from the module</p>
+<p>  doctest Snippetbox.Helpers.StringHelper</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pure Functions Are Easy to Test</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Pure functions with no side effects are trivial to test:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Pure function: same input always gives same output
+<p>def add(a, b), do: a + b</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Test is straightforward</p>
+<p>test "add/2" do</p>
+<p>  assert add(1, 2) == 3  # Always true</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Functions with side effects require mocking or setup, making them harder to test.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>ExUnit basics and structure</li>
+<li>Testing context modules</li>
+<li>Testing changesets</li>
+<li>Testing pure functions</li>
+<li>Setup and fixtures</li>
+<li>Assertions and doctests</li>
+</ul>
+
+<p>In the next chapter, we'll explore controller testing.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="13.00-testing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="13.02-controller-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

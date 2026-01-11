@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Custom Routes &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Custom Routes</span>
+            </div>
+            <div>
+                &lsaquo; <a href="07.02-scopes-and-namespaces.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="08.00-processing-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 7.3</div>
+        <h1>Chapter 7.3: Custom Routes</h1>
+
+<p>While <code>resources</code> generates standard CRUD routes, many applications need custom routes. In this chapter, we'll explore patterns for routes beyond REST conventions.</p>
+
+<h2>Member and Collection Routes</h2>
+
+<h3>Adding to Resources</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>resources "/snippets", SnippetController do</p>
+<p>  # Member routes - operate on a specific snippet</p>
+<p>  post "/publish", SnippetController, :publish</p>
+<p>  post "/archive", SnippetController, :archive</p>
+<p>  get "/stats", SnippetController, :stats</p>
+
+<p>  # Collection routes - operate on the collection</p>
+<p>  get "/search", SnippetController, :search, as: :search</p>
+<p>  get "/recent", SnippetController, :recent, as: :recent</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Generated routes:</p>
+<p>| Verb | Path | Action | Helper |</p>
+<p>|------|------|--------|--------|</p>
+<p>| POST | /snippets/:snippet_id/publish | :publish | <code>~p"/snippets/#{snippet}/publish"</code> |</p>
+<p>| POST | /snippets/:snippet_id/archive | :archive | <code>~p"/snippets/#{snippet}/archive"</code> |</p>
+<p>| GET | /snippets/:snippet_id/stats | :stats | <code>~p"/snippets/#{snippet}/stats"</code> |</p>
+<p>| GET | /snippets/search | :search | <code>~p"/snippets/search"</code> |</p>
+<p>| GET | /snippets/recent | :recent | <code>~p"/snippets/recent"</code> |</p>
+
+<h3>Controller Implementation</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  # Standard CRUD actions...</p>
+
+<p>  # Member action - operates on specific snippet</p>
+<p>  def publish(conn, %{"snippet_id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+
+<p>    case Snippets.publish_snippet(snippet) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Snippet published!")</p>
+<p>        |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>      {:error, _changeset} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:error, "Could not publish snippet.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{snippet}")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def archive(conn, %{"snippet_id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    {:ok, snippet} = Snippets.archive_snippet(snippet)</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "Snippet archived.")</p>
+<p>    |> redirect(to: ~p"/snippets")</p>
+<p>  end</p>
+
+<p>  def stats(conn, %{"snippet_id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    stats = Snippets.get_snippet_stats(snippet)</p>
+<p>    render(conn, :stats, snippet: snippet, stats: stats)</p>
+<p>  end</p>
+
+<p>  # Collection actions</p>
+<p>  def search(conn, %{"q" => query}) do</p>
+<p>    snippets = Snippets.search_snippets(query)</p>
+<p>    render(conn, :search, snippets: snippets, query: query)</p>
+<p>  end</p>
+
+<p>  def search(conn, _params) do</p>
+<p>    render(conn, :search, snippets: [], query: "")</p>
+<p>  end</p>
+
+<p>  def recent(conn, _params) do</p>
+<p>    snippets = Snippets.list_recent_snippets(limit: 20)</p>
+<p>    render(conn, :recent, snippets: snippets)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Standalone Custom Routes</h2>
+
+<h3>Basic Custom Routes</h3>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  # Static pages</p>
+<p>  get "/about", PageController, :about</p>
+<p>  get "/contact", PageController, :contact</p>
+<p>  get "/privacy", PageController, :privacy</p>
+<p>  get "/terms", PageController, :terms</p>
+
+<p>  # Feature pages</p>
+<p>  get "/explore", ExploreController, :index</p>
+<p>  get "/trending", ExploreController, :trending</p>
+<p>  get "/featured", ExploreController, :featured</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Dashboard Routes</h3>
+
+<figure class="code"><pre><code>scope "/dashboard", SnippetboxWeb.Dashboard, as: :dashboard do
+<p>  pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>  get "/", DashboardController, :index</p>
+<p>  get "/activity", DashboardController, :activity</p>
+<p>  get "/analytics", DashboardController, :analytics</p>
+
+<p>  # Settings subsection</p>
+<p>  get "/settings", SettingsController, :index</p>
+<p>  get "/settings/profile", SettingsController, :profile</p>
+<p>  put "/settings/profile", SettingsController, :update_profile</p>
+<p>  get "/settings/security", SettingsController, :security</p>
+<p>  put "/settings/security", SettingsController, :update_security</p>
+<p>  get "/settings/notifications", SettingsController, :notifications</p>
+<p>  put "/settings/notifications", SettingsController, :update_notifications</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Route Constraints</h2>
+
+<h3>Parameter Constraints</h3>
+
+<figure class="code"><pre><code># Only match numeric IDs
+<p>get "/snippets/:id", SnippetController, :show when is_integer(id)</p>
+
+<h1>Using constraints option</h1>
+<p>get "/users/:username", UserController, :show, constraints: %{username: ~r/^[a-z0-9_]+$/}</p>
+
+<h1>ID format constraint</h1>
+<p>get "/snippets/:id", SnippetController, :show, constraints: %{id: ~r/^\d+$/}</p>
+</code></pre></figure>
+
+<h3>Custom Matchers</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  # Match UUID format</p>
+<p>  @uuid_regex ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i</p>
+
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through :browser</p>
+
+<p>    get "/snippets/:id", SnippetController, :show, constraints: %{id: @uuid_regex}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Catch-All Routes</h2>
+
+<h3>404 Handler</h3>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  # Define specific routes first</p>
+<p>  get "/", PageController, :home</p>
+<p>  resources "/snippets", SnippetController</p>
+
+<p>  # Catch-all must be last</p>
+<p>  get "/*path", PageController, :not_found</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/page_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def not_found(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> put_status(:not_found)</p>
+<p>  |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>  |> render("404.html")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Slug-Based Routes</h3>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  # Specific routes first</p>
+<p>  get "/", PageController, :home</p>
+<p>  get "/about", PageController, :about</p>
+<p>  resources "/snippets", SnippetController</p>
+
+<p>  # User profile by username (catch-all pattern)</p>
+<p>  get "/:username", ProfileController, :show</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Redirect Routes</h2>
+
+<h3>Simple Redirects</h3>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  # Redirect old URLs to new ones</p>
+<p>  get "/old-path", Redirect, to: "/new-path"</p>
+<p>  get "/legacy/snippets", Redirect, to: "/snippets"</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Create a redirect plug:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/redirect.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Redirect do</p>
+<p>  @behaviour Plug</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, opts) do</p>
+<p>    conn</p>
+<p>    |> Phoenix.Controller.redirect(to: opts[:to])</p>
+<p>    |> Plug.Conn.halt()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Dynamic Redirects</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/redirect_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.RedirectController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  # Redirect old snippet URLs</p>
+<p>  def old_snippet(conn, %{"id" => id}) do</p>
+<p>    redirect(conn, to: ~p"/snippets/#{id}")</p>
+<p>  end</p>
+
+<p>  # Redirect with external URL</p>
+<p>  def github(conn, _params) do</p>
+<p>    redirect(conn, external: "https://github.com/snippetbox")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># In router
+<p>get "/s/:id", RedirectController, :old_snippet</p>
+<p>get "/github", RedirectController, :github</p>
+</code></pre></figure>
+
+<h2>RESTful Actions Beyond CRUD</h2>
+
+<h3>Bulk Operations</h3>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>  # Bulk actions on snippets</p>
+<p>  post "/snippets/bulk/delete", SnippetController, :bulk_delete</p>
+<p>  post "/snippets/bulk/archive", SnippetController, :bulk_archive</p>
+<p>  post "/snippets/bulk/publish", SnippetController, :bulk_publish</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code>def bulk_delete(conn, %{"ids" => ids}) do
+<p>  user = conn.assigns.current_user</p>
+<p>  {deleted_count, _} = Snippets.delete_user_snippets(user, ids)</p>
+
+<p>  conn</p>
+<p>  |> put_flash(:info, "Deleted #{deleted_count} snippets.")</p>
+<p>  |> redirect(to: ~p"/snippets")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>State Transitions</h3>
+
+<figure class="code"><pre><code>resources "/orders", OrderController do
+<p>  # State machine transitions</p>
+<p>  post "/confirm", OrderController, :confirm</p>
+<p>  post "/ship", OrderController, :ship</p>
+<p>  post "/deliver", OrderController, :deliver</p>
+<p>  post "/cancel", OrderController, :cancel</p>
+<p>  post "/refund", OrderController, :refund</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>API-Style Routes</h2>
+
+<h3>JSON Endpoints</h3>
+
+<figure class="code"><pre><code>scope "/api", SnippetboxWeb.API, as: :api do
+<p>  pipe_through :api</p>
+
+<p>  # Search</p>
+<p>  get "/search", SearchController, :index</p>
+
+<p>  # Autocomplete</p>
+<p>  get "/autocomplete/users", AutocompleteController, :users</p>
+<p>  get "/autocomplete/tags", AutocompleteController, :tags</p>
+
+<p>  # Stats</p>
+<p>  get "/stats/snippets", StatsController, :snippets</p>
+<p>  get "/stats/users", StatsController, :users</p>
+
+<p>  # Webhooks</p>
+<p>  post "/webhooks/github", WebhookController, :github</p>
+<p>  post "/webhooks/stripe", WebhookController, :stripe</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Mixed HTML/JSON Routes</h3>
+
+<figure class="code"><pre><code>scope "/snippets", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  resources "/", SnippetController</p>
+<p>end</p>
+
+<p>scope "/snippets", SnippetboxWeb.API do</p>
+<p>  pipe_through :api</p>
+
+<p>  # JSON versions of same resources</p>
+<p>  get "/", SnippetController, :index</p>
+<p>  get "/:id", SnippetController, :show</p>
+<p>  post "/", SnippetController, :create</p>
+<p>  put "/:id", SnippetController, :update</p>
+<p>  delete "/:id", SnippetController, :delete</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Route Helpers and Verified Routes</h2>
+
+<h3>Using Verified Routes</h3>
+
+<figure class="code"><pre><code># In controllers and templates
+<p>~p"/snippets"</p>
+<p>~p"/snippets/#{@snippet}"</p>
+<p>~p"/snippets/#{@snippet}/edit"</p>
+<p>~p"/snippets/#{@snippet}/publish"</p>
+
+<h1>With query params</h1>
+<p>~p"/snippets?#{[page: 2, per_page: 20]}"</p>
+<p>~p"/snippets/search?#{[q: @query]}"</p>
+</code></pre></figure>
+
+<h3>In Templates</h3>
+
+<figure class="code"><pre><code><.link href={~p"/snippets/#{@snippet}/publish"} method="post">
+<p>  Publish</p>
+</.link>
+
+<.link href={~p"/snippets/#{@snippet}/archive"} method="post" data-confirm="Are you sure?">
+<p>  Archive</p>
+</.link>
+
+<form action={~p"/snippets/search"} method="get">
+<p>  <input type="text" name="q" value={@query} placeholder="Search..."></p>
+<p>  <button type="submit">Search</button></p>
+</form>
+</code></pre></figure>
+
+<h2>Organizing Complex Routes</h2>
+
+<h3>Route Modules</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  import SnippetboxWeb.Router.{</p>
+<p>    BrowserRoutes,</p>
+<p>    APIRoutes,</p>
+<p>    AdminRoutes</p>
+<p>  }</p>
+
+<p>  pipeline :browser do</p>
+<p>    # ...</p>
+<p>  end</p>
+
+<p>  pipeline :api do</p>
+<p>    # ...</p>
+<p>  end</p>
+
+<p>  browser_routes()</p>
+<p>  api_routes()</p>
+<p>  admin_routes()</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router/browser_routes.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router.BrowserRoutes do</p>
+<p>  defmacro browser_routes do</p>
+<p>    quote do</p>
+<p>      scope "/", SnippetboxWeb do</p>
+<p>        pipe_through :browser</p>
+
+<p>        get "/", PageController, :home</p>
+<p>        resources "/snippets", SnippetController</p>
+<p>        # ... more routes</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Documentation</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  @moduledoc """</p>
+<p>  Router for SnippetboxWeb application.</p>
+
+<p>  ## Route Groups</p>
+
+<p>  - <code>/</code> - Public pages (home, about, etc.)</p>
+<p>  - <code>/snippets</code> - Snippet CRUD and actions</p>
+<p>  - <code>/users</code> - User profiles</p>
+<p>  - <code>/dashboard</code> - Authenticated user dashboard</p>
+<p>  - <code>/admin</code> - Admin panel (requires admin role)</p>
+<p>  - <code>/api</code> - JSON API endpoints</p>
+<p>  """</p>
+
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  # Routes...</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Declarative Routing</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix routes are declarative - you describe <em>what</em> you want, not <em>how</em> to achieve it:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Declarative: "This path maps to this action"
+<p>get "/snippets/:id", SnippetController, :show</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># The router handles:</p>
+<p># - Pattern matching the URL</p>
+<p># - Extracting parameters</p>
+<p># - Calling the right function</p>
+<p># - Handling errors</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This mirrors functional programming's preference for declaring transformations rather than writing imperative step-by-step instructions.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/routing.html">Phoenix Routing Guide</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Adding member and collection routes to resources</li>
+<li>Creating standalone custom routes</li>
+<li>Using route constraints for validation</li>
+<li>Implementing catch-all and redirect routes</li>
+<li>Building API-style endpoints</li>
+<li>Organizing complex route configurations</li>
+<li>Using verified routes in controllers and templates</li>
+</ul>
+
+<p>This completes the Advanced Routing chapter. In the next chapter, we'll explore processing forms in Phoenix.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="07.02-scopes-and-namespaces.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="08.00-processing-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

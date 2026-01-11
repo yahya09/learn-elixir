@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Authentication &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Authentication</span>
+            </div>
+            <div>
+                &lsaquo; <a href="10.06-common-vulnerabilities.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="11.01-password-hashing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 11</div>
+        <h1>Chapter 11: Authentication</h1>
+
+<p>Authentication verifies user identity. In this chapter, we'll build a complete authentication system from scratch and explore Phoenix's built-in authentication generator.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Password hashing with Argon2/Bcrypt</li>
+<li>User registration</li>
+<li>Login and logout flows</li>
+<li>Remember me functionality</li>
+<li>Password reset via email</li>
+<li>Email verification</li>
+<li>OAuth integration</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>11.1 Password Hashing</strong> - Secure password storage</li>
+<li><strong>11.2 User Registration</strong> - Creating new accounts</li>
+<li><strong>11.3 Login and Logout</strong> - Session management</li>
+<li><strong>11.4 Remember Me</strong> - Persistent sessions</li>
+<li><strong>11.5 Password Reset</strong> - Email-based recovery</li>
+<li><strong>11.6 Email Verification</strong> - Confirming email addresses</li>
+<li><strong>11.7 OAuth</strong> - Third-party authentication</li>
+</ul>
+
+<h2>Phoenix Authentication Generator</h2>
+
+<p>Phoenix provides <code>mix phx.gen.auth</code> for complete authentication scaffolding:</p>
+
+<figure class="code"><pre><code># Generate authentication
+<p>mix phx.gen.auth Accounts User users</p>
+
+<h1>What it creates:</h1>
+<h1>- User schema and migration</h1>
+<h1>- Registration, login, logout controllers</h1>
+<h1>- Password reset functionality</h1>
+<h1>- Email confirmation</h1>
+<h1>- Session management</h1>
+<h1>- LiveView integration</h1>
+</code></pre></figure>
+
+<p>We'll build these features manually to understand how they work.</p>
+
+<h2>Authentication Flow Overview</h2>
+
+<figure class="code"><pre><code>Registration:
+<p>User → Submit form → Validate → Hash password → Create user → Send confirmation email</p>
+
+<p>Login:</p>
+<p>User → Submit credentials → Verify password → Create session → Set cookie</p>
+
+<p>Protected Routes:</p>
+<p>Request → Check session → Load user → Allow or redirect</p>
+
+<p>Logout:</p>
+<p>User → Clear session → Delete cookie → Redirect</p>
+</code></pre></figure>
+
+<h2>User Schema Preview</h2>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Accounts.User do
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "users" do</p>
+<p>    field :email, :string</p>
+<p>    field :password, :string, virtual: true, redact: true</p>
+<p>    field :hashed_password, :string, redact: true</p>
+<p>    field :confirmed_at, :naive_datetime</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Authentication Architecture</h2>
+
+<figure class="code"><pre><code>┌─────────────────────────────────────────────────────────────┐
+<p>│                      Router Pipelines                        │</p>
+<p>│  ┌─────────────────┐  ┌─────────────────┐                   │</p>
+<p>│  │ fetch_session   │  │ require_auth    │                   │</p>
+<p>│  │ fetch_user      │  │ redirect_if_    │                   │</p>
+<p>│  │                 │  │ authenticated   │                   │</p>
+<p>│  └─────────────────┘  └─────────────────┘                   │</p>
+<p>└─────────────────────────────────────────────────────────────┘</p>
+<p>                              │</p>
+<p>┌─────────────────────────────────────────────────────────────┐</p>
+<p>│                      Controllers                             │</p>
+<p>│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │</p>
+<p>│  │ Registration    │  │ Session         │  │ Password    │ │</p>
+<p>│  │ Controller      │  │ Controller      │  │ Controller  │ │</p>
+<p>│  └─────────────────┘  └─────────────────┘  └─────────────┘ │</p>
+<p>└─────────────────────────────────────────────────────────────┘</p>
+<p>                              │</p>
+<p>┌─────────────────────────────────────────────────────────────┐</p>
+<p>│                      Context (Accounts)                      │</p>
+<p>│  • User CRUD            • Password hashing                  │</p>
+<p>│  • Session tokens       • Email tokens                      │</p>
+<p>│  • Authentication       • Password reset                    │</p>
+<p>└─────────────────────────────────────────────────────────────┘</p>
+<p>                              │</p>
+<p>┌─────────────────────────────────────────────────────────────┐</p>
+<p>│                      Database                                │</p>
+<p>│  • users table          • user_tokens table                 │</p>
+<p>└─────────────────────────────────────────────────────────────┘</p>
+</code></pre></figure>
+
+<h2>Security Principles</h2>
+
+<ol>
+<li><strong>Never store plaintext passwords</strong> - Always hash</li>
+<li><strong>Use slow hashing algorithms</strong> - Argon2 or Bcrypt</li>
+<li><strong>Prevent timing attacks</strong> - Constant-time comparisons</li>
+<li><strong>Secure session management</strong> - Signed tokens, rotation</li>
+<li><strong>Protect against enumeration</strong> - Generic error messages</li>
+<li><strong>Require strong passwords</strong> - Length, complexity</li>
+<li><strong>Rate limit attempts</strong> - Prevent brute force</li>
+</ol>
+
+<p>Let's start with password hashing.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="10.06-common-vulnerabilities.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="11.01-password-hashing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

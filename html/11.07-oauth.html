@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>OAuth Integration &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; OAuth Integration</span>
+            </div>
+            <div>
+                &lsaquo; <a href="11.06-email-verification.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="12.00-liveview.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 11.7</div>
+        <h1>Chapter 11.7: OAuth Integration</h1>
+
+<p>OAuth allows users to sign in using third-party providers like GitHub, Google, or Twitter. In this chapter, we'll implement OAuth authentication.</p>
+
+<h2>OAuth Flow</h2>
+
+<figure class="code"><pre><code>1. User clicks "Sign in with GitHub"
+<ol>
+<li>Redirect to GitHub authorization page</li>
+<li>User authorizes your app</li>
+<li>GitHub redirects back with code</li>
+<li>Exchange code for access token</li>
+<li>Fetch user info from GitHub</li>
+<li>Create/login user in your app</li>
+</ol>
+</code></pre></figure>
+
+<h2>Dependencies</h2>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">
+<p>defp deps do</p>
+<p>  [</p>
+<p>    {:ueberauth, "~> 0.10"},</p>
+<p>    {:ueberauth_github, "~> 0.8"}</p>
+<p>  ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Configuration</h2>
+
+<h3>GitHub OAuth App</h3>
+
+<ol>
+<li>Go to GitHub Settings → Developer Settings → OAuth Apps</li>
+<li>Create new OAuth App</li>
+<li>Set Authorization callback URL: <code>http://localhost:4000/auth/github/callback</code></li>
+</ol>
+
+<h3>Application Config</h3>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>config :ueberauth, Ueberauth,</p>
+<p>  providers: [</p>
+<p>    github: {Ueberauth.Strategy.Github, [default_scope: "user:email"]}</p>
+<p>  ]</p>
+
+<h1>File: config/dev.exs</h1>
+
+<p>config :ueberauth, Ueberauth.Strategy.Github.OAuth,</p>
+<p>  client_id: System.get_env("GITHUB_CLIENT_ID"),</p>
+<p>  client_secret: System.get_env("GITHUB_CLIENT_SECRET")</p>
+
+<h1>File: config/runtime.exs</h1>
+
+<p>config :ueberauth, Ueberauth.Strategy.Github.OAuth,</p>
+<p>  client_id: System.get_env("GITHUB_CLIENT_ID"),</p>
+<p>  client_secret: System.get_env("GITHUB_CLIENT_SECRET")</p>
+</code></pre></figure>
+
+<h2>Schema Updates</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/user.ex</figcaption><pre><code class="language-elixir">
+<p>schema "users" do</p>
+<p>  field :email, :string</p>
+<p>  field :name, :string</p>
+<p>  field :password, :string, virtual: true, redact: true</p>
+<p>  field :hashed_password, :string, redact: true</p>
+<p>  field :confirmed_at, :naive_datetime</p>
+
+<p>  # OAuth fields</p>
+<p>  field :provider, :string</p>
+<p>  field :provider_id, :string</p>
+<p>  field :avatar_url, :string</p>
+
+<p>  timestamps()</p>
+<p>end</p>
+
+<p>@doc """</p>
+<p>Changeset for OAuth registration.</p>
+<p>"""</p>
+<p>def oauth_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :name, :provider, :provider_id, :avatar_url])</p>
+<p>  |> validate_required([:email, :provider, :provider_id])</p>
+<p>  |> validate_email()</p>
+<p>  |> unique_constraint(:email)</p>
+<p>  |> unique_constraint([:provider, :provider_id])</p>
+<p>  |> put_change(:confirmed_at, NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second))</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Migration</h2>
+
+<figure class="code"><figcaption>File: priv/repo/migrations/YYYYMMDDHHMMSS_add_oauth_fields_to_users.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Repo.Migrations.AddOauthFieldsToUsers do</p>
+<p>  use Ecto.Migration</p>
+
+<p>  def change do</p>
+<p>    alter table(:users) do</p>
+<p>      add :provider, :string</p>
+<p>      add :provider_id, :string</p>
+<p>      add :avatar_url, :string</p>
+<p>      modify :hashed_password, :string, null: true  # OAuth users don't have passwords</p>
+<p>    end</p>
+
+<p>    create unique_index(:users, [:provider, :provider_id])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Auth Controller</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/auth_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.AuthController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+<p>  plug Ueberauth</p>
+
+<p>  alias Snippetbox.Accounts</p>
+<p>  alias SnippetboxWeb.UserAuth</p>
+
+<p>  def callback(%{assigns: %{ueberauth_failure: _fails}} = conn, _params) do</p>
+<p>    conn</p>
+<p>    |> put_flash(:error, "Failed to authenticate.")</p>
+<p>    |> redirect(to: ~p"/login")</p>
+<p>  end</p>
+
+<p>  def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do</p>
+<p>    user_params = %{</p>
+<p>      email: auth.info.email,</p>
+<p>      name: auth.info.name || auth.info.nickname,</p>
+<p>      provider: to_string(auth.provider),</p>
+<p>      provider_id: to_string(auth.uid),</p>
+<p>      avatar_url: auth.info.image</p>
+<p>    }</p>
+
+<p>    case Accounts.find_or_create_oauth_user(user_params) do</p>
+<p>      {:ok, user} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Successfully authenticated!")</p>
+<p>        |> UserAuth.log_in_user(user)</p>
+
+<p>      {:error, reason} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:error, "Error: #{reason}")</p>
+<p>        |> redirect(to: ~p"/login")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def delete(conn, _params) do</p>
+<p>    conn</p>
+<p>    |> put_flash(:info, "Logged out successfully.")</p>
+<p>    |> UserAuth.log_out_user()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Context Functions</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>@doc """</p>
+<p>Finds or creates a user from OAuth data.</p>
+<p>"""</p>
+<p>def find_or_create_oauth_user(attrs) do</p>
+<p>  case get_user_by_provider(attrs.provider, attrs.provider_id) do</p>
+<p>    nil -></p>
+<p>      # Check if email already exists</p>
+<p>      case get_user_by_email(attrs.email) do</p>
+<p>        nil -></p>
+<p>          create_oauth_user(attrs)</p>
+
+<p>        existing_user -></p>
+<p>          # Link OAuth to existing account</p>
+<p>          link_oauth_to_user(existing_user, attrs)</p>
+<p>      end</p>
+
+<p>    user -></p>
+<p>      # Update user info from OAuth</p>
+<p>      update_oauth_user(user, attrs)</p>
+<p>  end</p>
+<p>end</p>
+
+<p>def get_user_by_provider(provider, provider_id) do</p>
+<p>  Repo.get_by(User, provider: provider, provider_id: provider_id)</p>
+<p>end</p>
+
+<p>defp create_oauth_user(attrs) do</p>
+<p>  %User{}</p>
+<p>  |> User.oauth_changeset(attrs)</p>
+<p>  |> Repo.insert()</p>
+<p>end</p>
+
+<p>defp link_oauth_to_user(user, attrs) do</p>
+<p>  user</p>
+<p>  |> User.oauth_changeset(%{</p>
+<p>    provider: attrs.provider,</p>
+<p>    provider_id: attrs.provider_id,</p>
+<p>    avatar_url: attrs.avatar_url</p>
+<p>  })</p>
+<p>  |> Repo.update()</p>
+<p>end</p>
+
+<p>defp update_oauth_user(user, attrs) do</p>
+<p>  user</p>
+<p>  |> User.oauth_changeset(%{</p>
+<p>    name: attrs.name,</p>
+<p>    avatar_url: attrs.avatar_url</p>
+<p>  })</p>
+<p>  |> Repo.update()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Router</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/auth", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :redirect_if_user_is_authenticated]</p>
+
+<p>  get "/:provider", AuthController, :request</p>
+<p>  get "/:provider/callback", AuthController, :callback</p>
+<p>  post "/:provider/callback", AuthController, :callback</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Login Page with OAuth</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/user_session_html/new.html.heex %>
+
+<div class="mx-auto max-w-md">
+<p>  <.header class="text-center"></p>
+<p>    Log In</p>
+<p>  </.header></p>
+
+<p>  <div class="mt-8 space-y-4"></p>
+<p>    <a</p>
+<p>      href={~p"/auth/github"}</p>
+<p>      class="flex items-center justify-center gap-2 w-full px-4 py-2 border rounded-lg hover:bg-gray-50"</p>
+<p>    ></p>
+<p>      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"></p>
+<p>        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></p>
+<p>      </svg></p>
+<p>      Continue with GitHub</p>
+<p>    </a></p>
+<p>  </div></p>
+
+<p>  <div class="relative my-6"></p>
+<p>    <div class="absolute inset-0 flex items-center"></p>
+<p>      <div class="w-full border-t border-gray-300"></div></p>
+<p>    </div></p>
+<p>    <div class="relative flex justify-center text-sm"></p>
+<p>      <span class="px-2 bg-white text-gray-500">Or continue with email</span></p>
+<p>    </div></p>
+<p>  </div></p>
+
+<p>  <.form for={%{}} action={~p"/login"} as={:user}></p>
+<p>    <div class="space-y-4"></p>
+<p>      <.input name="email" type="email" label="Email" required /></p>
+<p>      <.input name="password" type="password" label="Password" required /></p>
+<p>    </div></p>
+<p>    <.button class="mt-6 w-full">Log in</.button></p>
+<p>  </.form></p>
+</div>
+</code></pre></figure>
+
+<h2>Multiple Providers</h2>
+
+<h3>Adding Google</h3>
+
+<figure class="code"><pre><code># mix.exs
+<p>{:ueberauth_google, "~> 0.10"}</p>
+
+<h1>config/config.exs</h1>
+<p>config :ueberauth, Ueberauth,</p>
+<p>  providers: [</p>
+<p>    github: {Ueberauth.Strategy.Github, [default_scope: "user:email"]},</p>
+<p>    google: {Ueberauth.Strategy.Google, [default_scope: "email profile"]}</p>
+<p>  ]</p>
+
+<h1>config/runtime.exs</h1>
+<p>config :ueberauth, Ueberauth.Strategy.Google.OAuth,</p>
+<p>  client_id: System.get_env("GOOGLE_CLIENT_ID"),</p>
+<p>  client_secret: System.get_env("GOOGLE_CLIENT_SECRET")</p>
+</code></pre></figure>
+
+<h3>Provider Buttons</h3>
+
+<figure class="code"><pre><code><div class="space-y-3">
+<p>  <a href={~p"/auth/github"} class="oauth-button"></p>
+<p>    <.icon name="github" /> Continue with GitHub</p>
+<p>  </a></p>
+
+<p>  <a href={~p"/auth/google"} class="oauth-button"></p>
+<p>    <.icon name="google" /> Continue with Google</p>
+<p>  </a></p>
+
+<p>  <a href={~p"/auth/twitter"} class="oauth-button"></p>
+<p>    <.icon name="twitter" /> Continue with Twitter</p>
+<p>  </a></p>
+</div>
+</code></pre></figure>
+
+<h2>Account Linking</h2>
+
+<p>Allow users to link multiple OAuth providers:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/user_identity.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts.UserIdentity do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "user_identities" do</p>
+<p>    field :provider, :string</p>
+<p>    field :provider_id, :string</p>
+<p>    field :provider_email, :string</p>
+<p>    field :provider_name, :string</p>
+<p>    field :avatar_url, :string</p>
+
+<p>    belongs_to :user, Snippetbox.Accounts.User</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  def changeset(identity, attrs) do</p>
+<p>    identity</p>
+<p>    |> cast(attrs, [:provider, :provider_id, :provider_email, :provider_name, :avatar_url])</p>
+<p>    |> validate_required([:provider, :provider_id])</p>
+<p>    |> unique_constraint([:provider, :provider_id])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Migration</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Repo.Migrations.CreateUserIdentities do
+<p>  use Ecto.Migration</p>
+
+<p>  def change do</p>
+<p>    create table(:user_identities) do</p>
+<p>      add :user_id, references(:users, on_delete: :delete_all), null: false</p>
+<p>      add :provider, :string, null: false</p>
+<p>      add :provider_id, :string, null: false</p>
+<p>      add :provider_email, :string</p>
+<p>      add :provider_name, :string</p>
+<p>      add :avatar_url, :string</p>
+
+<p>      timestamps()</p>
+<p>    end</p>
+
+<p>    create index(:user_identities, [:user_id])</p>
+<p>    create unique_index(:user_identities, [:provider, :provider_id])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Security Considerations</h2>
+
+<h3>State Parameter</h3>
+
+<p>Ueberauth handles CSRF via state parameter automatically.</p>
+
+<h3>Token Storage</h3>
+
+<p>Never store OAuth tokens unless needed for API access:</p>
+
+<figure class="code"><pre><code># Only store if you need to make API calls
+<p>def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do</p>
+<p>  credentials = auth.credentials</p>
+
+<p>  # Store encrypted if needed</p>
+<p>  if credentials.refresh_token do</p>
+<p>    Accounts.store_oauth_credentials(user, %{</p>
+<p>      access_token: encrypt(credentials.token),</p>
+<p>      refresh_token: encrypt(credentials.refresh_token),</p>
+<p>      expires_at: credentials.expires_at</p>
+<p>    })</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Scope Minimization</h3>
+
+<p>Only request scopes you need:</p>
+
+<figure class="code"><pre><code># Minimal scope
+<p>config :ueberauth, Ueberauth,</p>
+<p>  providers: [</p>
+<p>    github: {Ueberauth.Strategy.Github, [default_scope: "user:email"]}</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h2>Testing OAuth</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/auth_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.AuthControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  describe "callback/2" do</p>
+<p>    test "creates new user from OAuth", %{conn: conn} do</p>
+<p>      auth = %Ueberauth.Auth{</p>
+<p>        provider: :github,</p>
+<p>        uid: "12345",</p>
+<p>        info: %Ueberauth.Auth.Info{</p>
+<p>          email: "oauth@example.com",</p>
+<p>          name: "OAuth User",</p>
+<p>          image: "https://example.com/avatar.png"</p>
+<p>        }</p>
+<p>      }</p>
+
+<p>      conn =</p>
+<p>        conn</p>
+<p>        |> assign(:ueberauth_auth, auth)</p>
+<p>        |> get(~p"/auth/github/callback")</p>
+
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>      assert get_session(conn, :user_token)</p>
+
+<p>      user = Snippetbox.Accounts.get_user_by_email("oauth@example.com")</p>
+<p>      assert user.provider == "github"</p>
+<p>      assert user.provider_id == "12345"</p>
+<p>    end</p>
+
+<p>    test "logs in existing OAuth user", %{conn: conn} do</p>
+<p>      {:ok, existing} = Snippetbox.Accounts.create_oauth_user(%{</p>
+<p>        email: "existing@example.com",</p>
+<p>        name: "Existing",</p>
+<p>        provider: "github",</p>
+<p>        provider_id: "12345"</p>
+<p>      })</p>
+
+<p>      auth = %Ueberauth.Auth{</p>
+<p>        provider: :github,</p>
+<p>        uid: "12345",</p>
+<p>        info: %Ueberauth.Auth.Info{</p>
+<p>          email: "existing@example.com",</p>
+<p>          name: "Updated Name"</p>
+<p>        }</p>
+<p>      }</p>
+
+<p>      conn =</p>
+<p>        conn</p>
+<p>        |> assign(:ueberauth_auth, auth)</p>
+<p>        |> get(~p"/auth/github/callback")</p>
+
+<p>      assert redirected_to(conn) == ~p"/"</p>
+
+<p>      # Name should be updated</p>
+<p>      user = Snippetbox.Accounts.get_user!(existing.id)</p>
+<p>      assert user.name == "Updated Name"</p>
+<p>    end</p>
+
+<p>    test "handles OAuth failure", %{conn: conn} do</p>
+<p>      conn =</p>
+<p>        conn</p>
+<p>        |> assign(:ueberauth_failure, %Ueberauth.Failure{})</p>
+<p>        |> get(~p"/auth/github/callback")</p>
+
+<p>      assert redirected_to(conn) == ~p"/login"</p>
+<p>      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Failed"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: External State Integration</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>OAuth integrates external state (third-party identity) with local state:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # External: OAuth provider data
+<p>auth = %{provider: "github", uid: "123", email: "..."}</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Transform to local representation</p>
+<p>user_params = transform_oauth_to_user(auth)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Persist locally</p>
+<p>{:ok, user} = find_or_create_user(user_params)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The transformation is explicit, making the boundary between external and internal data clear.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>OAuth authentication flow</li>
+<li>Setting up Ueberauth</li>
+<li>Configuring OAuth providers</li>
+<li>Creating OAuth users</li>
+<li>Account linking</li>
+<li>Multiple provider support</li>
+<li>Security considerations</li>
+<li>Testing OAuth flows</li>
+</ul>
+
+<p>This completes the Authentication chapter. In the next chapter, we'll explore Phoenix LiveView.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="11.06-email-verification.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="12.00-liveview.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

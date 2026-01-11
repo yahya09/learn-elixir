@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Authentication Exercises &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Authentication Exercises</span>
+            </div>
+            <div>
+                &lsaquo; <a href="17.03-web-exercises.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="17.05-liveview-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 17.4</div>
+        <h1>Chapter 17.4: Authentication Exercises</h1>
+
+<p>These exercises reinforce concepts from Chapters 9-11 covering sessions, security, and authentication.</p>
+
+<h2>Exercise 1: Custom Session Store</h2>
+
+<p>Implement a database-backed session store.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/session/db_store.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Session.DBStore do</p>
+<p>  @behaviour Plug.Session.Store</p>
+
+<p>  # Implement:</p>
+<p>  # - init/1</p>
+<p>  # - get/3</p>
+<p>  # - put/4</p>
+<p>  # - delete/3</p>
+
+<p>  # Sessions stored in sessions table with:</p>
+<p>  # - id (UUID)</p>
+<p>  # - data (binary/JSON)</p>
+<p>  # - expires_at (datetime)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Session.DBStore do
+<p>  @behaviour Plug.Session.Store</p>
+
+<p>  alias Snippetbox.{Repo, Sessions.Session}</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    Keyword.get(opts, :table, "sessions")</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def get(_conn, sid, _table) do</p>
+<p>    case Repo.get(Session, sid) do</p>
+<p>      nil -></p>
+<p>        {nil, %{}}</p>
+
+<p>      session -></p>
+<p>        if DateTime.compare(session.expires_at, DateTime.utc_now()) == :gt do</p>
+<p>          {sid, :erlang.binary_to_term(session.data)}</p>
+<p>        else</p>
+<p>          Repo.delete(session)</p>
+<p>          {nil, %{}}</p>
+<p>        end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def put(_conn, nil, data, table) do</p>
+<p>    put_new(data, table)</p>
+<p>  end</p>
+
+<p>  def put(_conn, sid, data, _table) do</p>
+<p>    case Repo.get(Session, sid) do</p>
+<p>      nil -></p>
+<p>        put_new(data, sid)</p>
+
+<p>      session -></p>
+<p>        session</p>
+<p>        |> Session.changeset(%{data: :erlang.term_to_binary(data)})</p>
+<p>        |> Repo.update!()</p>
+<p>        sid</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def delete(_conn, sid, _table) do</p>
+<p>    case Repo.get(Session, sid) do</p>
+<p>      nil -> :ok</p>
+<p>      session -> Repo.delete(session)</p>
+<p>    end</p>
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  defp put_new(data, _table) do</p>
+<p>    sid = generate_sid()</p>
+<p>    expires = DateTime.add(DateTime.utc_now(), 7, :day)</p>
+
+<p>    %Session{}</p>
+<p>    |> Session.changeset(%{</p>
+<p>      id: sid,</p>
+<p>      data: :erlang.term_to_binary(data),</p>
+<p>      expires_at: expires</p>
+<p>    })</p>
+<p>    |> Repo.insert!()</p>
+
+<p>    sid</p>
+<p>  end</p>
+
+<p>  defp generate_sid do</p>
+<p>    :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 2: Two-Factor Authentication</h2>
+
+<p>Implement TOTP-based two-factor authentication.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/totp.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts.TOTP do</p>
+<p>  # Implement:</p>
+<p>  # - generate_secret/0 - creates new TOTP secret</p>
+<p>  # - generate_uri/2 - creates otpauth:// URI for QR code</p>
+<p>  # - valid_token?/2 - validates a TOTP token</p>
+<p>  # - backup_codes/0 - generates backup codes</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Hints</h3>
+<ul>
+<li>Use the <code>nimble_totp</code> library</li>
+<li>Secret should be 20 bytes, base32 encoded</li>
+<li>Allow 30-second window for clock drift</li>
+</ul>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Accounts.TOTP do
+<p>  @issuer "Snippetbox"</p>
+
+<p>  def generate_secret do</p>
+<p>    NimbleTOTP.secret()</p>
+<p>  end</p>
+
+<p>  def generate_uri(secret, user_email) do</p>
+<p>    NimbleTOTP.otpauth_uri("#{@issuer}:#{user_email}", secret, issuer: @issuer)</p>
+<p>  end</p>
+
+<p>  def valid_token?(secret, token) do</p>
+<p>    NimbleTOTP.valid?(secret, token)</p>
+<p>  end</p>
+
+<p>  def backup_codes(count \\ 10) do</p>
+<p>    for _ <- 1..count do</p>
+<p>      :crypto.strong_rand_bytes(4)</p>
+<p>      |> Base.encode32(padding: false)</p>
+<p>      |> String.downcase()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def hash_backup_code(code) do</p>
+<p>    Bcrypt.hash_pwd_salt(code)</p>
+<p>  end</p>
+
+<p>  def valid_backup_code?(code, hashed_codes) do</p>
+<p>    Enum.find(hashed_codes, fn hashed -></p>
+<p>      Bcrypt.verify_pass(code, hashed)</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 3: Password Policy</h2>
+
+<p>Create a password policy module with configurable rules.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/password_policy.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts.PasswordPolicy do</p>
+<p>  # Implement validation for:</p>
+<p>  # - Minimum length (default: 12)</p>
+<p>  # - Require uppercase</p>
+<p>  # - Require lowercase</p>
+<p>  # - Require digit</p>
+<p>  # - Require special character</p>
+<p>  # - Not in common password list</p>
+<p>  # - Not similar to email</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Accounts.PasswordPolicy do
+<p>  @min_length 12</p>
+<p>  @special_chars ~r/[!@#$%^&*(),.?":{}|<>]/</p>
+
+<p>  def validate(password, opts \\ []) do</p>
+<p>    email = Keyword.get(opts, :email)</p>
+
+<p>    []</p>
+<p>    |> check_length(password)</p>
+<p>    |> check_uppercase(password)</p>
+<p>    |> check_lowercase(password)</p>
+<p>    |> check_digit(password)</p>
+<p>    |> check_special(password)</p>
+<p>    |> check_common(password)</p>
+<p>    |> check_similar_to_email(password, email)</p>
+<p>    |> case do</p>
+<p>      [] -> :ok</p>
+<p>      errors -> {:error, errors}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_length(errors, password) do</p>
+<p>    if String.length(password) >= @min_length do</p>
+<p>      errors</p>
+<p>    else</p>
+<p>      ["must be at least #{@min_length} characters" | errors]</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_uppercase(errors, password) do</p>
+<p>    if password =~ ~r/[A-Z]/ do</p>
+<p>      errors</p>
+<p>    else</p>
+<p>      ["must contain at least one uppercase letter" | errors]</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_lowercase(errors, password) do</p>
+<p>    if password =~ ~r/[a-z]/ do</p>
+<p>      errors</p>
+<p>    else</p>
+<p>      ["must contain at least one lowercase letter" | errors]</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_digit(errors, password) do</p>
+<p>    if password =~ ~r/[0-9]/ do</p>
+<p>      errors</p>
+<p>    else</p>
+<p>      ["must contain at least one digit" | errors]</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_special(errors, password) do</p>
+<p>    if password =~ @special_chars do</p>
+<p>      errors</p>
+<p>    else</p>
+<p>      ["must contain at least one special character" | errors]</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_common(errors, password) do</p>
+<p>    if password in common_passwords() do</p>
+<p>      ["is too common" | errors]</p>
+<p>    else</p>
+<p>      errors</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_similar_to_email(errors, _password, nil), do: errors</p>
+<p>  defp check_similar_to_email(errors, password, email) do</p>
+<p>    local_part = email |> String.split("@") |> List.first() |> String.downcase()</p>
+<p>    password_lower = String.downcase(password)</p>
+
+<p>    if String.contains?(password_lower, local_part) do</p>
+<p>      ["cannot be similar to your email" | errors]</p>
+<p>    else</p>
+<p>      errors</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp common_passwords do</p>
+<p>    ~w(password123456 123456password qwerty123456 password1234)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 4: Account Lockout</h2>
+
+<p>Implement account lockout after failed login attempts.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/lockout.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts.Lockout do</p>
+<p>  # Implement:</p>
+<p>  # - record_failed_attempt/1 - records failed login</p>
+<p>  # - reset_attempts/1 - clears attempts on success</p>
+<p>  # - locked?/1 - checks if account is locked</p>
+<p>  # - unlock_at/1 - returns when account unlocks</p>
+
+<p>  # Rules:</p>
+<p>  # - Lock after 5 failed attempts</p>
+<p>  # - Lock duration increases exponentially</p>
+<p>  # - Max lock duration: 24 hours</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Accounts.Lockout do
+<p>  alias Snippetbox.{Repo, Accounts.User}</p>
+<p>  import Ecto.Query</p>
+
+<p>  @max_attempts 5</p>
+<p>  @base_lockout_minutes 5</p>
+<p>  @max_lockout_minutes 24 * 60</p>
+
+<p>  def record_failed_attempt(user) do</p>
+<p>    new_count = (user.failed_attempts || 0) + 1</p>
+
+<p>    updates =</p>
+<p>      if new_count >= @max_attempts do</p>
+<p>        lockout_minutes = calculate_lockout(new_count)</p>
+<p>        locked_until = DateTime.add(DateTime.utc_now(), lockout_minutes, :minute)</p>
+
+<p>        [failed_attempts: new_count, locked_until: locked_until]</p>
+<p>      else</p>
+<p>        [failed_attempts: new_count]</p>
+<p>      end</p>
+
+<p>    user</p>
+<p>    |> Ecto.Changeset.change(updates)</p>
+<p>    |> Repo.update()</p>
+<p>  end</p>
+
+<p>  def reset_attempts(user) do</p>
+<p>    user</p>
+<p>    |> Ecto.Changeset.change(failed_attempts: 0, locked_until: nil)</p>
+<p>    |> Repo.update()</p>
+<p>  end</p>
+
+<p>  def locked?(user) do</p>
+<p>    case user.locked_until do</p>
+<p>      nil -> false</p>
+<p>      locked_until -> DateTime.compare(locked_until, DateTime.utc_now()) == :gt</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def unlock_at(user), do: user.locked_until</p>
+
+<p>  def remaining_attempts(user) do</p>
+<p>    max(@max_attempts - (user.failed_attempts || 0), 0)</p>
+<p>  end</p>
+
+<p>  defp calculate_lockout(attempt_count) do</p>
+<p>    # Exponential backoff: 5, 10, 20, 40, 80, 160... minutes</p>
+<p>    lockout = @base_lockout_minutes * :math.pow(2, div(attempt_count, @max_attempts))</p>
+<p>    min(trunc(lockout), @max_lockout_minutes)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 5: API Token Authentication</h2>
+
+<p>Implement stateless API authentication with tokens.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/api_auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.APIAuth do</p>
+<p>  # Implement:</p>
+<p>  # - Extract token from Authorization header</p>
+<p>  # - Validate token format (Bearer scheme)</p>
+<p>  # - Verify token signature</p>
+<p>  # - Load user from token</p>
+<p>  # - Handle expiration</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.APIAuth do
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    with {:ok, token} <- get_token(conn),</p>
+<p>         {:ok, user_id} <- verify_token(token),</p>
+<p>         user when not is_nil(user) <- Accounts.get_user(user_id) do</p>
+<p>      assign(conn, :current_user, user)</p>
+<p>    else</p>
+<p>      _ -></p>
+<p>        conn</p>
+<p>        |> put_status(:unauthorized)</p>
+<p>        |> json(%{error: "Invalid or missing authentication token"})</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp get_token(conn) do</p>
+<p>    case get_req_header(conn, "authorization") do</p>
+<p>      ["Bearer " <> token] -> {:ok, token}</p>
+<p>      _ -> {:error, :missing_token}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp verify_token(token) do</p>
+<p>    case Phoenix.Token.verify(</p>
+<p>      SnippetboxWeb.Endpoint,</p>
+<p>      "api_token",</p>
+<p>      token,</p>
+<p>      max_age: 86400 * 30  # 30 days</p>
+<p>    ) do</p>
+<p>      {:ok, user_id} -> {:ok, user_id}</p>
+<p>      {:error, _reason} -> {:error, :invalid_token}</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Token generation in Accounts context</h1>
+<p>def generate_api_token(user) do</p>
+<p>  Phoenix.Token.sign(SnippetboxWeb.Endpoint, "api_token", user.id)</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 6: OAuth Scope Handling</h2>
+
+<p>Implement OAuth scope validation for API endpoints.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/require_scope.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RequireScope do</p>
+<p>  # Implement:</p>
+<p>  # - Check if token has required scopes</p>
+<p>  # - Support multiple scope requirements (any/all)</p>
+<p>  # - Return 403 with missing scopes info</p>
+
+<p>  # Usage:</p>
+<p>  # plug RequireScope, scopes: ["snippets:read"]</p>
+<p>  # plug RequireScope, scopes: ["snippets:write", "snippets:delete"], match: :any</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.RequireScope do
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def init(opts) do</p>
+<p>    %{</p>
+<p>      scopes: Keyword.fetch!(opts, :scopes),</p>
+<p>      match: Keyword.get(opts, :match, :all)</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def call(conn, %{scopes: required, match: match}) do</p>
+<p>    user_scopes = get_user_scopes(conn)</p>
+
+<p>    if has_required_scopes?(user_scopes, required, match) do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      missing = required -- user_scopes</p>
+
+<p>      conn</p>
+<p>      |> put_status(:forbidden)</p>
+<p>      |> json(%{</p>
+<p>        error: "Insufficient permissions",</p>
+<p>        required_scopes: required,</p>
+<p>        missing_scopes: missing</p>
+<p>      })</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp get_user_scopes(conn) do</p>
+<p>    case conn.assigns[:token_scopes] do</p>
+<p>      nil -> []</p>
+<p>      scopes -> scopes</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp has_required_scopes?(user_scopes, required, :all) do</p>
+<p>    Enum.all?(required, &(&1 in user_scopes))</p>
+<p>  end</p>
+
+<p>  defp has_required_scopes?(user_scopes, required, :any) do</p>
+<p>    Enum.any?(required, &(&1 in user_scopes))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Challenge: Social Login with Multiple Providers</h2>
+
+<p>Implement social login supporting:</p>
+
+<ol>
+<li>GitHub</li>
+<li>Google</li>
+<li>Account linking (one user, multiple providers)</li>
+<li>Handle email conflicts</li>
+<li>Profile data sync</li>
+</ol>
+
+<p>Create the full flow from OAuth callback to user creation/linking.</p>
+
+<p>This exercises OAuth, user management, and conflict resolution.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="17.03-web-exercises.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="17.05-liveview-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

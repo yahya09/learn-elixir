@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Form Basics &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Form Basics</span>
+            </div>
+            <div>
+                &lsaquo; <a href="08.00-processing-forms.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="08.02-phoenix-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 8.1</div>
+        <h1>Chapter 8.1: Form Basics</h1>
+
+<p>Before diving into Phoenix-specific form handling, let's review HTML form fundamentals and how they work in web applications.</p>
+
+<h2>HTML Form Structure</h2>
+
+<figure class="code"><pre><code><form action="/snippets" method="post">
+<p>  <label for="title">Title</label></p>
+<p>  <input type="text" id="title" name="snippet[title]" value=""></p>
+
+<p>  <label for="content">Content</label></p>
+<p>  <textarea id="content" name="snippet[content]"></textarea></p>
+
+<p>  <button type="submit">Create</button></p>
+</form>
+</code></pre></figure>
+
+<p>Key attributes:</p>
+<ul>
+<li><code>action</code> - URL to submit to</li>
+<li><code>method</code> - HTTP method (GET or POST)</li>
+<li><code>name</code> - Parameter name sent to server</li>
+</ul>
+
+<h2>HTTP Methods and Forms</h2>
+
+<p>HTML forms only support GET and POST. Phoenix uses method overriding for PUT/PATCH/DELETE:</p>
+
+<figure class="code"><pre><code><%# Phoenix generates a hidden field for method override %>
+<form action="/snippets/123" method="post">
+<p>  <input type="hidden" name="_method" value="put"></p>
+<p>  <!-- form fields --></p>
+</form>
+</code></pre></figure>
+
+<h2>Parameter Structure</h2>
+
+<h3>Flat Parameters</h3>
+
+<figure class="code"><pre><code><input name="title" value="My Snippet">
+<input name="content" value="Code here">
+</code></pre></figure>
+
+<p>Results in:</p>
+<figure class="code"><pre><code>%{"title" => "My Snippet", "content" => "Code here"}
+</code></pre></figure>
+
+<h3>Nested Parameters</h3>
+
+<figure class="code"><pre><code><input name="snippet[title]" value="My Snippet">
+<input name="snippet[content]" value="Code here">
+</code></pre></figure>
+
+<p>Results in:</p>
+<figure class="code"><pre><code>%{"snippet" => %{"title" => "My Snippet", "content" => "Code here"}}
+</code></pre></figure>
+
+<h3>Array Parameters</h3>
+
+<figure class="code"><pre><code><input name="snippet[tags][]" value="elixir">
+<input name="snippet[tags][]" value="phoenix">
+</code></pre></figure>
+
+<p>Results in:</p>
+<figure class="code"><pre><code>%{"snippet" => %{"tags" => ["elixir", "phoenix"]}}
+</code></pre></figure>
+
+<h2>Input Types</h2>
+
+<h3>Text Inputs</h3>
+
+<figure class="code"><pre><code><%# Single line text %>
+<input type="text" name="snippet[title]">
+
+<%# Password (masked) %>
+<input type="password" name="user[password]">
+
+<%# Email with validation %>
+<input type="email" name="user[email]">
+
+<%# URL with validation %>
+<input type="url" name="snippet[source_url]">
+
+<%# Number %>
+<input type="number" name="snippet[expires_in]" min="1" max="365">
+
+<%# Multi-line text %>
+<textarea name="snippet[content]" rows="10"></textarea>
+</code></pre></figure>
+
+<h3>Selection Inputs</h3>
+
+<figure class="code"><pre><code><%# Dropdown %>
+<select name="snippet[language]">
+<p>  <option value="">Select language...</option></p>
+<p>  <option value="elixir">Elixir</option></p>
+<p>  <option value="javascript">JavaScript</option></p>
+<p>  <option value="python">Python</option></p>
+</select>
+
+<%# Radio buttons %>
+<input type="radio" name="snippet[visibility]" value="public" id="public">
+<label for="public">Public</label>
+
+<input type="radio" name="snippet[visibility]" value="private" id="private">
+<label for="private">Private</label>
+
+<%# Checkboxes %>
+<input type="checkbox" name="snippet[featured]" value="true" id="featured">
+<label for="featured">Featured</label>
+
+<%# Multiple checkboxes %>
+<input type="checkbox" name="snippet[tags][]" value="elixir" id="tag-elixir">
+<label for="tag-elixir">Elixir</label>
+
+<input type="checkbox" name="snippet[tags][]" value="phoenix" id="tag-phoenix">
+<label for="tag-phoenix">Phoenix</label>
+</code></pre></figure>
+
+<h3>Date and Time</h3>
+
+<figure class="code"><pre><code><%# Date %>
+<input type="date" name="snippet[expires_at]">
+
+<%# Time %>
+<input type="time" name="event[start_time]">
+
+<%# Datetime %>
+<input type="datetime-local" name="event[starts_at]">
+</code></pre></figure>
+
+<h3>Hidden Fields</h3>
+
+<figure class="code"><pre><code><%# Hidden data %>
+<input type="hidden" name="snippet[user_id]" value="123">
+<input type="hidden" name="return_to" value="/dashboard">
+</code></pre></figure>
+
+<h2>Form in Controller</h2>
+
+<h3>Handling GET (Display Form)</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def new(conn, _params) do</p>
+<p>  changeset = Snippets.change_snippet(%Snippet{})</p>
+<p>  render(conn, :new, changeset: changeset)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Handling POST (Process Form)</h3>
+
+<figure class="code"><pre><code>def create(conn, %{"snippet" => snippet_params}) do
+<p>  case Snippets.create_snippet(snippet_params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Snippet created successfully.")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>      render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Request/Response Cycle</h2>
+
+<h3>GET /snippets/new</h3>
+
+<figure class="code"><pre><code>Browser                    Server
+<p>   |                         |</p>
+<p>   |  GET /snippets/new      |</p>
+<p>   |------------------------>|</p>
+<p>   |                         |</p>
+<p>   |                    Controller.new()</p>
+<p>   |                         |</p>
+<p>   |                    render(:new)</p>
+<p>   |                         |</p>
+<p>   |   HTML with empty form  |</p>
+<p>   |<------------------------|</p>
+<p>   |                         |</p>
+</code></pre></figure>
+
+<h3>POST /snippets</h3>
+
+<figure class="code"><pre><code>Browser                    Server
+<p>   |                         |</p>
+<p>   | POST /snippets          |</p>
+<p>   | {snippet: {...}}        |</p>
+<p>   |------------------------>|</p>
+<p>   |                         |</p>
+<p>   |                    Controller.create()</p>
+<p>   |                         |</p>
+<p>   |                    Snippets.create_snippet()</p>
+<p>   |                         |</p>
+<p>   |                    {:ok, snippet}</p>
+<p>   |                         |</p>
+<p>   | 302 Redirect            |</p>
+<p>   | Location: /snippets/1   |</p>
+<p>   |<------------------------|</p>
+<p>   |                         |</p>
+<p>   | GET /snippets/1         |</p>
+<p>   |------------------------>|</p>
+<p>   |                         |</p>
+</code></pre></figure>
+
+<h3>POST with Validation Errors</h3>
+
+<figure class="code"><pre><code>Browser                    Server
+<p>   |                         |</p>
+<p>   | POST /snippets          |</p>
+<p>   | {snippet: {title: ""}}  |</p>
+<p>   |------------------------>|</p>
+<p>   |                         |</p>
+<p>   |                    Controller.create()</p>
+<p>   |                         |</p>
+<p>   |                    Snippets.create_snippet()</p>
+<p>   |                         |</p>
+<p>   |                    {:error, changeset}</p>
+<p>   |                         |</p>
+<p>   | 200 OK                  |</p>
+<p>   | HTML with form + errors |</p>
+<p>   |<------------------------|</p>
+<p>   |                         |</p>
+</code></pre></figure>
+
+<h2>Form Accessibility</h2>
+
+<h3>Labels</h3>
+
+<p>Always associate labels with inputs:</p>
+
+<figure class="code"><pre><code><%# Using for/id %>
+<label for="snippet_title">Title</label>
+<input type="text" id="snippet_title" name="snippet[title]">
+
+<%# Or wrap the input %>
+<label>
+<p>  Title</p>
+<p>  <input type="text" name="snippet[title]"></p>
+</label>
+</code></pre></figure>
+
+<h3>Required Fields</h3>
+
+<figure class="code"><pre><code><label for="title">
+<p>  Title <span aria-hidden="true">*</span></p>
+</label>
+<input type="text" id="title" name="snippet[title]" required aria-required="true">
+</code></pre></figure>
+
+<h3>Error Messages</h3>
+
+<figure class="code"><pre><code><label for="title">Title</label>
+<input type="text" id="title" name="snippet[title]"
+<p>  aria-invalid="true"</p>
+<p>  aria-describedby="title-error"></p>
+<span id="title-error" role="alert">can't be blank</span>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Forms as Data Transformation</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Form handling in Phoenix follows functional principles:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Input: raw params from form
+<p>%{"snippet" => %{"title" => "Hello"}}</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Transform: build changeset</p>
+<p>changeset = Snippet.changeset(%Snippet{}, params)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Output: either success or error</p>
+<p>case Repo.insert(changeset) do</p>
+<p>  {:ok, snippet} -> # success path</p>
+<p>  {:error, changeset} -> # error path with reasons</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each step is a pure transformation, making the flow predictable and testable.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>HTML form structure and attributes</li>
+<li>HTTP methods and method overriding</li>
+<li>Parameter naming conventions (nested, arrays)</li>
+<li>Common input types</li>
+<li>Controller actions for forms</li>
+<li>The request/response cycle</li>
+<li>Accessibility best practices</li>
+</ul>
+
+<p>In the next chapter, we'll explore Phoenix's form components.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="08.00-processing-forms.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="08.02-phoenix-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Dynamic Templates &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Dynamic Templates</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.09-database-best-practices.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="05.01-displaying-data.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 5</div>
+        <h1>Chapter 5: Dynamic HTML Templates</h1>
+
+<p>Now that we have data in our database, we need to display it dynamically. In this chapter, we'll learn advanced templating techniques to build a complete user interface for our Snippetbox application.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Displaying database content in templates</li>
+<li>Working with template assigns and data</li>
+<li>Creating reusable components</li>
+<li>Iterating over collections</li>
+<li>Conditional rendering patterns</li>
+<li>Partial templates and layouts</li>
+<li>Helper functions for views</li>
+</ul>
+
+<h2>From Static to Dynamic</h2>
+
+<p>So far, our templates have been mostly static HTML. Now we'll make them dynamic by:</p>
+
+<ol>
+<li><strong>Querying</strong> data from the database</li>
+<li><strong>Passing</strong> data to templates via assigns</li>
+<li><strong>Rendering</strong> data with EEx/HEEx syntax</li>
+<li><strong>Building</strong> reusable UI components</li>
+</ol>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>5.1 Displaying Data</strong> - Rendering database records</li>
+<li><strong>5.2 Template Actions</strong> - Index, show, new, edit templates</li>
+<li><strong>5.3 Iterating Collections</strong> - Lists, tables, and empty states</li>
+<li><strong>5.4 Components</strong> - Reusable UI building blocks</li>
+<li><strong>5.5 Layouts</strong> - Page structure and navigation</li>
+<li><strong>5.6 Helpers and Formatting</strong> - Date formatting, truncation, etc.</li>
+</ul>
+
+<h2>The Data Flow</h2>
+
+<figure class="code"><pre><code>Controller          Template               Browser
+<p>    │                   │                     │</p>
+<p>    │ assigns data      │                     │</p>
+<p>    ├──────────────────►│                     │</p>
+<p>    │                   │ renders HTML        │</p>
+<p>    │                   ├────────────────────►│</p>
+<p>    │                   │                     │</p>
+</code></pre></figure>
+
+<p>Let's start by displaying our snippets from the database.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.09-database-best-practices.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="05.01-displaying-data.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Project Structure &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Project Structure</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.05-url-query-strings.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.07-html-templating.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.6</div>
+        <h1>Chapter 2.6: Project Structure and Organization</h1>
+
+<p>Understanding Phoenix's project structure is essential for navigating and extending your application. In this chapter, we'll explore how Phoenix organizes code and the reasoning behind its conventions.</p>
+
+<h2>The Phoenix Project Layout</h2>
+
+<p>When you create a new Phoenix application, you get this structure:</p>
+
+<figure class="code"><pre><code>snippetbox/
+<p>├── _build/              # Compiled files (gitignored)</p>
+<p>├── assets/              # Frontend assets</p>
+<p>│   ├── css/</p>
+<p>│   ├── js/</p>
+<p>│   └── vendor/</p>
+<p>├── config/              # Configuration files</p>
+<p>│   ├── config.exs       # Shared configuration</p>
+<p>│   ├── dev.exs          # Development config</p>
+<p>│   ├── prod.exs         # Production config</p>
+<p>│   ├── runtime.exs      # Runtime config</p>
+<p>│   └── test.exs         # Test config</p>
+<p>├── deps/                # Dependencies (gitignored)</p>
+<p>├── lib/                 # Application source code</p>
+<p>│   ├── snippetbox/      # Core business logic</p>
+<p>│   │   ├── application.ex</p>
+<p>│   │   └── repo.ex</p>
+<p>│   └── snippetbox_web/  # Web interface</p>
+<p>│       ├── components/</p>
+<p>│       ├── controllers/</p>
+<p>│       ├── endpoint.ex</p>
+<p>│       ├── router.ex</p>
+<p>│       └── telemetry.ex</p>
+<p>├── priv/                # Resources</p>
+<p>│   ├── gettext/         # Translations</p>
+<p>│   ├── repo/            # Database files</p>
+<p>│   │   ├── migrations/</p>
+<p>│   │   └── seeds.exs</p>
+<p>│   └── static/          # Static assets</p>
+<p>├── test/                # Tests</p>
+<p>│   ├── snippetbox/</p>
+<p>│   ├── snippetbox_web/</p>
+<p>│   └── support/</p>
+<p>├── .formatter.exs       # Code formatter config</p>
+<p>├── .gitignore</p>
+<p>├── mix.exs              # Project definition</p>
+<p>├── mix.lock             # Dependency lock</p>
+<p>└── README.md</p>
+</code></pre></figure>
+
+<h2>The lib/ Directory - Your Application Code</h2>
+
+<p>The most important directory is <code>lib/</code>. Phoenix splits your application into two main parts:</p>
+
+<h3>lib/snippetbox/ - Core Application</h3>
+
+<p>This directory contains your business logic, independent of the web interface:</p>
+
+<figure class="code"><pre><code>lib/snippetbox/
+<p>├── application.ex       # OTP application supervisor</p>
+<p>├── repo.ex              # Database repository</p>
+<p>├── snippets/            # Snippets context</p>
+<p>│   ├── snippet.ex       # Snippet schema</p>
+<p>│   └── snippets.ex      # Snippets API</p>
+<p>└── accounts/            # Accounts context</p>
+<p>    ├── user.ex          # User schema</p>
+<p>    └── accounts.ex      # Accounts API</p>
+</code></pre></figure>
+
+<strong>Key principle</strong>: Code in <code>lib/snippetbox/</code> should NOT know about HTTP, controllers, or web concepts. It's pure business logic.
+
+<h3>lib/snippetbox_web/ - Web Interface</h3>
+
+<p>This directory contains everything web-related:</p>
+
+<figure class="code"><pre><code>lib/snippetbox_web/
+<p>├── components/          # Reusable UI components</p>
+<p>│   ├── core_components.ex</p>
+<p>│   └── layouts/</p>
+<p>│       ├── app.html.heex</p>
+<p>│       └── root.html.heex</p>
+<p>├── controllers/         # Request handlers</p>
+<p>│   ├── error_html.ex</p>
+<p>│   ├── error_json.ex</p>
+<p>│   ├── page_controller.ex</p>
+<p>│   ├── page_html.ex</p>
+<p>│   └── page_html/</p>
+<p>│       └── home.html.heex</p>
+<p>├── endpoint.ex          # HTTP entry point</p>
+<p>├── gettext.ex           # Internationalization</p>
+<p>├── router.ex            # URL routing</p>
+<p>└── telemetry.ex         # Metrics/monitoring</p>
+</code></pre></figure>
+
+<h2>Why Two Directories?</h2>
+
+<p>This separation follows the <strong>Hexagonal Architecture</strong> (also called Ports and Adapters):</p>
+
+<figure class="code"><pre><code>                    ┌─────────────────┐
+<p>                    │   Web (HTTP)    │</p>
+<p>                    │ snippetbox_web  │</p>
+<p>                    └────────┬────────┘</p>
+<p>                             │</p>
+<p>                    ┌────────▼────────┐</p>
+<p>                    │  Core Business  │</p>
+<p>                    │   snippetbox    │</p>
+<p>                    └────────┬────────┘</p>
+<p>                             │</p>
+<p>                    ┌────────▼────────┐</p>
+<p>                    │    Database     │</p>
+<p>                    │   (via Ecto)    │</p>
+<p>                    └─────────────────┘</p>
+</code></pre></figure>
+
+<p>Benefits:</p>
+<ul>
+<li><strong>Testability</strong>: Test business logic without web layer</li>
+<li><strong>Reusability</strong>: Same core can power web, CLI, API</li>
+<li><strong>Clarity</strong>: Clear boundaries between concerns</li>
+<li><strong>Maintainability</strong>: Changes in one layer don't ripple through</li>
+</ul>
+
+<h2>Understanding Contexts</h2>
+
+<p>Phoenix encourages organizing business logic into <strong>contexts</strong> - modules that group related functionality:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  @moduledoc """</p>
+<p>  The Snippets context - public API for snippet operations.</p>
+<p>  """</p>
+
+<p>  alias Snippetbox.Repo</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  def list_snippets do</p>
+<p>    Repo.all(Snippet)</p>
+<p>  end</p>
+
+<p>  def get_snippet!(id) do</p>
+<p>    Repo.get!(Snippet, id)</p>
+<p>  end</p>
+
+<p>  def create_snippet(attrs \\ %{}) do</p>
+<p>    %Snippet{}</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.insert()</p>
+<p>  end</p>
+
+<p>  def update_snippet(%Snippet{} = snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.update()</p>
+<p>  end</p>
+
+<p>  def delete_snippet(%Snippet{} = snippet) do</p>
+<p>    Repo.delete(snippet)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Contexts provide:</p>
+<ul>
+<li><strong>Encapsulation</strong>: Internal implementation hidden</li>
+<li><strong>Clear API</strong>: Well-defined public functions</li>
+<li><strong>Organization</strong>: Related code grouped together</li>
+</ul>
+
+<h3>Context vs Model</h3>
+
+<p>If you're coming from Rails/Django, contexts replace the "fat model" pattern:</p>
+
+<figure class="code"><pre><code># Rails: Fat model
+<p>class Snippet < ApplicationRecord</p>
+<p>  def self.recent</p>
+<p>    where('created_at > ?', 1.week.ago)</p>
+<p>  end</p>
+
+<p>  def publish!</p>
+<p>    update!(published: true)</p>
+<p>    NotificationMailer.published(self).deliver_later</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># Phoenix: Thin schema + context
+<h1>File: lib/snippetbox/snippets/snippet.ex</h1>
+<p>defmodule Snippetbox.Snippets.Snippet do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>File: lib/snippetbox/snippets.ex</h1>
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  def recent_snippets do</p>
+<p>    # Query logic here</p>
+<p>  end</p>
+
+<p>  def publish_snippet(snippet) do</p>
+<p>    # Business logic here</p>
+<p>    # Can call other contexts for notifications</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The config/ Directory</h2>
+
+<p>Configuration files for different environments:</p>
+
+<figure class="code"><pre><code>config/
+<p>├── config.exs      # Loaded first, shared config</p>
+<p>├── dev.exs         # Development overrides</p>
+<p>├── test.exs        # Test overrides</p>
+<p>├── prod.exs        # Production defaults</p>
+<p>└── runtime.exs     # Runtime config (env vars)</p>
+</code></pre></figure>
+
+<p>Loading order:</p>
+<ol>
+<li><code>config.exs</code> - always loaded</li>
+<li><code>dev.exs</code>/<code>test.exs</code>/<code>prod.exs</code> - based on <code>MIX_ENV</code></li>
+<li><code>runtime.exs</code> - at application start (can use env vars)</li>
+</ol>
+
+<p>Example configuration:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">import Config
+
+<p>config :snippetbox,</p>
+<p>  ecto_repos: [Snippetbox.Repo]</p>
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  url: [host: "localhost"],</p>
+<p>  secret_key_base: "..."</p>
+
+<h1>Import environment specific config</h1>
+<p>import_config "#{config_env()}.exs"</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">import Config
+
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  database: "snippetbox_dev",</p>
+<p>  hostname: "localhost",</p>
+<p>  pool_size: 10</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">import Config
+
+<p>if config_env() == :prod do</p>
+<p>  config :snippetbox, Snippetbox.Repo,</p>
+<p>    url: System.get_env("DATABASE_URL")</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    secret_key_base: System.fetch_env!("SECRET_KEY_BASE")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The priv/ Directory</h2>
+
+<p>Resources needed at runtime but not compiled:</p>
+
+<figure class="code"><pre><code>priv/
+<p>├── gettext/             # Translation files</p>
+<p>│   └── en/LC_MESSAGES/</p>
+<p>├── repo/</p>
+<p>│   ├── migrations/      # Database migrations</p>
+<p>│   │   ├── 20240101000000_create_snippets.exs</p>
+<p>│   │   └── 20240102000000_create_users.exs</p>
+<p>│   └── seeds.exs        # Seed data</p>
+<p>└── static/              # Static assets (compiled)</p>
+<p>    ├── images/</p>
+<p>    ├── assets/</p>
+<p>    └── favicon.ico</p>
+</code></pre></figure>
+
+<p>Access <code>priv/</code> files in your code:</p>
+
+<figure class="code"><pre><code># Get path to a file in priv/
+<p>path = Application.app_dir(:snippetbox, "priv/static/images/logo.png")</p>
+
+<h1>Or use :code.priv_dir</h1>
+<p>path = :code.priv_dir(:snippetbox) |> Path.join("static/images/logo.png")</p>
+</code></pre></figure>
+
+<h2>The test/ Directory</h2>
+
+<p>Test files mirror your lib/ structure:</p>
+
+<figure class="code"><pre><code>test/
+<p>├── snippetbox/                    # Core logic tests</p>
+<p>│   ├── snippets_test.exs</p>
+<p>│   └── accounts_test.exs</p>
+<p>├── snippetbox_web/                # Web tests</p>
+<p>│   ├── controllers/</p>
+<p>│   │   └── snippet_controller_test.exs</p>
+<p>│   └── live/</p>
+<p>│       └── snippet_live_test.exs</p>
+<p>├── support/                       # Test helpers</p>
+<p>│   ├── conn_case.ex</p>
+<p>│   ├── data_case.ex</p>
+<p>│   └── fixtures/</p>
+<p>│       └── snippets_fixtures.ex</p>
+<p>└── test_helper.exs                # Test configuration</p>
+</code></pre></figure>
+
+<h2>File Naming Conventions</h2>
+
+<p>Phoenix follows these naming conventions:</p>
+
+<p>| Type | Module Name | File Name |</p>
+<p>|------|-------------|-----------|</p>
+<p>| Controller | <code>SnippetController</code> | <code>snippet_controller.ex</code> |</p>
+<p>| View | <code>SnippetHTML</code> | <code>snippet_html.ex</code> |</p>
+<p>| Template | - | <code>snippet_html/show.html.heex</code> |</p>
+<p>| Schema | <code>Snippet</code> | <code>snippet.ex</code> |</p>
+<p>| Context | <code>Snippets</code> | <code>snippets.ex</code> |</p>
+<p>| Live View | <code>SnippetLive.Index</code> | <code>snippet_live/index.ex</code> |</p>
+
+<h2>Creating New Files</h2>
+
+<p>When adding features, follow this structure:</p>
+
+<strong>Adding a new context (e.g., Comments):</strong>
+
+<figure class="code"><pre><code>lib/snippetbox/
+<p>└── comments/</p>
+<p>    ├── comment.ex       # Schema</p>
+<p>    └── comments.ex      # Context API (or inline in comment.ex)</p>
+
+<h1>Or generate it:</h1>
+<p>$ mix phx.gen.context Comments Comment comments content:text snippet_id:references:snippets</p>
+</code></pre></figure>
+
+<strong>Adding a new controller:</strong>
+
+<figure class="code"><pre><code>lib/snippetbox_web/controllers/
+<p>├── comment_controller.ex</p>
+<p>├── comment_html.ex</p>
+<p>└── comment_html/</p>
+<p>    ├── index.html.heex</p>
+<p>    ├── show.html.heex</p>
+<p>    └── new.html.heex</p>
+
+<h1>Or generate it:</h1>
+<p>$ mix phx.gen.html Comments Comment comments content:text</p>
+</code></pre></figure>
+
+<h2>Understanding the Application Module</h2>
+
+<p>The application supervisor starts your app:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Application do</p>
+<p>  use Application</p>
+
+<p>  @impl true</p>
+<p>  def start(_type, _args) do</p>
+<p>    children = [</p>
+<p>      # Start the Telemetry supervisor</p>
+<p>      SnippetboxWeb.Telemetry,</p>
+<p>      # Start the Ecto repository</p>
+<p>      Snippetbox.Repo,</p>
+<p>      # Start PubSub for real-time features</p>
+<p>      {Phoenix.PubSub, name: Snippetbox.PubSub},</p>
+<p>      # Start the Endpoint (HTTP server)</p>
+<p>      SnippetboxWeb.Endpoint</p>
+<p>    ]</p>
+
+<p>    opts = [strategy: :one_for_one, name: Snippetbox.Supervisor]</p>
+<p>    Supervisor.start_link(children, opts)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Supervision Trees</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In Elixir/OTP, applications are organized as supervision trees. Each "child" is a process (lightweight thread) that the supervisor monitors:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> Application Supervisor
+<p>├── Telemetry (metrics)</p>
+<p>├── Repo (database connections)</p>
+<p>├── PubSub (message broadcasting)</p>
+<p>└── Endpoint (HTTP server)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>If a child crashes, the supervisor restarts it. This is the "let it crash" philosophy - don't try to handle every error, let processes fail and restart cleanly.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li><strong>Fault tolerance</strong>: Crashes are isolated</li>
+<li><strong>Self-healing</strong>: Failed processes restart automatically</li>
+<li><strong>Predictable</strong>: Defined restart strategies</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixir-lang.org/getting-started/mix-otp/supervisor-and-application.html">OTP Supervisors</a></li>
+<li><a href="https://hexdocs.pm/elixir/GenServer.html">GenServer</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Phoenix's project directory structure</li>
+<li>The separation between <code>lib/app/</code> (core) and <code>lib/app_web/</code> (web)</li>
+<li>How contexts organize business logic</li>
+<li>Configuration file organization</li>
+<li>File naming conventions</li>
+<li>The supervision tree structure</li>
+</ul>
+
+<p>In the next chapter, we'll explore HTML templating with EEx.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Rails</strong>:
+<figure class="code"><pre><code>app/
+<p>├── controllers/</p>
+<p>├── models/</p>
+<p>├── views/</p>
+<p>└── helpers/</p>
+</code></pre></figure>
+
+<strong>Django</strong>:
+<figure class="code"><pre><code>myapp/
+<p>├── views.py</p>
+<p>├── models.py</p>
+<p>├── urls.py</p>
+<p>└── templates/</p>
+</code></pre></figure>
+
+<strong>Laravel</strong>:
+<figure class="code"><pre><code>app/
+<p>├── Http/Controllers/</p>
+<p>├── Models/</p>
+<p>└── Providers/</p>
+</code></pre></figure>
+
+<strong>Phoenix</strong>:
+<figure class="code"><pre><code>lib/
+<p>├── myapp/           # Business logic (like models)</p>
+<p>└── myapp_web/       # Web layer (like controllers/views)</p>
+</code></pre></figure>
+
+<p>Phoenix's separation is more explicit than other frameworks, making the boundary between business logic and web interface clearer.</p>
+
+<h3>When to Create a New Context</h3>
+
+<p>Create a new context when:</p>
+<ul>
+<li>You have a new business domain (e.g., Notifications, Billing)</li>
+<li>Code is growing too large in existing context</li>
+<li>You want clear API boundaries</li>
+</ul>
+
+<p>Don't over-contextualize:</p>
+<ul>
+<li>Start with fewer, larger contexts</li>
+<li>Split when natural boundaries emerge</li>
+<li>One-entity contexts are usually too granular</li>
+</ul>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.05-url-query-strings.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.07-html-templating.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

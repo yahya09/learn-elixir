@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Transactions &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Transactions</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.07-associations.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.09-database-best-practices.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.8</div>
+        <h1>Chapter 4.8: Transactions and Ecto.Multi</h1>
+
+<p>When multiple database operations must succeed or fail together, you need transactions. In this chapter, we'll learn how to use transactions and the powerful Ecto.Multi module.</p>
+
+<h2>Why Transactions?</h2>
+
+<p>Consider creating a snippet with tags:</p>
+
+<figure class="code"><pre><code># Without transaction - DANGEROUS
+<p>{:ok, snippet} = Repo.insert(snippet_changeset)</p>
+<p>{:ok, _} = Repo.insert_all(:snippet_tags, tag_entries)  # What if this fails?</p>
+</code></pre></figure>
+
+<p>If the second operation fails, you have a snippet without tags - inconsistent data.</p>
+
+<h2>Basic Transactions</h2>
+
+<h3>Repo.transaction/1</h3>
+
+<figure class="code"><pre><code>Repo.transaction(fn ->
+<p>  {:ok, snippet} = Repo.insert(snippet_changeset)</p>
+<p>  {:ok, _} = create_tags(snippet, tags)</p>
+<p>  snippet</p>
+<p>end)</p>
+<h1>Returns {:ok, snippet} or {:error, reason}</h1>
+</code></pre></figure>
+
+<h3>Handling Errors</h3>
+
+<figure class="code"><pre><code>Repo.transaction(fn ->
+<p>  case Repo.insert(snippet_changeset) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      case create_tags(snippet, tags) do</p>
+<p>        {:ok, _} -> snippet</p>
+<p>        {:error, reason} -> Repo.rollback(reason)</p>
+<p>      end</p>
+
+<p>    {:error, changeset} -></p>
+<p>      Repo.rollback(changeset)</p>
+<p>  end</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h3>Raising in Transactions</h3>
+
+<figure class="code"><pre><code>Repo.transaction(fn ->
+<p>  # Using bang functions - raises on failure, causing rollback</p>
+<p>  snippet = Repo.insert!(snippet_changeset)</p>
+<p>  Repo.insert_all!(SnippetTag, tag_entries)</p>
+<p>  snippet</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h2>Ecto.Multi</h2>
+
+<p>Ecto.Multi provides a cleaner way to compose transactions:</p>
+
+<h3>Basic Multi</h3>
+
+<figure class="code"><pre><code>alias Ecto.Multi
+
+<p>def create_snippet_with_tags(attrs, tag_names) do</p>
+<p>  Multi.new()</p>
+<p>  |> Multi.insert(:snippet, Snippet.changeset(%Snippet{}, attrs))</p>
+<p>  |> Multi.run(:tags, fn repo, %{snippet: snippet} -></p>
+<p>    create_tags(repo, snippet, tag_names)</p>
+<p>  end)</p>
+<p>  |> Repo.transaction()</p>
+<p>end</p>
+
+<p>defp create_tags(repo, snippet, tag_names) do</p>
+<p>  now = DateTime.utc_now()</p>
+<p>  entries = Enum.map(tag_names, fn name -></p>
+<p>    %{snippet_id: snippet.id, tag: name, inserted_at: now, updated_at: now}</p>
+<p>  end)</p>
+
+<p>  case repo.insert_all(SnippetTag, entries) do</p>
+<p>    {count, _} when count > 0 -> {:ok, count}</p>
+<p>    _ -> {:error, :no_tags_created}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Multi Operations</h3>
+
+<figure class="code"><pre><code>Multi.new()
+<h1>Insert</h1>
+<p>|> Multi.insert(:user, User.changeset(%User{}, attrs))</p>
+
+<h1>Update</h1>
+<p>|> Multi.update(:profile, fn %{user: user} -></p>
+<p>  Profile.changeset(user.profile, profile_attrs)</p>
+<p>end)</p>
+
+<h1>Delete</h1>
+<p>|> Multi.delete(:old_profile, old_profile)</p>
+
+<h1>Insert all</h1>
+<p>|> Multi.insert_all(:logs, AuditLog, log_entries)</p>
+
+<h1>Update all</h1>
+<p>|> Multi.update_all(:reset, from(s in Session, where: s.user_id == ^user_id),</p>
+<p>  set: [active: false])</p>
+
+<h1>Delete all</h1>
+<p>|> Multi.delete_all(:cleanup, from(t in Token, where: t.expires_at < ^now))</p>
+
+<h1>Run arbitrary function</h1>
+<p>|> Multi.run(:notify, fn _repo, %{user: user} -></p>
+<p>  send_welcome_email(user)</p>
+<p>  {:ok, :notified}</p>
+<p>end)</p>
+
+<h1>Execute transaction</h1>
+<p>|> Repo.transaction()</p>
+</code></pre></figure>
+
+<h3>Accessing Previous Results</h3>
+
+<p>Each step can access results from previous steps:</p>
+
+<figure class="code"><pre><code>Multi.new()
+<p>|> Multi.insert(:user, user_changeset)</p>
+<p>|> Multi.insert(:profile, fn %{user: user} -></p>
+<p>  # Access user from previous step</p>
+<p>  %Profile{}</p>
+<p>  |> Profile.changeset(%{user_id: user.id, bio: "New user"})</p>
+<p>end)</p>
+<p>|> Multi.run(:welcome_email, fn _repo, %{user: user} -></p>
+<p>  # Access user in run function</p>
+<p>  Mailer.send_welcome(user)</p>
+<p>  {:ok, :sent}</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h3>Multi.merge</h3>
+
+<p>Combine multiple Multis:</p>
+
+<figure class="code"><pre><code>def register_user(attrs) do
+<p>  Multi.new()</p>
+<p>  |> Multi.insert(:user, User.registration_changeset(%User{}, attrs))</p>
+<p>  |> Multi.merge(&create_default_settings/1)</p>
+<p>  |> Multi.merge(&send_welcome_email/1)</p>
+<p>  |> Repo.transaction()</p>
+<p>end</p>
+
+<p>defp create_default_settings(%{user: user}) do</p>
+<p>  Multi.new()</p>
+<p>  |> Multi.insert(:settings, %Settings{user_id: user.id, theme: "light"})</p>
+<p>end</p>
+
+<p>defp send_welcome_email(%{user: user}) do</p>
+<p>  Multi.new()</p>
+<p>  |> Multi.run(:email, fn _, _ -></p>
+<p>    Mailer.welcome(user)</p>
+<p>    {:ok, :sent}</p>
+<p>  end)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Conditional Operations</h3>
+
+<figure class="code"><pre><code>def create_snippet(attrs, opts \\ []) do
+<p>  multi = Multi.new()</p>
+<p>  |> Multi.insert(:snippet, Snippet.changeset(%Snippet{}, attrs))</p>
+
+<p>  multi = if opts[:notify] do</p>
+<p>    Multi.run(multi, :notification, fn _, %{snippet: snippet} -></p>
+<p>      notify_followers(snippet)</p>
+<p>    end)</p>
+<p>  else</p>
+<p>    multi</p>
+<p>  end</p>
+
+<p>  Repo.transaction(multi)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Error Handling with Multi</h3>
+
+<figure class="code"><pre><code>case Repo.transaction(multi) do
+<p>  {:ok, %{user: user, profile: profile}} -></p>
+<p>    # All operations succeeded</p>
+<p>    {:ok, user}</p>
+
+<p>  {:error, :user, changeset, _changes_so_far} -></p>
+<p>    # User insert failed</p>
+<p>    {:error, changeset}</p>
+
+<p>  {:error, :profile, changeset, %{user: user}} -></p>
+<p>    # Profile failed, but user was created (then rolled back)</p>
+<p>    {:error, changeset}</p>
+
+<p>  {:error, :email, reason, _} -></p>
+<p>    # Email sending failed</p>
+<p>    {:error, reason}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Real-World Examples</h2>
+
+<h3>Transfer Money</h3>
+
+<figure class="code"><pre><code>def transfer(from_account_id, to_account_id, amount) do
+<p>  Multi.new()</p>
+<p>  |> Multi.run(:from_account, fn repo, _ -></p>
+<p>    case repo.get(Account, from_account_id) do</p>
+<p>      nil -> {:error, :from_account_not_found}</p>
+<p>      account -> {:ok, account}</p>
+<p>    end</p>
+<p>  end)</p>
+<p>  |> Multi.run(:to_account, fn repo, _ -></p>
+<p>    case repo.get(Account, to_account_id) do</p>
+<p>      nil -> {:error, :to_account_not_found}</p>
+<p>      account -> {:ok, account}</p>
+<p>    end</p>
+<p>  end)</p>
+<p>  |> Multi.run(:check_balance, fn _, %{from_account: from} -></p>
+<p>    if from.balance >= amount do</p>
+<p>      {:ok, :sufficient}</p>
+<p>    else</p>
+<p>      {:error, :insufficient_funds}</p>
+<p>    end</p>
+<p>  end)</p>
+<p>  |> Multi.update(:debit, fn %{from_account: from} -></p>
+<p>    Account.changeset(from, %{balance: from.balance - amount})</p>
+<p>  end)</p>
+<p>  |> Multi.update(:credit, fn %{to_account: to} -></p>
+<p>    Account.changeset(to, %{balance: to.balance + amount})</p>
+<p>  end)</p>
+<p>  |> Multi.insert(:transaction_log, fn %{from_account: from, to_account: to} -></p>
+<p>    TransactionLog.changeset(%TransactionLog{}, %{</p>
+<p>      from_id: from.id,</p>
+<p>      to_id: to.id,</p>
+<p>      amount: amount</p>
+<p>    })</p>
+<p>  end)</p>
+<p>  |> Repo.transaction()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>User Registration</h3>
+
+<figure class="code"><pre><code>def register_user(attrs) do
+<p>  Multi.new()</p>
+<p>  |> Multi.insert(:user, User.registration_changeset(%User{}, attrs))</p>
+<p>  |> Multi.insert(:profile, fn %{user: user} -></p>
+<p>    Profile.changeset(%Profile{}, %{user_id: user.id})</p>
+<p>  end)</p>
+<p>  |> Multi.insert(:settings, fn %{user: user} -></p>
+<p>    Settings.changeset(%Settings{}, %{user_id: user.id})</p>
+<p>  end)</p>
+<p>  |> Multi.run(:verification_token, fn repo, %{user: user} -></p>
+<p>    token = generate_token()</p>
+<p>    case repo.insert(%VerificationToken{user_id: user.id, token: token}) do</p>
+<p>      {:ok, _} -> {:ok, token}</p>
+<p>      error -> error</p>
+<p>    end</p>
+<p>  end)</p>
+<p>  |> Multi.run(:send_email, fn _, %{user: user, verification_token: token} -></p>
+<p>    case Mailer.send_verification(user.email, token) do</p>
+<p>      :ok -> {:ok, :sent}</p>
+<p>      error -> {:error, error}</p>
+<p>    end</p>
+<p>  end)</p>
+<p>  |> Repo.transaction()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Bulk Import</h3>
+
+<figure class="code"><pre><code>def import_snippets(user, snippets_data) do
+<p>  now = DateTime.utc_now()</p>
+
+<p>  entries = Enum.map(snippets_data, fn data -></p>
+<p>    %{</p>
+<p>      title: data["title"],</p>
+<p>      content: data["content"],</p>
+<p>      user_id: user.id,</p>
+<p>      inserted_at: now,</p>
+<p>      updated_at: now</p>
+<p>    }</p>
+<p>  end)</p>
+
+<p>  Multi.new()</p>
+<p>  |> Multi.insert_all(:snippets, Snippet, entries, returning: [:id])</p>
+<p>  |> Multi.run(:audit, fn repo, %{snippets: {count, snippets}} -></p>
+<p>    audit_entry = %{</p>
+<p>      user_id: user.id,</p>
+<p>      action: "bulk_import",</p>
+<p>      count: count,</p>
+<p>      snippet_ids: Enum.map(snippets, & &1.id),</p>
+<p>      inserted_at: now</p>
+<p>    }</p>
+<p>    repo.insert(AuditLog.changeset(%AuditLog{}, audit_entry))</p>
+<p>  end)</p>
+<p>  |> Repo.transaction()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Transaction Isolation</h2>
+
+<h3>Isolation Levels</h3>
+
+<figure class="code"><pre><code># Read committed (default)
+<p>Repo.transaction(fn -> ... end)</p>
+
+<h1>Serializable (strictest)</h1>
+<p>Repo.transaction(fn -> ... end, isolation: :serializable)</p>
+
+<h1>Repeatable read</h1>
+<p>Repo.transaction(fn -> ... end, isolation: :repeatable_read)</p>
+</code></pre></figure>
+
+<h3>Locking</h3>
+
+<figure class="code"><pre><code># Pessimistic locking
+<p>from(a in Account, where: a.id == ^id, lock: "FOR UPDATE")</p>
+<p>|> Repo.one()</p>
+
+<h1>In transaction</h1>
+<p>Repo.transaction(fn -></p>
+<p>  account = Repo.one!(from a in Account, where: a.id == ^id, lock: "FOR UPDATE")</p>
+<p>  # Account is locked until transaction completes</p>
+<p>  Repo.update!(Account.changeset(account, %{balance: account.balance - 100}))</p>
+<p>end)</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Multi as Data Structure</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Ecto.Multi is a data structure that describes operations:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> multi = Multi.new()
+<p>|> Multi.insert(:user, changeset)</p>
+<p>|> Multi.insert(:profile, profile_changeset)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># multi is just data, nothing executed yet</p>
+<p># Inspect it:</p>
+<p>IO.inspect(multi.operations)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Execute when ready:</p>
+<p>Repo.transaction(multi)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li><strong>Composable</strong>: Combine Multis with merge</li>
+<li><strong>Testable</strong>: Inspect operations without executing</li>
+<li><strong>Declarative</strong>: Describe what, not how</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Multi.html">Ecto.Multi</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Basic transactions with <code>Repo.transaction/1</code></li>
+<li>Ecto.Multi for composing complex transactions</li>
+<li>Multi operations (insert, update, delete, run)</li>
+<li>Accessing results from previous steps</li>
+<li>Error handling in transactions</li>
+<li>Real-world transaction patterns</li>
+<li>Isolation levels and locking</li>
+</ul>
+
+<p>In the next chapter, we'll cover database best practices and optimization.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Transaction Timeouts</h3>
+
+<figure class="code"><pre><code># Default timeout is 15 seconds
+<p>Repo.transaction(fn -> ... end, timeout: 30_000)</p>
+</code></pre></figure>
+
+<h3>Nested Transactions</h3>
+
+<p>Ecto doesn't support true nested transactions. Inner transactions become savepoints:</p>
+
+<figure class="code"><pre><code>Repo.transaction(fn ->
+<p>  # Outer transaction</p>
+<p>  Repo.transaction(fn -></p>
+<p>    # This is a savepoint, not a separate transaction</p>
+<p>  end)</p>
+<p>end)</p>
+</code></pre></figure>
+
+<h3>Testing Transactions</h3>
+
+<figure class="code"><pre><code># In test
+<p>test "transfer rolls back on insufficient funds" do</p>
+<p>  {:error, :insufficient_funds} = Accounts.transfer(from.id, to.id, 1_000_000)</p>
+
+<p>  # Verify no changes</p>
+<p>  assert Repo.get!(Account, from.id).balance == original_balance</p>
+<p>end</p>
+</code></pre></figure>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.07-associations.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.09-database-best-practices.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Components &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Components</span>
+            </div>
+            <div>
+                &lsaquo; <a href="05.03-iterating-collections.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="05.05-layouts.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 5.4</div>
+        <h1>Chapter 5.4: Phoenix Components</h1>
+
+<p>Phoenix components are reusable UI building blocks. In this chapter, we'll learn how to create and use function components to build a consistent, maintainable UI.</p>
+
+<h2>What Are Components?</h2>
+
+<p>Components are functions that return HEEx markup:</p>
+
+<figure class="code"><pre><code>def button(assigns) do
+<p>  ~H"""</p>
+<p>  <button class="btn"><%= @text %></button></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Use them in templates:</p>
+
+<figure class="code"><pre><code><.button text="Click me" />
+</code></pre></figure>
+
+<h2>Creating Components</h2>
+
+<h3>In Core Components</h3>
+
+<p>Phoenix provides a <code>core_components.ex</code> file:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/core_components.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.CoreComponents do</p>
+<p>  use Phoenix.Component</p>
+
+<p>  # Simple button component</p>
+<p>  attr :type, :string, default: "button"</p>
+<p>  attr :class, :string, default: ""</p>
+<p>  slot :inner_block, required: true</p>
+
+<p>  def button(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <button type={@type} class={["btn", @class]}></p>
+<p>      <%= render_slot(@inner_block) %></p>
+<p>    </button></p>
+<p>    """</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Component Attributes</h3>
+
+<p>Define expected attributes with <code>attr</code>:</p>
+
+<figure class="code"><pre><code>attr :id, :string, required: true
+<p>attr :name, :string, required: true</p>
+<p>attr :value, :string, default: ""</p>
+<p>attr :type, :string, default: "text"</p>
+<p>attr :placeholder, :string, default: nil</p>
+<p>attr :class, :string, default: ""</p>
+<p>attr :rest, :global</p>
+
+<p>def input(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <input</p>
+<p>    type={@type}</p>
+<p>    id={@id}</p>
+<p>    name={@name}</p>
+<p>    value={@value}</p>
+<p>    placeholder={@placeholder}</p>
+<p>    class={["form-input", @class]}</p>
+<p>    {@rest}</p>
+<p>  /></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Slots</h3>
+
+<p>Slots allow passing content into components:</p>
+
+<figure class="code"><pre><code>slot :inner_block, required: true
+<p>slot :icon</p>
+<p>slot :actions</p>
+
+<p>def card(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div class="card"></p>
+<p>    <%= if @icon do %></p>
+<p>      <div class="card-icon"></p>
+<p>        <%= render_slot(@icon) %></p>
+<p>      </div></p>
+<p>    <% end %></p>
+
+<p>    <div class="card-content"></p>
+<p>      <%= render_slot(@inner_block) %></p>
+<p>    </div></p>
+
+<p>    <%= if @actions do %></p>
+<p>      <div class="card-actions"></p>
+<p>        <%= render_slot(@actions) %></p>
+<p>      </div></p>
+<p>    <% end %></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code><.card>
+<p>  <:icon>📝</:icon></p>
+<p>  <h3>Card Title</h3></p>
+<p>  <p>Card content goes here.</p></p>
+<p>  <:actions></p>
+<p>    <.button>Save</.button></p>
+<p>  </:actions></p>
+</.card>
+</code></pre></figure>
+
+<h2>Common Component Patterns</h2>
+
+<h3>Button Component</h3>
+
+<figure class="code"><pre><code>attr :type, :string, default: "button"
+<p>attr :variant, :string, default: "primary", values: ~w(primary secondary danger outline)</p>
+<p>attr :size, :string, default: "md", values: ~w(sm md lg)</p>
+<p>attr :disabled, :boolean, default: false</p>
+<p>attr :class, :string, default: ""</p>
+<p>attr :rest, :global</p>
+
+<p>slot :inner_block, required: true</p>
+
+<p>def button(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <button</p>
+<p>    type={@type}</p>
+<p>    disabled={@disabled}</p>
+<p>    class={[</p>
+<p>      "btn",</p>
+<p>      "btn-#{@variant}",</p>
+<p>      "btn-#{@size}",</p>
+<p>      @disabled && "btn-disabled",</p>
+<p>      @class</p>
+<p>    ]}</p>
+<p>    {@rest}</p>
+<p>  ></p>
+<p>    <%= render_slot(@inner_block) %></p>
+<p>  </button></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Badge Component</h3>
+
+<figure class="code"><pre><code>attr :variant, :string, default: "default", values: ~w(default success warning danger info)
+<p>attr :size, :string, default: "md"</p>
+<p>slot :inner_block, required: true</p>
+
+<p>def badge(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <span class={["badge", "badge-#{@variant}", "badge-#{@size}"]}></p>
+<p>    <%= render_slot(@inner_block) %></p>
+<p>  </span></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Alert Component</h3>
+
+<figure class="code"><pre><code>attr :type, :string, default: "info", values: ~w(info success warning error)
+<p>attr :dismissible, :boolean, default: false</p>
+<p>slot :inner_block, required: true</p>
+
+<p>def alert(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div class={["alert", "alert-#{@type}"]} role="alert"></p>
+<p>    <div class="alert-content"></p>
+<p>      <%= render_slot(@inner_block) %></p>
+<p>    </div></p>
+<p>    <%= if @dismissible do %></p>
+<p>      <button type="button" class="alert-dismiss" aria-label="Dismiss"></p>
+<p>        &times;</p>
+<p>      </button></p>
+<p>    <% end %></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Form Input Component</h3>
+
+<figure class="code"><pre><code>attr :field, Phoenix.HTML.FormField, required: true
+<p>attr :type, :string, default: "text"</p>
+<p>attr :label, :string, default: nil</p>
+<p>attr :class, :string, default: ""</p>
+<p>attr :rest, :global</p>
+
+<p>def form_input(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div class="form-group"></p>
+<p>    <%= if @label do %></p>
+<p>      <label for={@field.id} class="form-label"><%= @label %></label></p>
+<p>    <% end %></p>
+
+<p>    <input</p>
+<p>      type={@type}</p>
+<p>      id={@field.id}</p>
+<p>      name={@field.name}</p>
+<p>      value={@field.value}</p>
+<p>      class={["form-control", @field.errors != [] && "is-invalid", @class]}</p>
+<p>      {@rest}</p>
+<p>    /></p>
+
+<p>    <%= for error <- @field.errors do %></p>
+<p>      <span class="invalid-feedback"><%= translate_error(error) %></span></p>
+<p>    <% end %></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Modal Component</h3>
+
+<figure class="code"><pre><code>attr :id, :string, required: true
+<p>attr :show, :boolean, default: false</p>
+<p>attr :on_cancel, JS, default: %JS{}</p>
+<p>slot :inner_block, required: true</p>
+
+<p>def modal(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div</p>
+<p>    id={@id}</p>
+<p>    class={["modal", @show && "modal-open"]}</p>
+<p>    phx-mounted={@show && show_modal(@id)}</p>
+<p>  ></p>
+<p>    <div class="modal-backdrop" phx-click={@on_cancel}></div></p>
+<p>    <div class="modal-content"></p>
+<p>      <button class="modal-close" phx-click={@on_cancel}>&times;</button></p>
+<p>      <%= render_slot(@inner_block) %></p>
+<p>    </div></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Snippet-Specific Components</h2>
+
+<h3>Snippet Card</h3>
+
+<figure class="code"><pre><code>attr :snippet, :map, required: true
+<p>attr :show_author, :boolean, default: false</p>
+
+<p>def snippet_card(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <article class="snippet-card"></p>
+<p>    <header></p>
+<p>      <h3></p>
+<p>        <.link href={~p"/snippets/#{@snippet}"}></p>
+<p>          <%= @snippet.title %></p>
+<p>        </.link></p>
+<p>      </h3></p>
+<p>      <.badge variant={language_variant(@snippet.language)}></p>
+<p>        <%= @snippet.language %></p>
+<p>      </.badge></p>
+<p>    </header></p>
+
+<p>    <div class="snippet-preview"></p>
+<p>      <pre><code><%= truncate(@snippet.content, 150) %></code></pre></p>
+<p>    </div></p>
+
+<p>    <footer></p>
+<p>      <span class="time"><%= time_ago(@snippet.inserted_at) %></span></p>
+<p>      <%= if @show_author && @snippet.user do %></p>
+<p>        <span class="author">by <%= @snippet.user.name %></span></p>
+<p>      <% end %></p>
+<p>    </footer></p>
+<p>  </article></p>
+<p>  """</p>
+<p>end</p>
+
+<p>defp language_variant("elixir"), do: "info"</p>
+<p>defp language_variant("ruby"), do: "danger"</p>
+<p>defp language_variant("python"), do: "warning"</p>
+<p>defp language_variant("javascript"), do: "success"</p>
+<p>defp language_variant(_), do: "default"</p>
+</code></pre></figure>
+
+<h3>Snippet List</h3>
+
+<figure class="code"><pre><code>attr :snippets, :list, required: true
+<p>attr :empty_message, :string, default: "No snippets found"</p>
+
+<p>def snippet_list(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <%= if Enum.empty?(@snippets) do %></p>
+<p>    <div class="empty-state"></p>
+<p>      <p><%= @empty_message %></p></p>
+<p>    </div></p>
+<p>  <% else %></p>
+<p>    <div class="snippet-list"></p>
+<p>      <%= for snippet <- @snippets do %></p>
+<p>        <.snippet_card snippet={snippet} /></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>  <% end %></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Code Block</h3>
+
+<figure class="code"><pre><code>attr :code, :string, required: true
+<p>attr :language, :string, default: "text"</p>
+<p>attr :show_line_numbers, :boolean, default: true</p>
+
+<p>def code_block(assigns) do</p>
+<p>  lines = String.split(assigns.code, "\n")</p>
+<p>  assigns = assign(assigns, :lines, lines)</p>
+
+<p>  ~H"""</p>
+<p>  <div class="code-block"></p>
+<p>    <div class="code-header"></p>
+<p>      <span class="language"><%= @language %></span></p>
+<p>      <button class="copy-btn" data-code={@code}>Copy</button></p>
+<p>    </div></p>
+<p>    <pre><code class={"language-#{@language}"}><%= if @show_line_numbers do %><%= for {line, num} <- Enum.with_index(@lines, 1) do %><span class="line-number"><%= num %></span><%= line %></p>
+<% end %><% else %><%= @code %><% end %></code></pre>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Using Components</h2>
+
+<h3>Import in Templates</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web.ex</figcaption><pre><code class="language-elixir">
+<p>defp html_helpers do</p>
+<p>  quote do</p>
+<p>    import SnippetboxWeb.CoreComponents</p>
+<p>    import SnippetboxWeb.SnippetComponents  # Custom components</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>In Templates</h3>
+
+<figure class="code"><pre><code><.snippet_list snippets={@snippets} empty_message="Create your first snippet!" />
+
+<.code_block code={@snippet.content} language={@snippet.language} />
+
+<.button variant="primary" type="submit">
+<p>  Save Snippet</p>
+</.button>
+
+<.alert type="success" dismissible>
+<p>  Snippet saved successfully!</p>
+</.alert>
+</code></pre></figure>
+
+<h2>Component Documentation</h2>
+
+<figure class="code"><pre><code>@doc """
+<p>Renders a button component.</p>
+
+<h2>Examples</h2>
+
+<p>    <.button>Click me</.button></p>
+<p>    <.button variant="danger">Delete</.button></p>
+<p>    <.button type="submit" disabled={@submitting}></p>
+<p>      Save</p>
+<p>    </.button></p>
+
+<h2>Attributes</h2>
+
+<ul>
+<li><code>type</code> - Button type (default: "button")</li>
+<li><code>variant</code> - Visual style: primary, secondary, danger, outline</li>
+<li><code>size</code> - Size: sm, md, lg</li>
+<li><code>disabled</code> - Whether button is disabled</li>
+</ul>
+
+<h2>Slots</h2>
+
+<ul>
+<li><code>inner_block</code> - Button content (required)</li>
+</ul>
+<p>"""</p>
+<p>attr :type, :string, default: "button"</p>
+<h1>...</h1>
+<p>def button(assigns) do</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Components as Pure Functions</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Components are pure functions:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> def button(assigns) → HEEx
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Given the same assigns, they always return the same markup. This makes them:</p>
+<ul>
+<li><strong>Predictable</strong>: Same input = same output</li>
+<li><strong>Testable</strong>: Pass assigns, verify output</li>
+<li><strong>Composable</strong>: Build complex UIs from simple parts</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix_live_view/Phoenix.Component.html">Phoenix.Component</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating function components</li>
+<li>Defining attributes with <code>attr</code></li>
+<li>Using slots for content injection</li>
+<li>Building common UI components</li>
+<li>Domain-specific components</li>
+<li>Documenting components</li>
+</ul>
+
+<p>In the next chapter, we'll explore layouts and page structure.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="05.03-iterating-collections.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="05.05-layouts.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

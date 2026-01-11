@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Creating Custom Plugs &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Creating Custom Plugs</span>
+            </div>
+            <div>
+                &lsaquo; <a href="06.02-phoenix-pipelines.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="06.04-common-plug-patterns.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 6.3</div>
+        <h1>Chapter 6.3: Creating Custom Plugs</h1>
+
+<p>Custom plugs let you implement reusable request processing logic. In this chapter, we'll create both function and module plugs for common scenarios.</p>
+
+<h2>Function Plugs</h2>
+
+<p>Simple plugs can be functions:</p>
+
+<figure class="code"><pre><code># In router or controller
+<p>plug :my_plug</p>
+
+<p>def my_plug(conn, _opts) do</p>
+<p>  # Transform conn</p>
+<p>  conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>When to Use Function Plugs</h3>
+
+<ul>
+<li>Simple transformations</li>
+<li>Controller-specific logic</li>
+<li>No configuration needed</li>
+<li>Quick implementations</li>
+</ul>
+
+<h2>Module Plugs</h2>
+
+<p>For more complex plugs, use a module:</p>
+
+<figure class="code"><pre><code>defmodule MyPlug do
+<p>  @behaviour Plug</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    # Called at compile time</p>
+<p>    opts</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, opts) do</p>
+<p>    # Called at runtime</p>
+<p>    conn</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>When to Use Module Plugs</h3>
+
+<ul>
+<li>Reusable across multiple routers/controllers</li>
+<li>Configuration options needed</li>
+<li>Complex logic</li>
+<li>State or caching required</li>
+</ul>
+
+<h2>Creating Plugs: Examples</h2>
+
+<h3>Request Logger</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/request_logger.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RequestLogger do</p>
+<p>  @behaviour Plug</p>
+<p>  require Logger</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    level = Keyword.get(opts, :level, :info)</p>
+<p>    %{level: level}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, %{level: level}) do</p>
+<p>    start = System.monotonic_time()</p>
+
+<p>    Plug.Conn.register_before_send(conn, fn conn -></p>
+<p>      stop = System.monotonic_time()</p>
+<p>      diff = System.convert_time_unit(stop - start, :native, :millisecond)</p>
+
+<p>      Logger.log(level, fn -></p>
+<p>        "#{conn.method} #{conn.request_path} - #{conn.status} in #{diff}ms"</p>
+<p>      end)</p>
+
+<p>      conn</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code>plug SnippetboxWeb.Plugs.RequestLogger, level: :debug
+</code></pre></figure>
+
+<h3>Locale Plug</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/locale.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.Locale do</p>
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+
+<p>  @locales ~w(en es fr de ja)</p>
+<p>  @default_locale "en"</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    Keyword.get(opts, :default, @default_locale)</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, default) do</p>
+<p>    locale = fetch_locale(conn, default)</p>
+<p>    Gettext.put_locale(SnippetboxWeb.Gettext, locale)</p>
+<p>    assign(conn, :locale, locale)</p>
+<p>  end</p>
+
+<p>  defp fetch_locale(conn, default) do</p>
+<p>    # Check query param first</p>
+<p>    conn.params["locale"]</p>
+<p>    # Then session</p>
+<p>    |> check_or(&get_session(conn, :locale))</p>
+<p>    # Then Accept-Language header</p>
+<p>    |> check_or(&parse_accept_language(conn))</p>
+<p>    # Default</p>
+<p>    |> check_or(fn -> default end)</p>
+<p>    # Validate</p>
+<p>    |> validate_locale(default)</p>
+<p>  end</p>
+
+<p>  defp check_or(nil, func), do: func.()</p>
+<p>  defp check_or(value, _), do: value</p>
+
+<p>  defp parse_accept_language(conn) do</p>
+<p>    case get_req_header(conn, "accept-language") do</p>
+<p>      [header | _] -> header |> String.split(",") |> hd() |> String.slice(0, 2)</p>
+<p>      _ -> nil</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp validate_locale(locale, default) do</p>
+<p>    if locale in @locales, do: locale, else: default</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>CORS Plug</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/cors.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.CORS do</p>
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    %{</p>
+<p>      origins: Keyword.get(opts, :origins, ["*"]),</p>
+<p>      methods: Keyword.get(opts, :methods, ["GET", "POST", "PUT", "DELETE"]),</p>
+<p>      headers: Keyword.get(opts, :headers, ["content-type", "authorization"])</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, opts) do</p>
+<p>    origin = get_origin(conn)</p>
+
+<p>    if allowed_origin?(origin, opts.origins) do</p>
+<p>      conn</p>
+<p>      |> put_resp_header("access-control-allow-origin", origin)</p>
+<p>      |> put_resp_header("access-control-allow-methods", Enum.join(opts.methods, ", "))</p>
+<p>      |> put_resp_header("access-control-allow-headers", Enum.join(opts.headers, ", "))</p>
+<p>      |> handle_preflight()</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp get_origin(conn) do</p>
+<p>    case get_req_header(conn, "origin") do</p>
+<p>      [origin | _] -> origin</p>
+<p>      _ -> "*"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp allowed_origin?(origin, ["*"]), do: true</p>
+<p>  defp allowed_origin?(origin, origins), do: origin in origins</p>
+
+<p>  defp handle_preflight(%{method: "OPTIONS"} = conn) do</p>
+<p>    conn</p>
+<p>    |> put_resp_header("access-control-max-age", "86400")</p>
+<p>    |> send_resp(204, "")</p>
+<p>    |> halt()</p>
+<p>  end</p>
+
+<p>  defp handle_preflight(conn), do: conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Rate Limiter Plug</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/rate_limiter.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RateLimiter do</p>
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    %{</p>
+<p>      max_requests: Keyword.get(opts, :max_requests, 100),</p>
+<p>      window_ms: Keyword.get(opts, :window_ms, 60_000),</p>
+<p>      by: Keyword.get(opts, :by, :ip)</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, opts) do</p>
+<p>    key = rate_limit_key(conn, opts.by)</p>
+
+<p>    case check_rate_limit(key, opts.max_requests, opts.window_ms) do</p>
+<p>      {:ok, count} -></p>
+<p>        conn</p>
+<p>        |> put_resp_header("x-ratelimit-limit", to_string(opts.max_requests))</p>
+<p>        |> put_resp_header("x-ratelimit-remaining", to_string(opts.max_requests - count))</p>
+
+<p>      {:error, :rate_limited} -></p>
+<p>        conn</p>
+<p>        |> put_status(:too_many_requests)</p>
+<p>        |> put_resp_header("retry-after", to_string(div(opts.window_ms, 1000)))</p>
+<p>        |> json(%{error: "Rate limit exceeded"})</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp rate_limit_key(conn, :ip), do: "rate_limit:#{:inet.ntoa(conn.remote_ip)}"</p>
+<p>  defp rate_limit_key(conn, :user) do</p>
+<p>    user_id = conn.assigns[:current_user]&.id || "anon"</p>
+<p>    "rate_limit:user:#{user_id}"</p>
+<p>  end</p>
+
+<p>  defp check_rate_limit(key, max_requests, window_ms) do</p>
+<p>    # Simple in-memory implementation (use Redis in production)</p>
+<p>    count = :ets.update_counter(:rate_limits, key, {2, 1}, {key, 0, now()})</p>
+
+<p>    if count > max_requests do</p>
+<p>      {:error, :rate_limited}</p>
+<p>    else</p>
+<p>      {:ok, count}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp now, do: System.system_time(:millisecond)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Maintenance Mode Plug</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/maintenance.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.Maintenance do</p>
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    %{</p>
+<p>      enabled: Keyword.get(opts, :enabled, false),</p>
+<p>      allowed_ips: Keyword.get(opts, :allowed_ips, []),</p>
+<p>      message: Keyword.get(opts, :message, "We're performing maintenance. Please try again later.")</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, %{enabled: false}), do: conn</p>
+
+<p>  def call(conn, opts) do</p>
+<p>    if allowed?(conn, opts) do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_status(:service_unavailable)</p>
+<p>      |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>      |> render("503.html", message: opts.message)</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp allowed?(conn, %{allowed_ips: ips}) do</p>
+<p>    ip = to_string(:inet.ntoa(conn.remote_ip))</p>
+<p>    ip in ips</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Response Timer Header</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/response_time.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.ResponseTime do</p>
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+
+<p>  @impl true</p>
+<p>  def init(opts), do: Keyword.get(opts, :header, "x-response-time")</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, header) do</p>
+<p>    start = System.monotonic_time()</p>
+
+<p>    register_before_send(conn, fn conn -></p>
+<p>      stop = System.monotonic_time()</p>
+<p>      diff = System.convert_time_unit(stop - start, :native, :millisecond)</p>
+<p>      put_resp_header(conn, header, "#{diff}ms")</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Controller Plugs</h2>
+
+<p>Add plugs to specific controllers:</p>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetController do
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  # Run for all actions</p>
+<p>  plug :set_snippet when action in [:show, :edit, :update, :delete]</p>
+
+<p>  # Run before specific actions</p>
+<p>  plug :require_owner when action in [:edit, :update, :delete]</p>
+
+<p>  def show(conn, _params) do</p>
+<p>    # @snippet already set by plug</p>
+<p>    render(conn, :show, snippet: conn.assigns.snippet)</p>
+<p>  end</p>
+
+<p>  def edit(conn, _params) do</p>
+<p>    changeset = Snippets.change_snippet(conn.assigns.snippet)</p>
+<p>    render(conn, :edit, changeset: changeset)</p>
+<p>  end</p>
+
+<p>  # Plug implementations</p>
+<p>  defp set_snippet(conn, _opts) do</p>
+<p>    snippet = Snippets.get_snippet!(conn.params["id"])</p>
+<p>    assign(conn, :snippet, snippet)</p>
+<p>  end</p>
+
+<p>  defp require_owner(conn, _opts) do</p>
+<p>    if conn.assigns.snippet.user_id == conn.assigns.current_user.id do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "You can only edit your own snippets.")</p>
+<p>      |> redirect(to: ~p"/snippets")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Plugs as Middleware</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Plugs follow the middleware pattern in functional style:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> request → plug₁ → plug₂ → plug₃ → handler → response
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each plug is a pure transformation:</p>
+<figure class="code"><pre><code>> plug(conn, opts) → conn'
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This creates a pipeline of transformations, where each step:</p>
+<ul>
+<li>Has no side effects (except the conn transformation)</li>
+<li>Is independently testable</li>
+<li>Can be reordered or removed easily</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/plug/readme.html">Plug Documentation</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we created:</p>
+
+<ul>
+<li>Request logger plug</li>
+<li>Locale plug</li>
+<li>CORS plug</li>
+<li>Rate limiter plug</li>
+<li>Maintenance mode plug</li>
+<li>Response timer plug</li>
+<li>Controller-specific plugs</li>
+</ul>
+
+<p>In the next chapter, we'll explore more common plug patterns.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="06.02-phoenix-pipelines.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="06.04-common-plug-patterns.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

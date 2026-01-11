@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Plugs and Middleware &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Plugs and Middleware</span>
+            </div>
+            <div>
+                &lsaquo; <a href="05.06-helpers-and-formatting.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="06.01-understanding-plugs.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 6</div>
+        <h1>Chapter 6: Plugs and Middleware</h1>
+
+<p>Plugs are Phoenix's middleware system. In this chapter, we'll learn how plugs work, how to create custom plugs, and how to use them for cross-cutting concerns like authentication, logging, and request transformation.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Understanding the Plug specification</li>
+<li>How Phoenix uses plugs in pipelines</li>
+<li>Creating function and module plugs</li>
+<li>Common plug patterns</li>
+<li>Building authentication plugs</li>
+<li>Request/response transformation</li>
+</ul>
+
+<h2>What is a Plug?</h2>
+
+<p>A plug is a module or function that:</p>
+
+<ol>
+<li><strong>Receives</strong> a connection (<code>Plug.Conn</code>)</li>
+<li><strong>Transforms</strong> the connection somehow</li>
+<li><strong>Returns</strong> the (possibly modified) connection</li>
+</ol>
+
+<figure class="code"><pre><code># Function plug
+<p>def my_plug(conn, _opts) do</p>
+<p>  assign(conn, :user_agent, get_req_header(conn, "user-agent"))</p>
+<p>end</p>
+
+<h1>Module plug</h1>
+<p>defmodule MyPlug do</p>
+<p>  def init(opts), do: opts</p>
+<p>  def call(conn, _opts), do: conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The Plug Pipeline</h2>
+
+<p>Every Phoenix request flows through plugs:</p>
+
+<figure class="code"><pre><code>Request
+<p>   │</p>
+<p>   ▼</p>
+<p>┌─────────────┐</p>
+<p>│  Endpoint   │ (Plug.Static, Plug.RequestId, ...)</p>
+<p>└─────────────┘</p>
+<p>   │</p>
+<p>   ▼</p>
+<p>┌─────────────┐</p>
+<p>│   Router    │ (pipeline plugs, route matching)</p>
+<p>└─────────────┘</p>
+<p>   │</p>
+<p>   ▼</p>
+<p>┌─────────────┐</p>
+<p>│ Controller  │ (action plugs, action)</p>
+<p>└─────────────┘</p>
+<p>   │</p>
+<p>   ▼</p>
+<p>Response</p>
+</code></pre></figure>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>6.1 Understanding Plugs</strong> - The Plug specification</li>
+<li><strong>6.2 Phoenix Pipelines</strong> - Router pipelines and plug_through</li>
+<li><strong>6.3 Creating Custom Plugs</strong> - Function and module plugs</li>
+<li><strong>6.4 Common Plug Patterns</strong> - Authentication, logging, rate limiting</li>
+<li><strong>6.5 Testing Plugs</strong> - Unit testing plug modules</li>
+</ul>
+
+<p>Let's start by understanding the Plug specification.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="05.06-helpers-and-formatting.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="06.01-understanding-plugs.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

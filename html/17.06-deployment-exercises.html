@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Deployment Exercises &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Deployment Exercises</span>
+            </div>
+            <div>
+                &lsaquo; <a href="17.05-liveview-exercises.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 17.6</div>
+        <h1>Chapter 17.6: Deployment and Testing Exercises</h1>
+
+<p>These exercises reinforce concepts from Chapters 13-14 covering testing, deployment, and production configuration.</p>
+
+<h2>Exercise 1: Property-Based Testing</h2>
+
+<p>Write property-based tests for a string utility module.</p>
+
+<figure class="code"><figcaption>File: test/snippetbox/string_utils_property_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.StringUtilsPropertyTest do</p>
+<p>  use ExUnit.Case</p>
+<p>  use ExUnitProperties</p>
+
+<p>  # Test properties:</p>
+<p>  # 1. slugify always produces valid slugs</p>
+<p>  # 2. truncate never exceeds max length</p>
+<p>  # 3. split and join are inverse operations</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule Snippetbox.StringUtilsPropertyTest do
+<p>  use ExUnit.Case</p>
+<p>  use ExUnitProperties</p>
+
+<p>  alias Snippetbox.StringUtils</p>
+
+<p>  property "slugify produces valid slugs" do</p>
+<p>    check all string <- string(:printable) do</p>
+<p>      slug = StringUtils.slugify(string)</p>
+
+<p>      # Slugs contain only lowercase letters, numbers, and hyphens</p>
+<p>      assert slug =~ ~r/^[a-z0-9-]*$/</p>
+
+<p>      # No consecutive hyphens</p>
+<p>      refute slug =~ ~r/--/</p>
+
+<p>      # No leading or trailing hyphens</p>
+<p>      refute String.starts_with?(slug, "-")</p>
+<p>      refute String.ends_with?(slug, "-") or slug == ""</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  property "truncate respects max length" do</p>
+<p>    check all string <- string(:printable),</p>
+<p>              max_length <- integer(1..1000) do</p>
+<p>      result = StringUtils.truncate(string, max_length)</p>
+
+<p>      # Result is never longer than max_length + ellipsis (3)</p>
+<p>      assert String.length(result) <= max_length + 3</p>
+
+<p>      # If original was short enough, it's unchanged</p>
+<p>      if String.length(string) <= max_length do</p>
+<p>        assert result == string</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  property "split and join are inverses" do</p>
+<p>    check all parts <- list_of(string(:alphanumeric, min_length: 1)),</p>
+<p>              separator <- string(:alphanumeric, min_length: 1, max_length: 3),</p>
+<p>              length(parts) > 0 do</p>
+<p>      joined = Enum.join(parts, separator)</p>
+<p>      split = String.split(joined, separator)</p>
+
+<p>      assert split == parts</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  property "word count is always non-negative" do</p>
+<p>    check all string <- string(:printable) do</p>
+<p>      count = StringUtils.word_count(string)</p>
+<p>      assert count >= 0</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 2: Test Fixtures with ExMachina</h2>
+
+<p>Create comprehensive test fixtures.</p>
+
+<figure class="code"><figcaption>File: test/support/factory.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Factory do</p>
+<p>  use ExMachina.Ecto, repo: Snippetbox.Repo</p>
+
+<p>  # Create factories for:</p>
+<p>  # - User (with traits: admin, confirmed, unconfirmed)</p>
+<p>  # - Snippet (with associations)</p>
+<p>  # - Comment</p>
+<p>  # - Tag</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Factory do
+<p>  use ExMachina.Ecto, repo: Snippetbox.Repo</p>
+
+<p>  alias Snippetbox.Accounts.User</p>
+<p>  alias Snippetbox.Snippets.{Snippet, Tag}</p>
+<p>  alias Snippetbox.Comments.Comment</p>
+
+<p>  def user_factory do</p>
+<p>    %User{</p>
+<p>      email: sequence(:email, &"user#{&1}@example.com"),</p>
+<p>      name: sequence(:name, &"User #{&1}"),</p>
+<p>      hashed_password: Bcrypt.hash_pwd_salt("password123"),</p>
+<p>      confirmed_at: NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def admin_factory do</p>
+<p>    struct!(</p>
+<p>      user_factory(),</p>
+<p>      %{admin: true}</p>
+<p>    )</p>
+<p>  end</p>
+
+<p>  def unconfirmed_user_factory do</p>
+<p>    struct!(</p>
+<p>      user_factory(),</p>
+<p>      %{confirmed_at: nil}</p>
+<p>    )</p>
+<p>  end</p>
+
+<p>  def snippet_factory do</p>
+<p>    %Snippet{</p>
+<p>      title: sequence(:title, &"Snippet #{&1}"),</p>
+<p>      content: "defmodule Example do\n  def hello, do: :world\nend",</p>
+<p>      language: Enum.random(~w(elixir javascript python ruby)),</p>
+<p>      public: true,</p>
+<p>      user: build(:user)</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def private_snippet_factory do</p>
+<p>    struct!(</p>
+<p>      snippet_factory(),</p>
+<p>      %{public: false}</p>
+<p>    )</p>
+<p>  end</p>
+
+<p>  def snippet_with_tags_factory do</p>
+<p>    struct!(</p>
+<p>      snippet_factory(),</p>
+<p>      %{tags: build_list(3, :tag)}</p>
+<p>    )</p>
+<p>  end</p>
+
+<p>  def tag_factory do</p>
+<p>    %Tag{</p>
+<p>      name: sequence(:tag, &"tag-#{&1}")</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def comment_factory do</p>
+<p>    %Comment{</p>
+<p>      content: sequence(:content, &"This is comment #{&1}"),</p>
+<p>      snippet: build(:snippet),</p>
+<p>      user: build(:user)</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def anonymous_comment_factory do</p>
+<p>    struct!(</p>
+<p>      comment_factory(),</p>
+<p>      %{</p>
+<p>        user: nil,</p>
+<p>        author_name: "Anonymous",</p>
+<p>        author_email: sequence(:email, &"anon#{&1}@example.com")</p>
+<p>      }</p>
+<p>    )</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Usage in tests:</h1>
+<h1>user = insert(:user)</h1>
+<h1>admin = insert(:admin)</h1>
+<h1>snippet = insert(:snippet, user: user)</h1>
+<h1>snippet_with_tags = insert(:snippet_with_tags)</h1>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 3: Controller Test with Mocking</h2>
+
+<p>Test a controller that calls external services.</p>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/github_import_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.GithubImportControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  # Test the import flow:</p>
+<p>  # 1. Mock GitHub API responses</p>
+<p>  # 2. Test success case</p>
+<p>  # 3. Test API error handling</p>
+<p>  # 4. Test rate limiting</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.GithubImportControllerTest do
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Mox</p>
+
+<p>  setup :verify_on_exit!</p>
+
+<p>  setup %{conn: conn} do</p>
+<p>    user = insert(:user)</p>
+<p>    conn = log_in_user(conn, user)</p>
+<p>    %{conn: conn, user: user}</p>
+<p>  end</p>
+
+<p>  describe "create" do</p>
+<p>    test "imports gist successfully", %{conn: conn} do</p>
+<p>      expect(Snippetbox.Github.MockClient, :get_gist, fn "abc123" -></p>
+<p>        {:ok, %{</p>
+<p>          description: "My Gist",</p>
+<p>          files: %{</p>
+<p>            "example.ex" => %{</p>
+<p>              content: "defmodule Example do\nend",</p>
+<p>              language: "Elixir"</p>
+<p>            }</p>
+<p>          }</p>
+<p>        }}</p>
+<p>      end)</p>
+
+<p>      conn = post(conn, ~p"/import/github", %{gist_id: "abc123"})</p>
+
+<p>      assert redirected_to(conn) =~ "/snippets/"</p>
+<p>      assert get_flash(conn, :info) =~ "imported"</p>
+<p>    end</p>
+
+<p>    test "handles gist not found", %{conn: conn} do</p>
+<p>      expect(Snippetbox.Github.MockClient, :get_gist, fn "invalid" -></p>
+<p>        {:error, :not_found}</p>
+<p>      end)</p>
+
+<p>      conn = post(conn, ~p"/import/github", %{gist_id: "invalid"})</p>
+
+<p>      assert html_response(conn, 200) =~ "Gist not found"</p>
+<p>    end</p>
+
+<p>    test "handles rate limiting", %{conn: conn} do</p>
+<p>      expect(Snippetbox.Github.MockClient, :get_gist, fn _ -></p>
+<p>        {:error, :rate_limited}</p>
+<p>      end)</p>
+
+<p>      conn = post(conn, ~p"/import/github", %{gist_id: "abc123"})</p>
+
+<p>      assert html_response(conn, 200) =~ "rate limit"</p>
+<p>    end</p>
+
+<p>    test "handles API errors gracefully", %{conn: conn} do</p>
+<p>      expect(Snippetbox.Github.MockClient, :get_gist, fn _ -></p>
+<p>        {:error, :server_error}</p>
+<p>      end)</p>
+
+<p>      conn = post(conn, ~p"/import/github", %{gist_id: "abc123"})</p>
+
+<p>      assert html_response(conn, 200) =~ "try again"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 4: LiveView Integration Test</h2>
+
+<p>Write comprehensive tests for a LiveView form.</p>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/live/snippet_form_live_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetFormLiveTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Phoenix.LiveViewTest</p>
+
+<p>  # Test:</p>
+<p>  # 1. Form rendering</p>
+<p>  # 2. Real-time validation</p>
+<p>  # 3. Successful submission</p>
+<p>  # 4. Error handling</p>
+<p>  # 5. Navigation after submit</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetFormLiveTest do
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Phoenix.LiveViewTest</p>
+
+<p>  setup %{conn: conn} do</p>
+<p>    user = insert(:user)</p>
+<p>    %{conn: log_in_user(conn, user), user: user}</p>
+<p>  end</p>
+
+<p>  describe "new snippet form" do</p>
+<p>    test "renders form", %{conn: conn} do</p>
+<p>      {:ok, view, html} = live(conn, ~p"/snippets/new")</p>
+
+<p>      assert html =~ "New Snippet"</p>
+<p>      assert has_element?(view, "form#snippet-form")</p>
+<p>      assert has_element?(view, "input[name='snippet[title]']")</p>
+<p>      assert has_element?(view, "textarea[name='snippet[content]']")</p>
+<p>    end</p>
+
+<p>    test "validates form in real-time", %{conn: conn} do</p>
+<p>      {:ok, view, _html} = live(conn, ~p"/snippets/new")</p>
+
+<p>      # Empty title shows error</p>
+<p>      view</p>
+<p>      |> form("#snippet-form", snippet: %{title: ""})</p>
+<p>      |> render_change()</p>
+
+<p>      assert has_element?(view, ".phx-feedback-for-title", "can't be blank")</p>
+
+<p>      # Valid title clears error</p>
+<p>      view</p>
+<p>      |> form("#snippet-form", snippet: %{title: "Valid Title"})</p>
+<p>      |> render_change()</p>
+
+<p>      refute has_element?(view, ".phx-feedback-for-title")</p>
+<p>    end</p>
+
+<p>    test "creates snippet on valid submit", %{conn: conn} do</p>
+<p>      {:ok, view, _html} = live(conn, ~p"/snippets/new")</p>
+
+<p>      {:ok, conn} =</p>
+<p>        view</p>
+<p>        |> form("#snippet-form", snippet: %{</p>
+<p>          title: "Test Snippet",</p>
+<p>          content: "defmodule Test do\nend",</p>
+<p>          language: "elixir"</p>
+<p>        })</p>
+<p>        |> render_submit()</p>
+<p>        |> follow_redirect(conn)</p>
+
+<p>      assert html_response(conn, 200) =~ "Test Snippet"</p>
+<p>      assert html_response(conn, 200) =~ "created successfully"</p>
+<p>    end</p>
+
+<p>    test "shows errors on invalid submit", %{conn: conn} do</p>
+<p>      {:ok, view, _html} = live(conn, ~p"/snippets/new")</p>
+
+<p>      view</p>
+<p>      |> form("#snippet-form", snippet: %{title: "", content: ""})</p>
+<p>      |> render_submit()</p>
+
+<p>      assert has_element?(view, ".phx-feedback-for-title")</p>
+<p>      assert has_element?(view, ".phx-feedback-for-content")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "edit snippet form" do</p>
+<p>    test "loads existing data", %{conn: conn, user: user} do</p>
+<p>      snippet = insert(:snippet, user: user, title: "Original Title")</p>
+
+<p>      {:ok, view, html} = live(conn, ~p"/snippets/#{snippet}/edit")</p>
+
+<p>      assert html =~ "Edit"</p>
+<p>      assert has_element?(view, "input[value='Original Title']")</p>
+<p>    end</p>
+
+<p>    test "updates snippet", %{conn: conn, user: user} do</p>
+<p>      snippet = insert(:snippet, user: user)</p>
+
+<p>      {:ok, view, _html} = live(conn, ~p"/snippets/#{snippet}/edit")</p>
+
+<p>      {:ok, conn} =</p>
+<p>        view</p>
+<p>        |> form("#snippet-form", snippet: %{title: "Updated Title"})</p>
+<p>        |> render_submit()</p>
+<p>        |> follow_redirect(conn)</p>
+
+<p>      assert html_response(conn, 200) =~ "Updated Title"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 5: Release Configuration</h2>
+
+<p>Create a complete release configuration.</p>
+
+<figure class="code"><pre><code># Requirements:
+<h1>1. Configure runtime.exs for production</h1>
+<h1>2. Create Release module with migrations</h1>
+<h1>3. Add health check endpoint</h1>
+<h1>4. Configure logging for production</h1>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code># config/runtime.exs
+<p>import Config</p>
+
+<p>if config_env() == :prod do</p>
+<p>  database_url =</p>
+<p>    System.get_env("DATABASE_URL") ||</p>
+<p>      raise "DATABASE_URL not set"</p>
+
+<p>  config :snippetbox, Snippetbox.Repo,</p>
+<p>    url: database_url,</p>
+<p>    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),</p>
+<p>    ssl: System.get_env("DATABASE_SSL") == "true"</p>
+
+<p>  secret_key_base =</p>
+<p>    System.get_env("SECRET_KEY_BASE") ||</p>
+<p>      raise "SECRET_KEY_BASE not set"</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    url: [host: System.get_env("PHX_HOST"), port: 443, scheme: "https"],</p>
+<p>    http: [port: String.to_integer(System.get_env("PORT") || "4000")],</p>
+<p>    secret_key_base: secret_key_base,</p>
+<p>    server: true</p>
+
+<p>  config :logger,</p>
+<p>    level: String.to_atom(System.get_env("LOG_LEVEL") || "info")</p>
+<p>end</p>
+
+<h1>lib/snippetbox/release.ex</h1>
+<p>defmodule Snippetbox.Release do</p>
+<p>  @app :snippetbox</p>
+
+<p>  def migrate do</p>
+<p>    load_app()</p>
+
+<p>    for repo <- repos() do</p>
+<p>      {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :up, all: true))</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def rollback(repo, version) do</p>
+<p>    load_app()</p>
+<p>    {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))</p>
+<p>  end</p>
+
+<p>  def seed do</p>
+<p>    load_app()</p>
+
+<p>    for repo <- repos() do</p>
+<p>      {:ok, _, _} = Ecto.Migrator.with_repo(repo, fn _ -></p>
+<p>        seeds_file = Path.join([:code.priv_dir(@app), "repo", "seeds.exs"])</p>
+<p>        if File.exists?(seeds_file), do: Code.eval_file(seeds_file)</p>
+<p>      end)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp repos, do: Application.fetch_env!(@app, :ecto_repos)</p>
+<p>  defp load_app, do: Application.load(@app)</p>
+<p>end</p>
+
+<h1>lib/snippetbox_web/controllers/health_controller.ex</h1>
+<p>defmodule SnippetboxWeb.HealthController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def live(conn, _params) do</p>
+<p>    json(conn, %{status: "ok", timestamp: DateTime.utc_now()})</p>
+<p>  end</p>
+
+<p>  def ready(conn, _params) do</p>
+<p>    case check_database() do</p>
+<p>      :ok -></p>
+<p>        json(conn, %{status: "ready"})</p>
+<p>      :error -></p>
+<p>        conn</p>
+<p>        |> put_status(:service_unavailable)</p>
+<p>        |> json(%{status: "not_ready", reason: "database"})</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_database do</p>
+<p>    case Ecto.Adapters.SQL.query(Snippetbox.Repo, "SELECT 1", []) do</p>
+<p>      {:ok, _} -> :ok</p>
+<p>      _ -> :error</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 6: Docker Multi-Stage Build</h2>
+
+<p>Optimize the Docker build for production.</p>
+
+<figure class="code"><pre><code># Requirements:
+<h1>1. Multi-stage build</h1>
+<h1>2. Minimal runtime image</h1>
+<h1>3. Non-root user</h1>
+<h1>4. Health check</h1>
+<h1>5. Proper caching</h1>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code># Build stage
+<p>ARG ELIXIR_VERSION=1.16.0</p>
+<p>ARG OTP_VERSION=26.2</p>
+<p>ARG DEBIAN_VERSION=bookworm-20231009-slim</p>
+
+<p>FROM hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION} AS builder</p>
+
+<p>RUN apt-get update -y && apt-get install -y build-essential git \</p>
+<p>    && apt-get clean && rm -f /var/lib/apt/lists/<em>_</em></p>
+
+<p>WORKDIR /app</p>
+
+<p>RUN mix local.hex --force && mix local.rebar --force</p>
+
+<p>ENV MIX_ENV=prod</p>
+
+<h1>Cache dependencies</h1>
+<p>COPY mix.exs mix.lock ./</p>
+<p>RUN mix deps.get --only $MIX_ENV</p>
+<p>RUN mkdir config</p>
+<p>COPY config/config.exs config/${MIX_ENV}.exs config/</p>
+<p>RUN mix deps.compile</p>
+
+<h1>Cache assets</h1>
+<p>COPY priv priv</p>
+<p>COPY assets assets</p>
+<p>RUN mix assets.deploy</p>
+
+<h1>Compile application</h1>
+<p>COPY lib lib</p>
+<p>RUN mix compile</p>
+
+<h1>Build release</h1>
+<p>COPY config/runtime.exs config/</p>
+<p>COPY rel rel</p>
+<p>RUN mix release</p>
+
+<h1>Runtime stage</h1>
+<p>FROM debian:${DEBIAN_VERSION}</p>
+
+<p>RUN apt-get update -y && \</p>
+<p>    apt-get install -y libstdc++6 openssl libncurses5 locales curl \</p>
+<p>    && apt-get clean && rm -f /var/lib/apt/lists/<em>_</em></p>
+
+<p>RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen</p>
+
+<p>ENV LANG=en_US.UTF-8</p>
+<p>ENV LANGUAGE=en_US:en</p>
+<p>ENV LC_ALL=en_US.UTF-8</p>
+
+<p>WORKDIR /app</p>
+
+<h1>Create non-root user</h1>
+<p>RUN groupadd --gid 1000 app && \</p>
+<p>    useradd --uid 1000 --gid app --shell /bin/bash app && \</p>
+<p>    chown -R app:app /app</p>
+
+<p>USER app</p>
+
+<p>COPY --from=builder --chown=app:app /app/_build/prod/rel/snippetbox ./</p>
+
+<p>ENV MIX_ENV=prod</p>
+<p>ENV PORT=4000</p>
+
+<p>EXPOSE 4000</p>
+
+<p>HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \</p>
+<p>    CMD curl -f http://localhost:4000/health/live || exit 1</p>
+
+<p>CMD ["bin/snippetbox", "start"]</p>
+</code></pre></figure>
+</details>
+
+<h2>Challenge: Complete CI/CD Pipeline</h2>
+
+<p>Create a full CI/CD pipeline with:</p>
+
+<ol>
+<li>Run tests on every PR</li>
+<li>Check formatting and Credo</li>
+<li>Build Docker image</li>
+<li>Push to registry on main</li>
+<li>Deploy to staging automatically</li>
+<li>Manual approval for production</li>
+<li>Run migrations after deploy</li>
+</ol>
+
+<p>Use GitHub Actions and implement the full pipeline.</p>
+
+<p>This comprehensive exercise covers testing, Docker, and deployment.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="17.05-liveview-exercises.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

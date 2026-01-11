@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Security Headers &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Security Headers</span>
+            </div>
+            <div>
+                &lsaquo; <a href="10.04-xss-prevention.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="10.06-common-vulnerabilities.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 10.5</div>
+        <h1>Chapter 10.5: Security Headers</h1>
+
+<p>HTTP security headers provide an additional layer of protection. In this chapter, we'll explore the security headers Phoenix provides and how to configure them.</p>
+
+<h2>Phoenix Default Headers</h2>
+
+<h3>put_secure_browser_headers</h3>
+
+<p>Phoenix includes security headers by default:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser do</p>
+<p>  # ...</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>This adds:</p>
+
+<figure class="code"><pre><code>x-frame-options: SAMEORIGIN
+<p>x-content-type-options: nosniff</p>
+<p>x-xss-protection: 1; mode=block</p>
+<p>x-download-options: noopen</p>
+<p>x-permitted-cross-domain-policies: none</p>
+<p>cross-origin-window-policy: deny</p>
+</code></pre></figure>
+
+<h3>Customizing Headers</h3>
+
+<figure class="code"><pre><code>plug :put_secure_browser_headers, %{
+<p>  "content-security-policy" => "default-src 'self'",</p>
+<p>  "x-frame-options" => "DENY"</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>Essential Security Headers</h2>
+
+<h3>Content-Security-Policy (CSP)</h3>
+
+<p>Controls which resources can be loaded:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/security_headers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.SecurityHeaders do</p>
+<p>  import Plug.Conn</p>
+
+<p>  @csp [</p>
+<p>    "default-src 'self'",</p>
+<p>    "script-src 'self'",</p>
+<p>    "style-src 'self' 'unsafe-inline'",</p>
+<p>    "img-src 'self' data: https:",</p>
+<p>    "font-src 'self'",</p>
+<p>    "connect-src 'self' wss://#{Application.compile_env(:snippetbox, :host)}",</p>
+<p>    "frame-ancestors 'none'",</p>
+<p>    "base-uri 'self'",</p>
+<p>    "form-action 'self'"</p>
+<p>  ] |> Enum.join("; ")</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    put_resp_header(conn, "content-security-policy", @csp)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>CSP Directives</h3>
+
+<p>| Directive | Purpose |</p>
+<p>|-----------|---------|</p>
+<p>| <code>default-src</code> | Fallback for other directives |</p>
+<p>| <code>script-src</code> | JavaScript sources |</p>
+<p>| <code>style-src</code> | CSS sources |</p>
+<p>| <code>img-src</code> | Image sources |</p>
+<p>| <code>font-src</code> | Font sources |</p>
+<p>| <code>connect-src</code> | AJAX, WebSocket, etc. |</p>
+<p>| <code>frame-ancestors</code> | Who can embed this page |</p>
+<p>| <code>form-action</code> | Form submission targets |</p>
+<p>| <code>base-uri</code> | Base URL for relative URLs |</p>
+<p>| <code>upgrade-insecure-requests</code> | Upgrade HTTP to HTTPS |</p>
+
+<h3>X-Frame-Options</h3>
+
+<p>Prevents clickjacking:</p>
+
+<figure class="code"><pre><code># Options:
+<h1>DENY - Never allow framing</h1>
+<h1>SAMEORIGIN - Only same origin can frame</h1>
+<h1>ALLOW-FROM uri - Specific origin (deprecated)</h1>
+
+<p>put_resp_header(conn, "x-frame-options", "DENY")</p>
+</code></pre></figure>
+
+<h3>X-Content-Type-Options</h3>
+
+<p>Prevents MIME type sniffing:</p>
+
+<figure class="code"><pre><code>put_resp_header(conn, "x-content-type-options", "nosniff")
+</code></pre></figure>
+
+<h3>Strict-Transport-Security (HSTS)</h3>
+
+<p>Forces HTTPS:</p>
+
+<figure class="code"><pre><code># Only over HTTPS connections
+<p>put_resp_header(conn, "strict-transport-security",</p>
+<p>  "max-age=63072000; includeSubDomains; preload")</p>
+</code></pre></figure>
+
+<h3>Referrer-Policy</h3>
+
+<p>Controls Referer header:</p>
+
+<figure class="code"><pre><code># Options:
+<h1>no-referrer - Never send</h1>
+<h1>same-origin - Only same origin</h1>
+<h1>strict-origin - HTTPS→HTTPS only</h1>
+<h1>strict-origin-when-cross-origin - Full URL same-origin, origin only cross-origin</h1>
+
+<p>put_resp_header(conn, "referrer-policy", "strict-origin-when-cross-origin")</p>
+</code></pre></figure>
+
+<h3>Permissions-Policy</h3>
+
+<p>Controls browser features:</p>
+
+<figure class="code"><pre><code>put_resp_header(conn, "permissions-policy",
+<p>  "geolocation=(), microphone=(), camera=()")</p>
+</code></pre></figure>
+
+<h2>Complete Security Headers Plug</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/security_headers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.SecurityHeaders do</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    conn</p>
+<p>    |> put_csp_header()</p>
+<p>    |> put_resp_header("x-frame-options", "DENY")</p>
+<p>    |> put_resp_header("x-content-type-options", "nosniff")</p>
+<p>    |> put_resp_header("x-xss-protection", "0")  # Disabled, CSP is better</p>
+<p>    |> put_resp_header("referrer-policy", "strict-origin-when-cross-origin")</p>
+<p>    |> put_resp_header("permissions-policy", permissions_policy())</p>
+<p>    |> maybe_put_hsts(conn)</p>
+<p>  end</p>
+
+<p>  defp put_csp_header(conn) do</p>
+<p>    csp = build_csp(conn)</p>
+<p>    put_resp_header(conn, "content-security-policy", csp)</p>
+<p>  end</p>
+
+<p>  defp build_csp(conn) do</p>
+<p>    host = conn.host</p>
+
+<p>    [</p>
+<p>      "default-src 'self'",</p>
+<p>      "script-src 'self'",</p>
+<p>      "style-src 'self' 'unsafe-inline'",</p>
+<p>      "img-src 'self' data: https:",</p>
+<p>      "font-src 'self' https://fonts.gstatic.com",</p>
+<p>      "connect-src 'self' wss://#{host}",</p>
+<p>      "frame-ancestors 'none'",</p>
+<p>      "base-uri 'self'",</p>
+<p>      "form-action 'self'",</p>
+<p>      "upgrade-insecure-requests"</p>
+<p>    ]</p>
+<p>    |> Enum.join("; ")</p>
+<p>  end</p>
+
+<p>  defp permissions_policy do</p>
+<p>    [</p>
+<p>      "accelerometer=()",</p>
+<p>      "camera=()",</p>
+<p>      "geolocation=()",</p>
+<p>      "gyroscope=()",</p>
+<p>      "magnetometer=()",</p>
+<p>      "microphone=()",</p>
+<p>      "payment=()",</p>
+<p>      "usb=()"</p>
+<p>    ]</p>
+<p>    |> Enum.join(", ")</p>
+<p>  end</p>
+
+<p>  defp maybe_put_hsts(conn, _original_conn) do</p>
+<p>    if conn.scheme == :https do</p>
+<p>      put_resp_header(conn, "strict-transport-security",</p>
+<p>        "max-age=63072000; includeSubDomains")</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Environment-Specific Configuration</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/security_headers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.SecurityHeaders do</p>
+<p>  import Plug.Conn</p>
+
+<p>  @env Mix.env()</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    conn</p>
+<p>    |> put_csp_header()</p>
+<p>    |> put_common_headers()</p>
+<p>  end</p>
+
+<p>  defp put_csp_header(conn) do</p>
+<p>    csp = if @env == :dev, do: dev_csp(), else: prod_csp(conn)</p>
+<p>    put_resp_header(conn, "content-security-policy", csp)</p>
+<p>  end</p>
+
+<p>  defp dev_csp do</p>
+<p>    # More permissive for development</p>
+<p>    [</p>
+<p>      "default-src 'self' 'unsafe-inline' 'unsafe-eval'",</p>
+<p>      "connect-src 'self' ws://localhost:<em> wss://localhost:</em>",</p>
+<p>      "img-src 'self' data: blob:"</p>
+<p>    ]</p>
+<p>    |> Enum.join("; ")</p>
+<p>  end</p>
+
+<p>  defp prod_csp(conn) do</p>
+<p>    [</p>
+<p>      "default-src 'self'",</p>
+<p>      "script-src 'self'",</p>
+<p>      "style-src 'self' 'unsafe-inline'",</p>
+<p>      "img-src 'self' data: https:",</p>
+<p>      "connect-src 'self' wss://#{conn.host}",</p>
+<p>      "frame-ancestors 'none'",</p>
+<p>      "upgrade-insecure-requests"</p>
+<p>    ]</p>
+<p>    |> Enum.join("; ")</p>
+<p>  end</p>
+
+<p>  defp put_common_headers(conn) do</p>
+<p>    conn</p>
+<p>    |> put_resp_header("x-frame-options", "DENY")</p>
+<p>    |> put_resp_header("x-content-type-options", "nosniff")</p>
+<p>    |> put_resp_header("referrer-policy", "strict-origin-when-cross-origin")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>CSP Reporting</h2>
+
+<h3>Report-Only Mode</h3>
+
+<p>Test CSP without blocking:</p>
+
+<figure class="code"><pre><code>put_resp_header(conn, "content-security-policy-report-only", csp_policy())
+</code></pre></figure>
+
+<h3>Violation Reporting</h3>
+
+<figure class="code"><pre><code>defp build_csp(conn) do
+<p>  base_csp() <> "; report-uri /csp-reports"</p>
+<p>end</p>
+
+<h1>Controller to receive reports</h1>
+<p>defmodule SnippetboxWeb.CSPReportController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+<p>  require Logger</p>
+
+<p>  def create(conn, %{"csp-report" => report}) do</p>
+<p>    Logger.warning("CSP Violation: #{inspect(report)}")</p>
+
+<p>    # Optionally store in database for analysis</p>
+<p>    # CSPReports.create_report(report)</p>
+
+<p>    send_resp(conn, 204, "")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>CORS Headers</h2>
+
+<p>For APIs accessed from other origins:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/cors.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.CORS do</p>
+<p>  import Plug.Conn</p>
+
+<p>  @allowed_origins Application.compile_env(:snippetbox, :cors_origins, ["*"])</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    origin = get_req_header(conn, "origin") |> List.first()</p>
+
+<p>    if allowed_origin?(origin) do</p>
+<p>      conn</p>
+<p>      |> put_resp_header("access-control-allow-origin", origin || "*")</p>
+<p>      |> put_resp_header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS")</p>
+<p>      |> put_resp_header("access-control-allow-headers", "content-type, authorization")</p>
+<p>      |> put_resp_header("access-control-max-age", "86400")</p>
+<p>      |> handle_preflight()</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp allowed_origin?(nil), do: false</p>
+<p>  defp allowed_origin?(origin) do</p>
+<p>    "*" in @allowed_origins || origin in @allowed_origins</p>
+<p>  end</p>
+
+<p>  defp handle_preflight(%{method: "OPTIONS"} = conn) do</p>
+<p>    conn</p>
+<p>    |> send_resp(204, "")</p>
+<p>    |> halt()</p>
+<p>  end</p>
+<p>  defp handle_preflight(conn), do: conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Security Headers</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/security_headers_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.SecurityHeadersTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  describe "security headers" do</p>
+<p>    test "includes Content-Security-Policy", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/")</p>
+
+<p>      csp = get_resp_header(conn, "content-security-policy") |> List.first()</p>
+
+<p>      assert csp =~ "default-src"</p>
+<p>      assert csp =~ "script-src"</p>
+<p>      assert csp =~ "frame-ancestors 'none'"</p>
+<p>    end</p>
+
+<p>    test "includes X-Frame-Options", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/")</p>
+
+<p>      assert get_resp_header(conn, "x-frame-options") == ["DENY"]</p>
+<p>    end</p>
+
+<p>    test "includes X-Content-Type-Options", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/")</p>
+
+<p>      assert get_resp_header(conn, "x-content-type-options") == ["nosniff"]</p>
+<p>    end</p>
+
+<p>    test "includes Referrer-Policy", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/")</p>
+
+<p>      policy = get_resp_header(conn, "referrer-policy") |> List.first()</p>
+<p>      assert policy =~ "strict-origin"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Security Headers Checklist</h2>
+
+<p>| Header | Value | Protection |</p>
+<p>|--------|-------|------------|</p>
+<p>| Content-Security-Policy | Various directives | XSS, injection |</p>
+<p>| X-Frame-Options | DENY | Clickjacking |</p>
+<p>| X-Content-Type-Options | nosniff | MIME confusion |</p>
+<p>| Strict-Transport-Security | max-age=... | Downgrade attacks |</p>
+<p>| Referrer-Policy | strict-origin... | Information leak |</p>
+<p>| Permissions-Policy | Various | Feature abuse |</p>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Headers as Middleware</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Security headers are a perfect fit for the plug/middleware pattern:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> conn
+<p>|> put_csp_header()</p>
+<p>|> put_frame_options()</p>
+<p>|> put_content_type_options()</p>
+<p># Each transformation is independent and composable</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Headers don't modify the response body—they're metadata that transforms how browsers handle the response.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Phoenix's default security headers</li>
+<li>Content-Security-Policy configuration</li>
+<li>X-Frame-Options for clickjacking prevention</li>
+<li>HSTS for forcing HTTPS</li>
+<li>Referrer-Policy for privacy</li>
+<li>Permissions-Policy for feature control</li>
+<li>CORS headers for API access</li>
+<li>Testing security headers</li>
+</ul>
+
+<p>In the next chapter, we'll explore common vulnerabilities and how to prevent them.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="10.04-xss-prevention.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="10.06-common-vulnerabilities.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

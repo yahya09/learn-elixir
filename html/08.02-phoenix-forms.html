@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Phoenix Forms &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Phoenix Forms</span>
+            </div>
+            <div>
+                &lsaquo; <a href="08.01-form-basics.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="08.03-changesets-in-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 8.2</div>
+        <h1>Chapter 8.2: Phoenix Forms</h1>
+
+<p>Phoenix 1.7+ provides powerful form components that handle the complexity of form rendering. In this chapter, we'll explore Phoenix's form helpers and components.</p>
+
+<h2>The Form Component</h2>
+
+<h3>Basic Form</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/new.html.heex %>
+
+<.form for={@changeset} action={~p"/snippets"}>
+<p>  <.input field={@form[:title]} label="Title" /></p>
+<p>  <.input field={@form[:content]} type="textarea" label="Content" /></p>
+<p>  <.button>Create Snippet</.button></p>
+</.form>
+</code></pre></figure>
+
+<h3>Form With All Options</h3>
+
+<figure class="code"><pre><code><.form
+<p>  for={@changeset}</p>
+<p>  action={~p"/snippets/#{@snippet}"}</p>
+<p>  method="put"</p>
+<p>  multipart={true}</p>
+<p>  class="space-y-4"</p>
+<p>></p>
+<p>  <%# Form fields %></p>
+</.form>
+</code></pre></figure>
+
+<h3>Form Attributes</h3>
+
+<p>| Attribute | Description |</p>
+<p>|-----------|-------------|</p>
+<p>| <code>for</code> | Changeset or map for form data |</p>
+<p>| <code>action</code> | URL to submit to |</p>
+<p>| <code>method</code> | HTTP method (get, post, put, patch, delete) |</p>
+<p>| <code>multipart</code> | Enable file uploads |</p>
+<p>| <code>class</code> | CSS classes |</p>
+<p>| <code>phx-change</code> | LiveView change event |</p>
+<p>| <code>phx-submit</code> | LiveView submit event |</p>
+
+<h2>The Input Component</h2>
+
+<h3>Default Input Component</h3>
+
+<p>Phoenix generates a default input component in <code>core_components.ex</code>:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/core_components.ex</figcaption><pre><code class="language-elixir">
+<p>attr :id, :any, default: nil</p>
+<p>attr :name, :any</p>
+<p>attr :label, :string, default: nil</p>
+<p>attr :value, :any</p>
+
+<p>attr :type, :string,</p>
+<p>  default: "text",</p>
+<p>  values: ~w(checkbox color date datetime-local email file hidden month number password</p>
+<p>             range radio search select tel text textarea time url week)</p>
+
+<p>attr :field, Phoenix.HTML.FormField</p>
+<p>attr :errors, :list, default: []</p>
+<p>attr :checked, :boolean</p>
+<p>attr :prompt, :string, default: nil</p>
+<p>attr :options, :list</p>
+<p>attr :multiple, :boolean, default: false</p>
+
+<p>attr :rest, :global,</p>
+<p>  include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength</p>
+<p>              multiple pattern placeholder readonly required rows size step)</p>
+
+<p>slot :inner_block</p>
+
+<p>def input(%{field: %Phoenix.HTML.FormField{} = field} = assigns) do</p>
+<p>  assigns</p>
+<p>  |> assign(field: nil, id: assigns.id || field.id)</p>
+<p>  |> assign(:errors, Enum.map(field.errors, &translate_error(&1)))</p>
+<p>  |> assign_new(:name, fn -> if assigns.multiple, do: field.name <> "[]", else: field.name end)</p>
+<p>  |> assign_new(:value, fn -> field.value end)</p>
+<p>  |> input()</p>
+<p>end</p>
+
+<p>def input(%{type: "textarea"} = assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div phx-feedback-for={@name}></p>
+<p>    <.label for={@id}><%= @label %></.label></p>
+<p>    <textarea</p>
+<p>      id={@id}</p>
+<p>      name={@name}</p>
+<p>      class={[</p>
+<p>        "mt-2 block w-full rounded-lg text-zinc-900 focus:ring-0 sm:text-sm sm:leading-6",</p>
+<p>        "min-h-[6rem] phx-no-feedback:border-zinc-300 phx-no-feedback:focus:border-zinc-400",</p>
+<p>        @errors == [] && "border-zinc-300 focus:border-zinc-400",</p>
+<p>        @errors != [] && "border-rose-400 focus:border-rose-400"</p>
+<p>      ]}</p>
+<p>      {@rest}</p>
+<p>    ><%= Phoenix.HTML.Form.normalize_value("textarea", @value) %></textarea></p>
+<p>    <.error :for={msg <- @errors}><%= msg %></.error></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+
+<p>def input(%{type: "select"} = assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div phx-feedback-for={@name}></p>
+<p>    <.label for={@id}><%= @label %></.label></p>
+<p>    <select</p>
+<p>      id={@id}</p>
+<p>      name={@name}</p>
+<p>      class="mt-2 block w-full rounded-md border border-gray-300 bg-white shadow-sm focus:border-zinc-400 focus:ring-0 sm:text-sm"</p>
+<p>      multiple={@multiple}</p>
+<p>      {@rest}</p>
+<p>    ></p>
+<p>      <option :if={@prompt} value=""><%= @prompt %></option></p>
+<p>      <%= Phoenix.HTML.Form.options_for_select(@options, @value) %></p>
+<p>    </select></p>
+<p>    <.error :for={msg <- @errors}><%= msg %></.error></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+
+<h1>Default text input</h1>
+<p>def input(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div phx-feedback-for={@name}></p>
+<p>    <.label for={@id}><%= @label %></.label></p>
+<p>    <input</p>
+<p>      type={@type}</p>
+<p>      name={@name}</p>
+<p>      id={@id}</p>
+<p>      value={Phoenix.HTML.Form.normalize_value(@type, @value)}</p>
+<p>      class={[</p>
+<p>        "mt-2 block w-full rounded-lg text-zinc-900 focus:ring-0 sm:text-sm sm:leading-6",</p>
+<p>        "phx-no-feedback:border-zinc-300 phx-no-feedback:focus:border-zinc-400",</p>
+<p>        @errors == [] && "border-zinc-300 focus:border-zinc-400",</p>
+<p>        @errors != [] && "border-rose-400 focus:border-rose-400"</p>
+<p>      ]}</p>
+<p>      {@rest}</p>
+<p>    /></p>
+<p>    <.error :for={msg <- @errors}><%= msg %></.error></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Using Input Component</h2>
+
+<h3>Text Input</h3>
+
+<figure class="code"><pre><code><.input field={@form[:title]} label="Title" />
+<.input field={@form[:title]} label="Title" placeholder="Enter title..." />
+<.input field={@form[:title]} label="Title" required />
+</code></pre></figure>
+
+<h3>Textarea</h3>
+
+<figure class="code"><pre><code><.input field={@form[:content]} type="textarea" label="Content" />
+<.input field={@form[:content]} type="textarea" label="Content" rows={15} />
+</code></pre></figure>
+
+<h3>Select</h3>
+
+<figure class="code"><pre><code><%# Simple options %>
+<.input
+<p>  field={@form[:language]}</p>
+<p>  type="select"</p>
+<p>  label="Language"</p>
+<p>  options={["Elixir", "JavaScript", "Python", "Ruby"]}</p>
+<p>/></p>
+
+<%# With prompt %>
+<.input
+<p>  field={@form[:language]}</p>
+<p>  type="select"</p>
+<p>  label="Language"</p>
+<p>  prompt="Select a language..."</p>
+<p>  options={["Elixir", "JavaScript", "Python", "Ruby"]}</p>
+<p>/></p>
+
+<%# Key-value options %>
+<.input
+<p>  field={@form[:language]}</p>
+<p>  type="select"</p>
+<p>  label="Language"</p>
+<p>  options={[</p>
+<p>    {"Elixir", "elixir"},</p>
+<p>    {"JavaScript", "javascript"},</p>
+<p>    {"Python", "python"}</p>
+<p>  ]}</p>
+<p>/></p>
+
+<%# From database %>
+<.input
+<p>  field={@form[:category_id]}</p>
+<p>  type="select"</p>
+<p>  label="Category"</p>
+<p>  options={Enum.map(@categories, &{&1.name, &1.id})}</p>
+<p>/></p>
+</code></pre></figure>
+
+<h3>Checkbox</h3>
+
+<figure class="code"><pre><code><.input field={@form[:public]} type="checkbox" label="Make public" />
+<.input field={@form[:featured]} type="checkbox" label="Featured snippet" />
+</code></pre></figure>
+
+<h3>Radio Buttons</h3>
+
+<p>For radio buttons, create a custom component or use raw HTML:</p>
+
+<figure class="code"><pre><code><fieldset>
+<p>  <legend class="text-sm font-semibold">Visibility</legend></p>
+<p>  <div class="mt-2 space-y-2"></p>
+<p>    <label class="flex items-center gap-2"></p>
+<p>      <input type="radio" name={@form[:visibility].name} value="public"</p>
+<p>        checked={@form[:visibility].value == "public"} /></p>
+<p>      Public</p>
+<p>    </label></p>
+<p>    <label class="flex items-center gap-2"></p>
+<p>      <input type="radio" name={@form[:visibility].name} value="private"</p>
+<p>        checked={@form[:visibility].value == "private"} /></p>
+<p>      Private</p>
+<p>    </label></p>
+<p>    <label class="flex items-center gap-2"></p>
+<p>      <input type="radio" name={@form[:visibility].name} value="unlisted"</p>
+<p>        checked={@form[:visibility].value == "unlisted"} /></p>
+<p>      Unlisted</p>
+<p>    </label></p>
+<p>  </div></p>
+</fieldset>
+</code></pre></figure>
+
+<h3>Hidden Fields</h3>
+
+<figure class="code"><pre><code><.input field={@form[:user_id]} type="hidden" />
+<input type="hidden" name="return_to" value={@return_to} />
+</code></pre></figure>
+
+<h3>Password</h3>
+
+<figure class="code"><pre><code><.input field={@form[:password]} type="password" label="Password" />
+<.input field={@form[:password_confirmation]} type="password" label="Confirm Password" />
+</code></pre></figure>
+
+<h3>Email and URL</h3>
+
+<figure class="code"><pre><code><.input field={@form[:email]} type="email" label="Email" />
+<.input field={@form[:website]} type="url" label="Website" />
+</code></pre></figure>
+
+<h3>Number</h3>
+
+<figure class="code"><pre><code><.input field={@form[:expires_in]} type="number" label="Expires in (days)" min="1" max="365" />
+</code></pre></figure>
+
+<h3>Date and Time</h3>
+
+<figure class="code"><pre><code><.input field={@form[:published_at]} type="date" label="Publish Date" />
+<.input field={@form[:event_time]} type="time" label="Event Time" />
+<.input field={@form[:starts_at]} type="datetime-local" label="Starts At" />
+</code></pre></figure>
+
+<h2>Complete Form Example</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/new.html.heex %>
+
+<.header>
+<p>  Create Snippet</p>
+<p>  <:subtitle>Share your code with the world</:subtitle></p>
+</.header>
+
+<.form for={@changeset} action={~p"/snippets"} class="mt-8">
+<p>  <div class="space-y-6"></p>
+<p>    <.input field={@form[:title]} label="Title" placeholder="My awesome snippet" required /></p>
+
+<p>    <.input</p>
+<p>      field={@form[:content]}</p>
+<p>      type="textarea"</p>
+<p>      label="Code"</p>
+<p>      placeholder="Paste your code here..."</p>
+<p>      rows={15}</p>
+<p>      required</p>
+<p>    /></p>
+
+<p>    <.input</p>
+<p>      field={@form[:language]}</p>
+<p>      type="select"</p>
+<p>      label="Language"</p>
+<p>      prompt="Select language..."</p>
+<p>      options={@languages}</p>
+<p>    /></p>
+
+<p>    <.input</p>
+<p>      field={@form[:expires_in]}</p>
+<p>      type="select"</p>
+<p>      label="Expires"</p>
+<p>      options={[</p>
+<p>        {"Never", nil},</p>
+<p>        {"1 hour", 1},</p>
+<p>        {"1 day", 24},</p>
+<p>        {"1 week", 168},</p>
+<p>        {"1 month", 720}</p>
+<p>      ]}</p>
+<p>    /></p>
+
+<p>    <.input field={@form[:public]} type="checkbox" label="Make this snippet public" /></p>
+<p>  </div></p>
+
+<p>  <div class="mt-8 flex gap-4"></p>
+<p>    <.button type="submit">Create Snippet</.button></p>
+<p>    <.link href={~p"/snippets"} class="btn-secondary">Cancel</.link></p>
+<p>  </div></p>
+</.form>
+</code></pre></figure>
+
+<h2>Edit Form</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/edit.html.heex %>
+
+<.header>
+<p>  Edit Snippet</p>
+<p>  <:subtitle>Update "<%= @snippet.title %>"</:subtitle></p>
+</.header>
+
+<.form for={@changeset} action={~p"/snippets/#{@snippet}"} method="put" class="mt-8">
+<p>  <div class="space-y-6"></p>
+<p>    <.input field={@form[:title]} label="Title" required /></p>
+<p>    <.input field={@form[:content]} type="textarea" label="Code" rows={15} required /></p>
+<p>    <.input field={@form[:language]} type="select" label="Language" options={@languages} /></p>
+<p>    <.input field={@form[:public]} type="checkbox" label="Make this snippet public" /></p>
+<p>  </div></p>
+
+<p>  <div class="mt-8 flex gap-4"></p>
+<p>    <.button type="submit">Update Snippet</.button></p>
+<p>    <.link href={~p"/snippets/#{@snippet}"} class="btn-secondary">Cancel</.link></p>
+<p>  </div></p>
+</.form>
+
+<div class="mt-8 border-t pt-8">
+<p>  <.link</p>
+<p>    href={~p"/snippets/#{@snippet}"}</p>
+<p>    method="delete"</p>
+<p>    data-confirm="Are you sure you want to delete this snippet?"</p>
+<p>    class="text-red-600 hover:text-red-800"</p>
+<p>  ></p>
+<p>    Delete this snippet</p>
+<p>  </.link></p>
+</div>
+</code></pre></figure>
+
+<h2>Form Without Changeset</h2>
+
+<p>For forms not backed by a database:</p>
+
+<figure class="code"><pre><code><%# Search form %>
+<.form for={%{}} action={~p"/search"} method="get">
+<p>  <.input name="q" value={@query} label="Search" placeholder="Search snippets..." /></p>
+<p>  <.button>Search</.button></p>
+</.form>
+
+<%# Contact form %>
+<.form for={%{}} action={~p"/contact"} method="post">
+<p>  <.input name="name" value="" label="Your Name" required /></p>
+<p>  <.input name="email" type="email" value="" label="Email" required /></p>
+<p>  <.input name="message" type="textarea" value="" label="Message" required /></p>
+<p>  <.button>Send Message</.button></p>
+</.form>
+</code></pre></figure>
+
+<h2>Custom Form Components</h2>
+
+<h3>Input Group</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/form_components.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.FormComponents do</p>
+<p>  use Phoenix.Component</p>
+
+<p>  attr :class, :string, default: nil</p>
+<p>  slot :inner_block, required: true</p>
+
+<p>  def input_group(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class={["flex gap-4", @class]}></p>
+<p>      <%= render_slot(@inner_block) %></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code><.input_group>
+<p>  <.input field={@form[:first_name]} label="First Name" /></p>
+<p>  <.input field={@form[:last_name]} label="Last Name" /></p>
+</.input_group>
+</code></pre></figure>
+
+<h3>Submit Button Group</h3>
+
+<figure class="code"><pre><code>attr :confirm_text, :string, default: "Save"
+<p>attr :cancel_url, :string, required: true</p>
+
+<p>def submit_group(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div class="mt-8 flex gap-4"></p>
+<p>    <.button type="submit"><%= @confirm_text %></.button></p>
+<p>    <.link href={@cancel_url} class="btn-secondary">Cancel</.link></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Declarative UI</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix form components are declarative:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> <%# Declare WHAT you want, not HOW to render it %>
+<.input field={@form[:title]} type="text" label="Title" />
+</blockquote>
+<p>></p>
+<blockquote>
+<%# The component handles:
+<p>    - Label rendering</p>
+<p>    - Input attributes</p>
+<p>    - Error display</p>
+<p>    - Accessibility</p>
+<p>    - Styling %></p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This separation of concerns keeps templates clean and behavior consistent.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Using the <code>.form</code> component</li>
+<li>The <code>.input</code> component and its options</li>
+<li>Different input types (text, select, checkbox, etc.)</li>
+<li>Complete form examples for create and edit</li>
+<li>Forms without changesets</li>
+<li>Creating custom form components</li>
+</ul>
+
+<p>In the next chapter, we'll explore how changesets integrate with forms.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="08.01-form-basics.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="08.03-changesets-in-forms.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

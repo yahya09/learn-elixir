@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Integration Testing &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Integration Testing</span>
+            </div>
+            <div>
+                &lsaquo; <a href="13.02-controller-testing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="13.04-liveview-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 13.3</div>
+        <h1>Chapter 13.3: Integration Testing</h1>
+
+<p>Integration tests verify that multiple components work together correctly. In this chapter, we'll explore end-to-end testing with Wallaby.</p>
+
+<h2>Wallaby Setup</h2>
+
+<h3>Installation</h3>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">
+<p>defp deps do</p>
+<p>  [</p>
+<p>    {:wallaby, "~> 0.30", only: :test, runtime: false}</p>
+<p>  ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Configuration</h3>
+
+<figure class="code"><figcaption>File: config/test.exs</figcaption><pre><code class="language-elixir">
+<p>config :wallaby,</p>
+<p>  driver: Wallaby.Chrome,</p>
+<p>  screenshot_on_failure: true,</p>
+<p>  js_logger: :stdio</p>
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  server: true</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: test/test_helper.exs</figcaption><pre><code class="language-elixir">
+<p>{:ok, _} = Application.ensure_all_started(:wallaby)</p>
+<p>Application.put_env(:wallaby, :base_url, SnippetboxWeb.Endpoint.url())</p>
+<p>ExUnit.start()</p>
+<p>Ecto.Adapters.SQL.Sandbox.mode(Snippetbox.Repo, :manual)</p>
+</code></pre></figure>
+
+<h3>Feature Case</h3>
+
+<figure class="code"><figcaption>File: test/support/feature_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.FeatureCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      use Wallaby.Feature</p>
+
+<p>      alias SnippetboxWeb.Router.Helpers, as: Routes</p>
+<p>      import Snippetbox.AccountsFixtures</p>
+<p>      import Snippetbox.SnippetsFixtures</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  setup tags do</p>
+<p>    :ok = Ecto.Adapters.SQL.Sandbox.checkout(Snippetbox.Repo)</p>
+
+<p>    unless tags[:async] do</p>
+<p>      Ecto.Adapters.SQL.Sandbox.mode(Snippetbox.Repo, {:shared, self()})</p>
+<p>    end</p>
+
+<p>    metadata = Phoenix.Ecto.SQL.Sandbox.metadata_for(Snippetbox.Repo, self())</p>
+<p>    {:ok, session} = Wallaby.start_session(metadata: metadata)</p>
+
+<p>    {:ok, session: session}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Basic Feature Tests</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/features/homepage_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Features.HomepageTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  feature "user visits homepage", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/")</p>
+<p>    |> assert_has(Query.css("h1", text: "Welcome to Snippetbox"))</p>
+<p>    |> assert_has(Query.link("Browse Snippets"))</p>
+<p>  end</p>
+
+<p>  feature "user can navigate to snippets", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/")</p>
+<p>    |> click(Query.link("Browse Snippets"))</p>
+<p>    |> assert_has(Query.css("h1", text: "Snippets"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing User Flows</h2>
+
+<h3>Registration Flow</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/features/registration_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Features.RegistrationTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  feature "user can register", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/register")</p>
+<p>    |> fill_in(Query.text_field("Email"), with: "new@example.com")</p>
+<p>    |> fill_in(Query.text_field("Password"), with: "password123456")</p>
+<p>    |> click(Query.button("Create Account"))</p>
+<p>    |> assert_has(Query.css(".alert-info", text: "Account created"))</p>
+<p>  end</p>
+
+<p>  feature "shows validation errors", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/register")</p>
+<p>    |> fill_in(Query.text_field("Email"), with: "invalid")</p>
+<p>    |> fill_in(Query.text_field("Password"), with: "short")</p>
+<p>    |> click(Query.button("Create Account"))</p>
+<p>    |> assert_has(Query.css(".phx-form-error", text: "must have the @ sign"))</p>
+<p>    |> assert_has(Query.css(".phx-form-error", text: "should be at least"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Login Flow</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/features/login_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Features.LoginTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  feature "user can login", %{session: session} do</p>
+<p>    user = user_fixture()</p>
+
+<p>    session</p>
+<p>    |> visit("/login")</p>
+<p>    |> fill_in(Query.text_field("Email"), with: user.email)</p>
+<p>    |> fill_in(Query.text_field("Password"), with: valid_user_password())</p>
+<p>    |> click(Query.button("Log in"))</p>
+<p>    |> assert_has(Query.css(".alert-info", text: "Welcome back"))</p>
+<p>    |> assert_has(Query.text(user.email))</p>
+<p>  end</p>
+
+<p>  feature "shows error for invalid credentials", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/login")</p>
+<p>    |> fill_in(Query.text_field("Email"), with: "wrong@example.com")</p>
+<p>    |> fill_in(Query.text_field("Password"), with: "wrongpassword")</p>
+<p>    |> click(Query.button("Log in"))</p>
+<p>    |> assert_has(Query.css(".alert-error", text: "Invalid email or password"))</p>
+<p>  end</p>
+
+<p>  feature "user can logout", %{session: session} do</p>
+<p>    user = user_fixture()</p>
+
+<p>    session</p>
+<p>    |> login(user)</p>
+<p>    |> click(Query.link("Log out"))</p>
+<p>    |> assert_has(Query.link("Log in"))</p>
+<p>  end</p>
+
+<p>  defp login(session, user) do</p>
+<p>    session</p>
+<p>    |> visit("/login")</p>
+<p>    |> fill_in(Query.text_field("Email"), with: user.email)</p>
+<p>    |> fill_in(Query.text_field("Password"), with: valid_user_password())</p>
+<p>    |> click(Query.button("Log in"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing CRUD Operations</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/features/snippet_crud_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Features.SnippetCRUDTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  setup %{session: session} do</p>
+<p>    user = user_fixture()</p>
+<p>    session = login(session, user)</p>
+<p>    {:ok, session: session, user: user}</p>
+<p>  end</p>
+
+<p>  feature "user creates a snippet", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/snippets/new")</p>
+<p>    |> fill_in(Query.text_field("Title"), with: "My Test Snippet")</p>
+<p>    |> fill_in(Query.css("textarea[name='snippet[content]']"), with: "defmodule Test do\nend")</p>
+<p>    |> select(Query.select("Language"), option: "elixir")</p>
+<p>    |> click(Query.button("Save Snippet"))</p>
+<p>    |> assert_has(Query.css(".alert-info", text: "created"))</p>
+<p>    |> assert_has(Query.css("h1", text: "My Test Snippet"))</p>
+<p>  end</p>
+
+<p>  feature "user views a snippet", %{session: session, user: user} do</p>
+<p>    snippet = snippet_fixture(%{user_id: user.id, title: "View Test"})</p>
+
+<p>    session</p>
+<p>    |> visit("/snippets/#{snippet.id}")</p>
+<p>    |> assert_has(Query.css("h1", text: "View Test"))</p>
+<p>    |> assert_has(Query.css("code", text: snippet.content))</p>
+<p>  end</p>
+
+<p>  feature "user edits a snippet", %{session: session, user: user} do</p>
+<p>    snippet = snippet_fixture(%{user_id: user.id})</p>
+
+<p>    session</p>
+<p>    |> visit("/snippets/#{snippet.id}/edit")</p>
+<p>    |> clear(Query.text_field("Title"))</p>
+<p>    |> fill_in(Query.text_field("Title"), with: "Updated Title")</p>
+<p>    |> click(Query.button("Save Snippet"))</p>
+<p>    |> assert_has(Query.css(".alert-info", text: "updated"))</p>
+<p>    |> assert_has(Query.css("h1", text: "Updated Title"))</p>
+<p>  end</p>
+
+<p>  feature "user deletes a snippet", %{session: session, user: user} do</p>
+<p>    snippet = snippet_fixture(%{user_id: user.id, title: "Delete Me"})</p>
+
+<p>    session</p>
+<p>    |> visit("/snippets/#{snippet.id}")</p>
+<p>    |> accept_confirm(fn s -> click(s, Query.button("Delete")) end)</p>
+<p>    |> assert_has(Query.css(".alert-info", text: "deleted"))</p>
+<p>    |> refute_has(Query.text("Delete Me"))</p>
+<p>  end</p>
+
+<p>  defp login(session, user) do</p>
+<p>    session</p>
+<p>    |> visit("/login")</p>
+<p>    |> fill_in(Query.text_field("Email"), with: user.email)</p>
+<p>    |> fill_in(Query.text_field("Password"), with: valid_user_password())</p>
+<p>    |> click(Query.button("Log in"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Search</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/features/search_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Features.SearchTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  feature "user searches snippets", %{session: session} do</p>
+<p>    snippet_fixture(%{title: "Elixir GenServer Example"})</p>
+<p>    snippet_fixture(%{title: "Python Script"})</p>
+
+<p>    session</p>
+<p>    |> visit("/snippets")</p>
+<p>    |> fill_in(Query.text_field("Search"), with: "GenServer")</p>
+<p>    |> click(Query.button("Search"))</p>
+<p>    |> assert_has(Query.text("Elixir GenServer Example"))</p>
+<p>    |> refute_has(Query.text("Python Script"))</p>
+<p>  end</p>
+
+<p>  feature "search with no results", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/snippets")</p>
+<p>    |> fill_in(Query.text_field("Search"), with: "nonexistent")</p>
+<p>    |> click(Query.button("Search"))</p>
+<p>    |> assert_has(Query.text("No snippets found"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing JavaScript Interactions</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/features/javascript_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Features.JavaScriptTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  feature "modal opens and closes", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/snippets")</p>
+<p>    |> click(Query.button("New Snippet"))</p>
+<p>    |> assert_has(Query.css("#snippet-modal", visible: true))</p>
+<p>    |> click(Query.css("[data-close-modal]"))</p>
+<p>    |> assert_has(Query.css("#snippet-modal", visible: false))</p>
+<p>  end</p>
+
+<p>  feature "dropdown menu works", %{session: session} do</p>
+<p>    user = user_fixture()</p>
+
+<p>    session</p>
+<p>    |> login(user)</p>
+<p>    |> visit("/")</p>
+<p>    |> click(Query.css("[data-dropdown-toggle]"))</p>
+<p>    |> assert_has(Query.css("[data-dropdown-menu]", visible: true))</p>
+<p>    |> click(Query.link("Profile"))</p>
+<p>    |> assert_has(Query.css("h1", text: "Profile"))</p>
+<p>  end</p>
+
+<p>  feature "copy to clipboard shows feedback", %{session: session} do</p>
+<p>    snippet = snippet_fixture()</p>
+
+<p>    session</p>
+<p>    |> visit("/snippets/#{snippet.id}")</p>
+<p>    |> click(Query.button("Copy"))</p>
+<p>    |> assert_has(Query.text("Copied!"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Forms with Validation</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/features/form_validation_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Features.FormValidationTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  setup %{session: session} do</p>
+<p>    user = user_fixture()</p>
+<p>    session = login(session, user)</p>
+<p>    {:ok, session: session}</p>
+<p>  end</p>
+
+<p>  feature "real-time validation shows errors", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/snippets/new")</p>
+<p>    |> fill_in(Query.text_field("Title"), with: "")</p>
+<p>    |> click(Query.css("body"))  # Trigger blur</p>
+<p>    |> assert_has(Query.css(".phx-form-error", text: "can't be blank"))</p>
+<p>  end</p>
+
+<p>  feature "validation clears on valid input", %{session: session} do</p>
+<p>    session</p>
+<p>    |> visit("/snippets/new")</p>
+<p>    |> fill_in(Query.text_field("Title"), with: "")</p>
+<p>    |> click(Query.css("body"))</p>
+<p>    |> assert_has(Query.css(".phx-form-error"))</p>
+<p>    |> fill_in(Query.text_field("Title"), with: "Valid Title")</p>
+<p>    |> refute_has(Query.css(".phx-form-error"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Page Objects Pattern</h2>
+
+<figure class="code"><figcaption>File: test/support/pages/snippet_page.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Pages.SnippetPage do</p>
+<p>  use Wallaby.DSL</p>
+
+<p>  def visit_index(session) do</p>
+<p>    visit(session, "/snippets")</p>
+<p>  end</p>
+
+<p>  def visit_new(session) do</p>
+<p>    visit(session, "/snippets/new")</p>
+<p>  end</p>
+
+<p>  def visit_show(session, snippet) do</p>
+<p>    visit(session, "/snippets/#{snippet.id}")</p>
+<p>  end</p>
+
+<p>  def fill_form(session, attrs) do</p>
+<p>    session</p>
+<p>    |> fill_in(Query.text_field("Title"), with: attrs[:title] || "")</p>
+<p>    |> fill_in(Query.css("textarea[name='snippet[content]']"), with: attrs[:content] || "")</p>
+<p>    |> select(Query.select("Language"), option: attrs[:language] || "elixir")</p>
+<p>  end</p>
+
+<p>  def submit_form(session) do</p>
+<p>    click(session, Query.button("Save Snippet"))</p>
+<p>  end</p>
+
+<p>  def assert_snippet_displayed(session, snippet) do</p>
+<p>    session</p>
+<p>    |> assert_has(Query.css("h1", text: snippet.title))</p>
+<p>    |> assert_has(Query.css("code", text: snippet.content))</p>
+<p>  end</p>
+
+<p>  def click_edit(session) do</p>
+<p>    click(session, Query.link("Edit"))</p>
+<p>  end</p>
+
+<p>  def click_delete(session) do</p>
+<p>    accept_confirm(session, fn s -></p>
+<p>      click(s, Query.button("Delete"))</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Usage</h1>
+<p>defmodule SnippetboxWeb.Features.SnippetPageObjectTest do</p>
+<p>  use SnippetboxWeb.FeatureCase</p>
+
+<p>  alias SnippetboxWeb.Pages.SnippetPage</p>
+
+<p>  feature "creates snippet using page object", %{session: session} do</p>
+<p>    user = user_fixture()</p>
+
+<p>    session</p>
+<p>    |> login(user)</p>
+<p>    |> SnippetPage.visit_new()</p>
+<p>    |> SnippetPage.fill_form(%{</p>
+<p>      title: "Page Object Test",</p>
+<p>      content: "defmodule Test do\nend",</p>
+<p>      language: "elixir"</p>
+<p>    })</p>
+<p>    |> SnippetPage.submit_form()</p>
+<p>    |> assert_has(Query.css(".alert-info", text: "created"))</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing File Uploads</h2>
+
+<figure class="code"><pre><code>feature "user uploads file", %{session: session} do
+<p>  session</p>
+<p>  |> login(user_fixture())</p>
+<p>  |> visit("/snippets/import")</p>
+<p>  |> attach_file(Query.file_field("file"), path: "test/fixtures/sample.ex")</p>
+<p>  |> click(Query.button("Import"))</p>
+<p>  |> assert_has(Query.css(".alert-info", text: "imported"))</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Screenshots on Failure</h2>
+
+<figure class="code"><figcaption>File: config/test.exs</figcaption><pre><code class="language-elixir">
+<p>config :wallaby,</p>
+<p>  screenshot_on_failure: true,</p>
+<p>  screenshot_dir: "tmp/screenshots"</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># Manual screenshots
+<p>feature "captures screenshot", %{session: session} do</p>
+<p>  session</p>
+<p>  |> visit("/")</p>
+<p>  |> take_screenshot(name: "homepage")</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Session Transformation</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Wallaby tests follow the functional pattern of session transformation:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> session
+<p>|> visit("/page")           # Returns new session</p>
+<p>|> fill_in(field, value)    # Returns new session</p>
+<p>|> click(button)            # Returns new session</p>
+<p>|> assert_has(element)      # Returns new session</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Each action transforms the session state</p>
+<p># The original session is never modified</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes test steps composable and easy to reason about.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Setting up Wallaby for integration tests</li>
+<li>Writing feature tests</li>
+<li>Testing user flows (registration, login)</li>
+<li>Testing CRUD operations</li>
+<li>Testing JavaScript interactions</li>
+<li>Page objects pattern</li>
+<li>Testing file uploads</li>
+<li>Screenshots for debugging</li>
+</ul>
+
+<p>In the next chapter, we'll explore LiveView testing.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="13.02-controller-testing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="13.04-liveview-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

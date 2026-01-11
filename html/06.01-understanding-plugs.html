@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Understanding Plugs &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Understanding Plugs</span>
+            </div>
+            <div>
+                &lsaquo; <a href="06.00-plugs-and-middleware.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="06.02-phoenix-pipelines.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 6.1</div>
+        <h1>Chapter 6.1: Understanding Plugs</h1>
+
+<p>Plugs are the foundation of Phoenix's request handling. In this chapter, we'll understand the Plug specification and how the connection struct works.</p>
+
+<h2>The Plug Specification</h2>
+
+<p>A plug must implement one of two patterns:</p>
+
+<h3>Function Plug</h3>
+
+<figure class="code"><pre><code>def my_plug(conn, opts) do
+<p>  # Transform conn</p>
+<p>  conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Module Plug</h3>
+
+<figure class="code"><pre><code>defmodule MyPlug do
+<p>  @behaviour Plug</p>
+
+<p>  @impl true</p>
+<p>  def init(opts) do</p>
+<p>    # Called at compile time</p>
+<p>    # Process options and return them</p>
+<p>    opts</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def call(conn, opts) do</p>
+<p>    # Called at runtime for every request</p>
+<p>    # Transform and return conn</p>
+<p>    conn</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The Connection Struct</h2>
+
+<code>Plug.Conn</code> carries all request and response data:
+
+<figure class="code"><pre><code>%Plug.Conn{
+<p>  # Request data (read-only)</p>
+<p>  host: "localhost",</p>
+<p>  port: 4000,</p>
+<p>  method: "GET",</p>
+<p>  path_info: ["snippets", "123"],</p>
+<p>  request_path: "/snippets/123",</p>
+<p>  query_string: "format=json",</p>
+<p>  req_headers: [{"accept", "text/html"}, ...],</p>
+<p>  remote_ip: {127, 0, 0, 1},</p>
+<p>  scheme: :http,</p>
+
+<p>  # Parameters (merged)</p>
+<p>  params: %{"id" => "123", "format" => "json"},</p>
+<p>  path_params: %{"id" => "123"},</p>
+<p>  query_params: %{"format" => "json"},</p>
+<p>  body_params: %{},</p>
+
+<p>  # Assigns (your data)</p>
+<p>  assigns: %{},</p>
+
+<p>  # Response data (mutable through functions)</p>
+<p>  status: nil,</p>
+<p>  resp_headers: [{"cache-control", "max-age=0, private, must-revalidate"}],</p>
+<p>  resp_body: nil,</p>
+<p>  state: :unset,</p>
+
+<p>  # Private data (Phoenix internal)</p>
+<p>  private: %{</p>
+<p>    phoenix_action: :show,</p>
+<p>    phoenix_controller: SnippetController,</p>
+<p>    phoenix_endpoint: SnippetboxWeb.Endpoint,</p>
+<p>    phoenix_format: "html",</p>
+<p>    phoenix_router: SnippetboxWeb.Router,</p>
+<p>    ...</p>
+<p>  }</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>Reading from the Connection</h2>
+
+<figure class="code"><pre><code>def my_plug(conn, _opts) do
+<p>  # Read request info</p>
+<p>  method = conn.method                    # "GET"</p>
+<p>  path = conn.request_path                # "/snippets/123"</p>
+<p>  host = conn.host                        # "localhost"</p>
+
+<p>  # Read headers</p>
+<p>  [user_agent | _] = get_req_header(conn, "user-agent")</p>
+
+<p>  # Read params</p>
+<p>  id = conn.params["id"]                  # "123"</p>
+
+<p>  # Read assigns</p>
+<p>  user = conn.assigns[:current_user]      # nil or %User{}</p>
+
+<p>  conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Modifying the Connection</h2>
+
+<p>All modifications return a <strong>new</strong> connection:</p>
+
+<figure class="code"><pre><code>def my_plug(conn, _opts) do
+<p>  conn</p>
+<p>  |> assign(:request_time, DateTime.utc_now())</p>
+<p>  |> put_resp_header("x-custom", "value")</p>
+<p>  |> put_status(200)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Common Modification Functions</h3>
+
+<figure class="code"><pre><code># Assigns (your custom data)
+<p>conn = assign(conn, :key, value)</p>
+<p>conn = merge_assigns(conn, %{key1: val1, key2: val2})</p>
+
+<h1>Response headers</h1>
+<p>conn = put_resp_header(conn, "x-custom", "value")</p>
+<p>conn = delete_resp_header(conn, "x-frame-options")</p>
+<p>conn = put_resp_content_type(conn, "application/json")</p>
+
+<h1>Status</h1>
+<p>conn = put_status(conn, :ok)        # 200</p>
+<p>conn = put_status(conn, :not_found) # 404</p>
+<p>conn = put_status(conn, 418)        # I'm a teapot</p>
+
+<h1>Response body</h1>
+<p>conn = resp(conn, 200, "body")      # Set body</p>
+<p>conn = send_resp(conn)              # Send response</p>
+
+<h1>Sessions</h1>
+<p>conn = put_session(conn, :user_id, 123)</p>
+<p>user_id = get_session(conn, :user_id)</p>
+<p>conn = delete_session(conn, :user_id)</p>
+<p>conn = clear_session(conn)</p>
+
+<h1>Flash</h1>
+<p>conn = put_flash(conn, :info, "Success!")</p>
+<p>conn = put_flash(conn, :error, "Failed!")</p>
+</code></pre></figure>
+
+<h2>Halting the Pipeline</h2>
+
+<p>Use <code>halt/1</code> to stop plug execution:</p>
+
+<figure class="code"><pre><code>def require_admin(conn, _opts) do
+<p>  if conn.assigns[:current_user]&.admin do</p>
+<p>    conn  # Continue to next plug</p>
+<p>  else</p>
+<p>    conn</p>
+<p>    |> put_status(:forbidden)</p>
+<p>    |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>    |> render("403.html")</p>
+<p>    |> halt()  # Stop pipeline!</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>After <code>halt()</code>, no more plugs run, but the response is sent.</p>
+
+<h2>Plug Execution Flow</h2>
+
+<figure class="code"><pre><code># Pipeline
+<p>plug :plug_a</p>
+<p>plug :plug_b</p>
+<p>plug :plug_c</p>
+
+<h1>Execution without halt</h1>
+<p>Request → plug_a → plug_b → plug_c → Controller</p>
+
+<h1>Execution with halt in plug_b</h1>
+<p>Request → plug_a → plug_b (halt) → Response</p>
+<p>                      ↓</p>
+<p>                (plug_c never runs)</p>
+</code></pre></figure>
+
+<h2>Simple Plug Examples</h2>
+
+<h3>Logging Plug</h3>
+
+<figure class="code"><pre><code>def log_request(conn, _opts) do
+<p>  IO.puts("#{conn.method} #{conn.request_path}")</p>
+<p>  conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Timing Plug</h3>
+
+<figure class="code"><pre><code>def request_timer(conn, _opts) do
+<p>  start = System.monotonic_time()</p>
+
+<p>  Plug.Conn.register_before_send(conn, fn conn -></p>
+<p>    stop = System.monotonic_time()</p>
+<p>    diff = System.convert_time_unit(stop - start, :native, :millisecond)</p>
+<p>    IO.puts("Request completed in #{diff}ms")</p>
+<p>    conn</p>
+<p>  end)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>User Agent Plug</h3>
+
+<figure class="code"><pre><code>def assign_user_agent(conn, _opts) do
+<p>  ua = case get_req_header(conn, "user-agent") do</p>
+<p>    [ua | _] -> ua</p>
+<p>    _ -> "unknown"</p>
+<p>  end</p>
+
+<p>  assign(conn, :user_agent, ua)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The Conn Lifecycle</h2>
+
+<figure class="code"><pre><code>1. conn.state = :unset
+<p>   (Initial state, no response set)</p>
+
+<ol>
+<li>conn.state = :set</li>
+</ol>
+<p>   (Response set but not sent: resp/3, put_resp_*)</p>
+
+<ol>
+<li>conn.state = :sent</li>
+</ol>
+<p>   (Response sent: send_resp/1)</p>
+
+<ol>
+<li>conn.state = :chunked</li>
+</ol>
+<p>   (Streaming response)</p>
+</code></pre></figure>
+
+<p>Check state before operations:</p>
+
+<figure class="code"><pre><code>def my_plug(conn, _opts) do
+<p>  if conn.state == :sent do</p>
+<p>    # Response already sent, can't modify</p>
+<p>    conn</p>
+<p>  else</p>
+<p>    put_resp_header(conn, "x-custom", "value")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Immutable Transformations</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The conn is never mutated - each function returns a new conn:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> conn1 = assign(conn, :a, 1)
+<p>conn2 = assign(conn1, :b, 2)  # conn1 unchanged!</p>
+<p>conn3 = put_status(conn2, 200)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Or with pipe</p>
+<p>conn</p>
+<p>|> assign(:a, 1)</p>
+<p>|> assign(:b, 2)</p>
+<p>|> put_status(200)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li>No side effects during transformation</li>
+<li>Easy to trace data flow</li>
+<li>Thread-safe (important for concurrent requests)</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/plug/Plug.Conn.html">Plug.Conn</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>The Plug specification (function and module)</li>
+<li>The connection struct and its fields</li>
+<li>Reading request data</li>
+<li>Modifying response data</li>
+<li>Halting the pipeline</li>
+<li>The connection lifecycle</li>
+</ul>
+
+<p>In the next chapter, we'll explore Phoenix router pipelines.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="06.00-plugs-and-middleware.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="06.02-phoenix-pipelines.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

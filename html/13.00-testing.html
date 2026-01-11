@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Testing &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Testing</span>
+            </div>
+            <div>
+                &lsaquo; <a href="12.04-real-time-features.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="13.01-unit-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 13</div>
+        <h1>Chapter 13: Testing</h1>
+
+<p>Testing is a first-class citizen in Elixir and Phoenix. In this chapter, we'll explore comprehensive testing strategies for Phoenix applications.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Unit testing with ExUnit</li>
+<li>Controller and integration testing</li>
+<li>LiveView testing</li>
+<li>Database testing strategies</li>
+<li>Test organization and best practices</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>13.1 Unit Testing</strong> - Testing modules and functions</li>
+<li><strong>13.2 Controller Testing</strong> - Testing HTTP endpoints</li>
+<li><strong>13.3 Integration Testing</strong> - End-to-end testing</li>
+<li><strong>13.4 LiveView Testing</strong> - Testing LiveView components</li>
+<li><strong>13.5 Database Testing</strong> - Ecto and sandbox testing</li>
+<li><strong>13.6 Best Practices</strong> - Coverage and organization</li>
+</ul>
+
+<h2>Testing in Elixir</h2>
+
+<p>ExUnit is Elixir's built-in test framework:</p>
+
+<figure class="code"><pre><code># Run all tests
+<p>mix test</p>
+
+<h1>Run specific file</h1>
+<p>mix test test/snippetbox/snippets_test.exs</p>
+
+<h1>Run specific test</h1>
+<p>mix test test/snippetbox/snippets_test.exs:42</p>
+
+<h1>Run with coverage</h1>
+<p>mix test --cover</p>
+
+<h1>Run in watch mode (with mix_test_watch)</h1>
+<p>mix test.watch</p>
+</code></pre></figure>
+
+<h2>Test Structure</h2>
+
+<figure class="code"><pre><code>test/
+<p>├── snippetbox/                    # Context tests</p>
+<p>│   ├── accounts_test.exs</p>
+<p>│   └── snippets_test.exs</p>
+<p>├── snippetbox_web/</p>
+<p>│   ├── controllers/              # Controller tests</p>
+<p>│   │   ├── page_controller_test.exs</p>
+<p>│   │   └── snippet_controller_test.exs</p>
+<p>│   ├── live/                     # LiveView tests</p>
+<p>│   │   └── snippet_live_test.exs</p>
+<p>│   └── views/                    # View tests (if any)</p>
+<p>├── support/                      # Test helpers</p>
+<p>│   ├── conn_case.ex</p>
+<p>│   ├── data_case.ex</p>
+<p>│   ├── fixtures/</p>
+<p>│   │   └── accounts_fixtures.ex</p>
+<p>│   └── channel_case.ex</p>
+<p>└── test_helper.exs               # Test configuration</p>
+</code></pre></figure>
+
+<h2>Test Configuration</h2>
+
+<figure class="code"><figcaption>File: test/test_helper.exs</figcaption><pre><code class="language-elixir">
+<p>ExUnit.start()</p>
+<p>Ecto.Adapters.SQL.Sandbox.mode(Snippetbox.Repo, :manual)</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: config/test.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Configure your database for tests</h1>
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  hostname: "localhost",</p>
+<p>  database: "snippetbox_test#{System.get_env("MIX_TEST_PARTITION")}",</p>
+<p>  pool: Ecto.Adapters.SQL.Sandbox,</p>
+<p>  pool_size: 10</p>
+
+<h1>Faster password hashing for tests</h1>
+<p>config :bcrypt_elixir, :log_rounds, 1</p>
+
+<h1>Disable Swoosh API client</h1>
+<p>config :swoosh, :api_client, false</p>
+
+<h1>Print only warnings and errors during test</h1>
+<p>config :logger, level: :warning</p>
+
+<h1>Initialize plugs at runtime for faster test compilation</h1>
+<p>config :phoenix, :plug_init_mode, :runtime</p>
+</code></pre></figure>
+
+<h2>Test Cases</h2>
+
+<p>Phoenix provides specialized test case modules:</p>
+
+<h3>DataCase</h3>
+
+<p>For testing contexts and database operations:</p>
+
+<figure class="code"><figcaption>File: test/support/data_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.DataCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      alias Snippetbox.Repo</p>
+
+<p>      import Ecto</p>
+<p>      import Ecto.Changeset</p>
+<p>      import Ecto.Query</p>
+<p>      import Snippetbox.DataCase</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  setup tags do</p>
+<p>    Snippetbox.DataCase.setup_sandbox(tags)</p>
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  def setup_sandbox(tags) do</p>
+<p>    pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Snippetbox.Repo, shared: not tags[:async])</p>
+<p>    on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)</p>
+<p>  end</p>
+
+<p>  def errors_on(changeset) do</p>
+<p>    Ecto.Changeset.traverse_errors(changeset, fn {message, opts} -></p>
+<p>      Regex.replace(~r"%{(\w+)}", message, fn _, key -></p>
+<p>        opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()</p>
+<p>      end)</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>ConnCase</h3>
+
+<p>For testing controllers:</p>
+
+<figure class="code"><figcaption>File: test/support/conn_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ConnCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      @endpoint SnippetboxWeb.Endpoint</p>
+
+<p>      use SnippetboxWeb, :verified_routes</p>
+
+<p>      import Plug.Conn</p>
+<p>      import Phoenix.ConnTest</p>
+<p>      import SnippetboxWeb.ConnCase</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  setup tags do</p>
+<p>    Snippetbox.DataCase.setup_sandbox(tags)</p>
+<p>    {:ok, conn: Phoenix.ConnTest.build_conn()}</p>
+<p>  end</p>
+
+<p>  def register_and_log_in_user(%{conn: conn}) do</p>
+<p>    user = Snippetbox.AccountsFixtures.user_fixture()</p>
+<p>    %{conn: log_in_user(conn, user), user: user}</p>
+<p>  end</p>
+
+<p>  def log_in_user(conn, user) do</p>
+<p>    token = Snippetbox.Accounts.generate_user_session_token(user)</p>
+
+<p>    conn</p>
+<p>    |> Phoenix.ConnTest.init_test_session(%{})</p>
+<p>    |> Plug.Conn.put_session(:user_token, token)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Fixtures</h2>
+
+<figure class="code"><figcaption>File: test/support/fixtures/accounts_fixtures.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.AccountsFixtures do</p>
+<p>  def unique_user_email, do: "user#{System.unique_integer()}@example.com"</p>
+<p>  def valid_user_password, do: "hello world!"</p>
+
+<p>  def valid_user_attributes(attrs \\ %{}) do</p>
+<p>    Enum.into(attrs, %{</p>
+<p>      email: unique_user_email(),</p>
+<p>      password: valid_user_password()</p>
+<p>    })</p>
+<p>  end</p>
+
+<p>  def user_fixture(attrs \\ %{}) do</p>
+<p>    {:ok, user} =</p>
+<p>      attrs</p>
+<p>      |> valid_user_attributes()</p>
+<p>      |> Snippetbox.Accounts.register_user()</p>
+
+<p>    user</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Quick Test Example</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox/snippets_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.SnippetsTest do</p>
+<p>  use Snippetbox.DataCase</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  describe "snippets" do</p>
+<p>    alias Snippetbox.Snippets.Snippet</p>
+
+<p>    import Snippetbox.SnippetsFixtures</p>
+
+<p>    test "list_snippets/0 returns all snippets" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert Snippets.list_snippets() == [snippet]</p>
+<p>    end</p>
+
+<p>    test "get_snippet!/1 returns the snippet with given id" do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      assert Snippets.get_snippet!(snippet.id) == snippet</p>
+<p>    end</p>
+
+<p>    test "create_snippet/1 with valid data creates a snippet" do</p>
+<p>      valid_attrs = %{title: "Test", content: "Code", language: "elixir"}</p>
+
+<p>      assert {:ok, %Snippet{} = snippet} = Snippets.create_snippet(valid_attrs)</p>
+<p>      assert snippet.title == "Test"</p>
+<p>      assert snippet.content == "Code"</p>
+<p>      assert snippet.language == "elixir"</p>
+<p>    end</p>
+
+<p>    test "create_snippet/1 with invalid data returns error changeset" do</p>
+<p>      assert {:error, %Ecto.Changeset{}} = Snippets.create_snippet(%{})</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Test Tags</h2>
+
+<figure class="code"><pre><code># Run async tests in parallel
+<p>@tag :async</p>
+<p>test "async test" do</p>
+<p>  # ...</p>
+<p>end</p>
+
+<h1>Skip tests</h1>
+<p>@tag :skip</p>
+<p>test "skipped test" do</p>
+<p>  # ...</p>
+<p>end</p>
+
+<h1>External service tests</h1>
+<p>@tag :external</p>
+<p>test "calls external API" do</p>
+<p>  # ...</p>
+<p>end</p>
+
+<h1>Run only external tests</h1>
+<h1>mix test --only external</h1>
+</code></pre></figure>
+
+<p>Let's explore each testing strategy in detail.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="12.04-real-time-features.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="13.01-unit-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

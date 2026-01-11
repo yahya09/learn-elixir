@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>LiveView Forms &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; LiveView Forms</span>
+            </div>
+            <div>
+                &lsaquo; <a href="12.01-liveview-basics.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="12.03-live-components.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 12.2</div>
+        <h1>Chapter 12.2: LiveView Forms</h1>
+
+<p>LiveView forms provide real-time validation and a smooth user experience. In this chapter, we'll explore form handling in LiveView.</p>
+
+<h2>Basic LiveView Form</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/snippet_live/form_component.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetLive.FormComponent do</p>
+<p>  use SnippetboxWeb, :live_component</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div></p>
+<p>      <.header></p>
+<p>        <%= @title %></p>
+<p>        <:subtitle>Manage snippet details</:subtitle></p>
+<p>      </.header></p>
+
+<p>      <.simple_form</p>
+<p>        for={@form}</p>
+<p>        id="snippet-form"</p>
+<p>        phx-target={@myself}</p>
+<p>        phx-change="validate"</p>
+<p>        phx-submit="save"</p>
+<p>      ></p>
+<p>        <.input field={@form[:title]} type="text" label="Title" /></p>
+<p>        <.input field={@form[:content]} type="textarea" label="Content" /></p>
+<p>        <.input</p>
+<p>          field={@form[:language]}</p>
+<p>          type="select"</p>
+<p>          label="Language"</p>
+<p>          prompt="Select language"</p>
+<p>          options={~w(elixir javascript python ruby go rust)}</p>
+<p>        /></p>
+<p>        <.input field={@form[:public]} type="checkbox" label="Public" /></p>
+
+<p>        <:actions></p>
+<p>          <.button phx-disable-with="Saving...">Save Snippet</.button></p>
+<p>        </:actions></p>
+<p>      </.simple_form></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def update(%{snippet: snippet} = assigns, socket) do</p>
+<p>    changeset = Snippets.change_snippet(snippet)</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(assigns)</p>
+<p>     |> assign_form(changeset)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("validate", %{"snippet" => snippet_params}, socket) do</p>
+<p>    changeset =</p>
+<p>      socket.assigns.snippet</p>
+<p>      |> Snippets.change_snippet(snippet_params)</p>
+<p>      |> Map.put(:action, :validate)</p>
+
+<p>    {:noreply, assign_form(socket, changeset)}</p>
+<p>  end</p>
+
+<p>  def handle_event("save", %{"snippet" => snippet_params}, socket) do</p>
+<p>    save_snippet(socket, socket.assigns.action, snippet_params)</p>
+<p>  end</p>
+
+<p>  defp save_snippet(socket, :edit, snippet_params) do</p>
+<p>    case Snippets.update_snippet(socket.assigns.snippet, snippet_params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        notify_parent({:saved, snippet})</p>
+
+<p>        {:noreply,</p>
+<p>         socket</p>
+<p>         |> put_flash(:info, "Snippet updated successfully")</p>
+<p>         |> push_patch(to: socket.assigns.patch)}</p>
+
+<p>      {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>        {:noreply, assign_form(socket, changeset)}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp save_snippet(socket, :new, snippet_params) do</p>
+<p>    case Snippets.create_snippet(snippet_params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        notify_parent({:saved, snippet})</p>
+
+<p>        {:noreply,</p>
+<p>         socket</p>
+<p>         |> put_flash(:info, "Snippet created successfully")</p>
+<p>         |> push_patch(to: socket.assigns.patch)}</p>
+
+<p>      {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>        {:noreply, assign_form(socket, changeset)}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp assign_form(socket, %Ecto.Changeset{} = changeset) do</p>
+<p>    assign(socket, :form, to_form(changeset))</p>
+<p>  end</p>
+
+<p>  defp notify_parent(msg), do: send(self(), {__MODULE__, msg})</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Real-Time Validation</h2>
+
+<h3>Debounced Input</h3>
+
+<figure class="code"><pre><code><.input
+<p>  field={@form[:title]}</p>
+<p>  type="text"</p>
+<p>  label="Title"</p>
+<p>  phx-debounce="300"</p>
+<p>/></p>
+</code></pre></figure>
+
+<h3>Blur Validation</h3>
+
+<figure class="code"><pre><code><.input
+<p>  field={@form[:email]}</p>
+<p>  type="email"</p>
+<p>  label="Email"</p>
+<p>  phx-debounce="blur"</p>
+<p>/></p>
+</code></pre></figure>
+
+<h3>Instant Validation</h3>
+
+<figure class="code"><pre><code><.input
+<p>  field={@form[:public]}</p>
+<p>  type="checkbox"</p>
+<p>  label="Public"</p>
+<p>  phx-debounce="0"</p>
+<p>/></p>
+</code></pre></figure>
+
+<h2>Form Events</h2>
+
+<h3>phx-change</h3>
+
+<p>Fires on every input change:</p>
+
+<figure class="code"><pre><code>def handle_event("validate", %{"snippet" => params}, socket) do
+<p>  changeset =</p>
+<p>    socket.assigns.snippet</p>
+<p>    |> Snippets.change_snippet(params)</p>
+<p>    |> Map.put(:action, :validate)</p>
+
+<p>  {:noreply, assign_form(socket, changeset)}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>phx-submit</h3>
+
+<p>Fires on form submission:</p>
+
+<figure class="code"><pre><code>def handle_event("save", %{"snippet" => params}, socket) do
+<p>  case Snippets.create_snippet(params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      {:noreply,</p>
+<p>       socket</p>
+<p>       |> put_flash(:info, "Created!")</p>
+<p>       |> push_navigate(to: ~p"/snippets/#{snippet}")}</p>
+
+<p>    {:error, changeset} -></p>
+<p>      {:noreply, assign_form(socket, changeset)}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>File Uploads</h2>
+
+<h3>Configuration</h3>
+
+<figure class="code"><pre><code>@impl true
+<p>def mount(_params, _session, socket) do</p>
+<p>  {:ok,</p>
+<p>   socket</p>
+<p>   |> assign(:uploaded_files, [])</p>
+<p>   |> allow_upload(:avatar,</p>
+<p>       accept: ~w(.jpg .jpeg .png),</p>
+<p>       max_entries: 1,</p>
+<p>       max_file_size: 5_000_000</p>
+<p>     )}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Template</h3>
+
+<figure class="code"><pre><code><form phx-submit="save" phx-change="validate">
+<p>  <.live_file_input upload={@uploads.avatar} /></p>
+
+<p>  <%# Preview %></p>
+<p>  <%= for entry <- @uploads.avatar.entries do %></p>
+<p>    <article class="upload-entry"></p>
+<p>      <figure></p>
+<p>        <.live_img_preview entry={entry} /></p>
+<p>        <figcaption><%= entry.client_name %></figcaption></p>
+<p>      </figure></p>
+
+<p>      <%# Progress bar %></p>
+<p>      <progress value={entry.progress} max="100"><%= entry.progress %>%</progress></p>
+
+<p>      <%# Cancel button %></p>
+<p>      <button type="button" phx-click="cancel-upload" phx-value-ref={entry.ref}></p>
+<p>        &times;</p>
+<p>      </button></p>
+
+<p>      <%# Errors %></p>
+<p>      <%= for err <- upload_errors(@uploads.avatar, entry) do %></p>
+<p>        <p class="text-red-600"><%= error_to_string(err) %></p></p>
+<p>      <% end %></p>
+<p>    </article></p>
+<p>  <% end %></p>
+
+<p>  <button type="submit">Upload</button></p>
+</form>
+</code></pre></figure>
+
+<h3>Handling Upload</h3>
+
+<figure class="code"><pre><code>def handle_event("save", _params, socket) do
+<p>  uploaded_files =</p>
+<p>    consume_uploaded_entries(socket, :avatar, fn %{path: path}, entry -></p>
+<p>      dest = Path.join("priv/static/uploads", entry.client_name)</p>
+<p>      File.cp!(path, dest)</p>
+<p>      {:ok, ~p"/uploads/#{Path.basename(dest)}"}</p>
+<p>    end)</p>
+
+<p>  {:noreply, update(socket, :uploaded_files, &(&1 ++ uploaded_files))}</p>
+<p>end</p>
+
+<p>def handle_event("cancel-upload", %{"ref" => ref}, socket) do</p>
+<p>  {:noreply, cancel_upload(socket, :avatar, ref)}</p>
+<p>end</p>
+
+<p>defp error_to_string(:too_large), do: "File too large"</p>
+<p>defp error_to_string(:not_accepted), do: "File type not accepted"</p>
+<p>defp error_to_string(:too_many_files), do: "Too many files"</p>
+</code></pre></figure>
+
+<h2>Multi-Step Forms</h2>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.WizardLive do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:step, 1)</p>
+<p>     |> assign(:form_data, %{})</p>
+<p>     |> assign_form(changeset_for_step(1, %{}))}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="wizard"></p>
+<p>      <div class="steps"></p>
+<p>        <.step_indicator current={@step} total={3} /></p>
+<p>      </div></p>
+
+<p>      <.form for={@form} phx-submit="next"></p>
+<p>        <%= case @step do %></p>
+<p>          <% 1 -> %></p>
+<p>            <.step_one form={@form} /></p>
+<p>          <% 2 -> %></p>
+<p>            <.step_two form={@form} /></p>
+<p>          <% 3 -> %></p>
+<p>            <.step_three form={@form} /></p>
+<p>        <% end %></p>
+
+<p>        <div class="flex gap-4 mt-6"></p>
+<p>          <.button :if={@step > 1} type="button" phx-click="prev">Back</.button></p>
+<p>          <.button type="submit"></p>
+<p>            <%= if @step == 3, do: "Submit", else: "Next" %></p>
+<p>          </.button></p>
+<p>        </div></p>
+<p>      </.form></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("next", %{"wizard" => params}, socket) do</p>
+<p>    current_step = socket.assigns.step</p>
+<p>    form_data = Map.merge(socket.assigns.form_data, params)</p>
+
+<p>    case validate_step(current_step, params) do</p>
+<p>      {:ok, _} when current_step < 3 -></p>
+<p>        {:noreply,</p>
+<p>         socket</p>
+<p>         |> assign(:step, current_step + 1)</p>
+<p>         |> assign(:form_data, form_data)</p>
+<p>         |> assign_form(changeset_for_step(current_step + 1, form_data))}</p>
+
+<p>      {:ok, _} -></p>
+<p>        # Final step - submit</p>
+<p>        submit_wizard(socket, form_data)</p>
+
+<p>      {:error, changeset} -></p>
+<p>        {:noreply, assign_form(socket, changeset)}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def handle_event("prev", _params, socket) do</p>
+<p>    new_step = max(1, socket.assigns.step - 1)</p>
+
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> assign(:step, new_step)</p>
+<p>     |> assign_form(changeset_for_step(new_step, socket.assigns.form_data))}</p>
+<p>  end</p>
+
+<p>  defp changeset_for_step(step, data) do</p>
+<p>    # Return appropriate changeset for each step</p>
+<p>  end</p>
+
+<p>  defp validate_step(step, params) do</p>
+<p>    # Validate params for specific step</p>
+<p>  end</p>
+
+<p>  defp submit_wizard(socket, form_data) do</p>
+<p>    # Process complete form data</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Dynamic Form Fields</h2>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.DynamicFormLive do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok, assign(socket, tags: [""], next_id: 1)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <.form for={%{}} phx-submit="save"></p>
+<p>      <div id="tags" phx-update="stream"></p>
+<p>        <%= for {id, tag} <- Enum.with_index(@tags) do %></p>
+<p>          <div id={"tag-#{id}"} class="flex gap-2 mb-2"></p>
+<p>            <input type="text" name="tags[]" value={tag} /></p>
+<p>            <button type="button" phx-click="remove-tag" phx-value-index={id}></p>
+<p>              Remove</p>
+<p>            </button></p>
+<p>          </div></p>
+<p>        <% end %></p>
+<p>      </div></p>
+
+<p>      <button type="button" phx-click="add-tag">Add Tag</button></p>
+<p>      <.button type="submit">Save</.button></p>
+<p>    </.form></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("add-tag", _params, socket) do</p>
+<p>    {:noreply, update(socket, :tags, &(&1 ++ [""]))}</p>
+<p>  end</p>
+
+<p>  def handle_event("remove-tag", %{"index" => index}, socket) do</p>
+<p>    index = String.to_integer(index)</p>
+<p>    tags = List.delete_at(socket.assigns.tags, index)</p>
+<p>    {:noreply, assign(socket, :tags, tags)}</p>
+<p>  end</p>
+
+<p>  def handle_event("save", %{"tags" => tags}, socket) do</p>
+<p>    # Process tags</p>
+<p>    {:noreply, socket}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Form with Associations</h2>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetLive.FormWithTags do
+<p>  use SnippetboxWeb, :live_component</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <.simple_form for={@form} phx-target={@myself} phx-submit="save"></p>
+<p>      <.input field={@form[:title]} label="Title" /></p>
+<p>      <.input field={@form[:content]} type="textarea" label="Content" /></p>
+
+<p>      <div class="mt-4"></p>
+<p>        <label class="block text-sm font-medium">Tags</label></p>
+<p>        <.inputs_for :let={tag_form} field={@form[:tags]}></p>
+<p>          <div class="flex gap-2 mt-2"></p>
+<p>            <input type="hidden" name="snippet[tags_sort][]" value={tag_form.index} /></p>
+<p>            <.input field={tag_form[:name]} placeholder="Tag name" /></p>
+<p>            <button</p>
+<p>              type="button"</p>
+<p>              name="snippet[tags_drop][]"</p>
+<p>              value={tag_form.index}</p>
+<p>              phx-click={JS.dispatch("change")}</p>
+<p>            ></p>
+<p>              Remove</p>
+<p>            </button></p>
+<p>          </div></p>
+<p>        </.inputs_for></p>
+
+<p>        <input type="hidden" name="snippet[tags_drop][]" /></p>
+
+<p>        <button</p>
+<p>          type="button"</p>
+<p>          name="snippet[tags_sort][]"</p>
+<p>          value="new"</p>
+<p>          phx-click={JS.dispatch("change")}</p>
+<p>          class="mt-2"</p>
+<p>        ></p>
+<p>          Add Tag</p>
+<p>        </button></p>
+<p>      </div></p>
+
+<p>      <:actions></p>
+<p>        <.button>Save</.button></p>
+<p>      </:actions></p>
+<p>    </.simple_form></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def update(%{snippet: snippet} = assigns, socket) do</p>
+<p>    changeset = Snippets.change_snippet(snippet)</p>
+<p>    {:ok, socket |> assign(assigns) |> assign_form(changeset)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("validate", %{"snippet" => params}, socket) do</p>
+<p>    changeset =</p>
+<p>      socket.assigns.snippet</p>
+<p>      |> Snippets.change_snippet(params)</p>
+<p>      |> Map.put(:action, :validate)</p>
+
+<p>    {:noreply, assign_form(socket, changeset)}</p>
+<p>  end</p>
+
+<p>  def handle_event("save", %{"snippet" => params}, socket) do</p>
+<p>    # Handle save</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Form as Data Transformation</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>LiveView forms follow a data transformation pattern:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Initial: empty changeset
+<p>changeset = change_snippet(%Snippet{})</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># On each change: params → changeset → form</p>
+<p>changeset = change_snippet(snippet, params)</p>
+<p>form = to_form(changeset)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># On submit: params → changeset → insert/update</p>
+<p>case create_snippet(params) do</p>
+<p>  {:ok, snippet} -> success</p>
+<p>  {:error, changeset} -> show errors</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The same changeset pattern works for both real-time validation and final submission.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Basic LiveView form setup</li>
+<li>Real-time validation with phx-change</li>
+<li>Debounced and blur validation</li>
+<li>File uploads with progress</li>
+<li>Multi-step wizard forms</li>
+<li>Dynamic form fields</li>
+<li>Forms with associations</li>
+</ul>
+
+<p>In the next chapter, we'll explore Live Components.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="12.01-liveview-basics.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="12.03-live-components.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

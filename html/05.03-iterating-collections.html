@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Iterating Collections &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Iterating Collections</span>
+            </div>
+            <div>
+                &lsaquo; <a href="05.02-template-actions.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="05.04-components.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 5.3</div>
+        <h1>Chapter 5.3: Iterating Collections</h1>
+
+<p>Displaying lists of data is a common task. In this chapter, we'll explore patterns for iterating over collections in templates.</p>
+
+<h2>Basic Iteration</h2>
+
+<h3>The for Comprehension</h3>
+
+<figure class="code"><pre><code><ul>
+<p>  <%= for item <- @items do %></p>
+<p>    <li><%= item.name %></li></p>
+<p>  <% end %></p>
+</ul>
+</code></pre></figure>
+
+<h3>With Index</h3>
+
+<figure class="code"><pre><code><ol>
+<p>  <%= for {item, index} <- Enum.with_index(@items) do %></p>
+<p>    <li></p>
+<p>      <span class="number"><%= index + 1 %>.</span></p>
+<p>      <%= item.name %></p>
+<p>    </li></p>
+<p>  <% end %></p>
+</ol>
+</code></pre></figure>
+
+<h3>With First/Last Detection</h3>
+
+<figure class="code"><pre><code><%= for {item, index} <- Enum.with_index(@items) do %>
+<p>  <div class={[</p>
+<p>    "item",</p>
+<p>    index == 0 && "first",</p>
+<p>    index == length(@items) - 1 && "last"</p>
+<p>  ]}></p>
+<p>    <%= item.name %></p>
+<p>  </div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Filtering in Loops</h2>
+
+<figure class="code"><pre><code><%# Only public snippets %>
+<%= for snippet <- @snippets, snippet.is_public do %>
+<p>  <div><%= snippet.title %></div></p>
+<% end %>
+
+<%# With multiple conditions %>
+<%= for snippet <- @snippets,
+<p>        snippet.is_public,</p>
+<p>        snippet.language == "elixir" do %></p>
+<p>  <div><%= snippet.title %></div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Empty State Handling</h2>
+
+<h3>Check Before Loop</h3>
+
+<figure class="code"><pre><code><%= if Enum.empty?(@snippets) do %>
+<p>  <div class="empty-state"></p>
+<p>    <h2>No snippets found</h2></p>
+<p>    <p>Be the first to create one!</p></p>
+<p>    <a href={~p"/snippets/new"} class="btn">Create Snippet</a></p>
+<p>  </div></p>
+<% else %>
+<p>  <div class="snippets"></p>
+<p>    <%= for snippet <- @snippets do %></p>
+<p>      <div class="snippet"><%= snippet.title %></div></p>
+<p>    <% end %></p>
+<p>  </div></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Using case</h3>
+
+<figure class="code"><pre><code><%= case @snippets do %>
+<p>  <% [] -> %></p>
+<p>    <div class="empty-state">No snippets found</div></p>
+
+<p>  <% [single] -> %></p>
+<p>    <div class="single-result"></p>
+<p>      Found one snippet: <%= single.title %></p>
+<p>    </div></p>
+
+<p>  <% snippets -> %></p>
+<p>    <div class="snippets"></p>
+<p>      Found <%= length(snippets) %> snippets:</p>
+<p>      <%= for s <- snippets do %></p>
+<p>        <div><%= s.title %></div></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Table Rendering</h2>
+
+<h3>Basic Table</h3>
+
+<figure class="code"><pre><code><table class="table">
+<p>  <thead></p>
+<p>    <tr></p>
+<p>      <th>Title</th></p>
+<p>      <th>Language</th></p>
+<p>      <th>Created</th></p>
+<p>      <th>Actions</th></p>
+<p>    </tr></p>
+<p>  </thead></p>
+<p>  <tbody></p>
+<p>    <%= for snippet <- @snippets do %></p>
+<p>      <tr></p>
+<p>        <td><%= snippet.title %></td></p>
+<p>        <td><%= snippet.language %></td></p>
+<p>        <td><%= format_date(snippet.inserted_at) %></td></p>
+<p>        <td></p>
+<p>          <a href={~p"/snippets/#{snippet}"}>View</a></p>
+<p>          <a href={~p"/snippets/#{snippet}/edit"}>Edit</a></p>
+<p>        </td></p>
+<p>      </tr></p>
+<p>    <% end %></p>
+<p>  </tbody></p>
+</table>
+</code></pre></figure>
+
+<h3>Striped Rows</h3>
+
+<figure class="code"><pre><code><tbody>
+<p>  <%= for {snippet, index} <- Enum.with_index(@snippets) do %></p>
+<p>    <tr class={if rem(index, 2) == 0, do: "even", else: "odd"}></p>
+<p>      <td><%= snippet.title %></td></p>
+<p>    </tr></p>
+<p>  <% end %></p>
+</tbody>
+</code></pre></figure>
+
+<h3>Empty Table State</h3>
+
+<figure class="code"><pre><code><table class="table">
+<p>  <thead></p>
+<p>    <tr></p>
+<p>      <th>Title</th></p>
+<p>      <th>Language</th></p>
+<p>    </tr></p>
+<p>  </thead></p>
+<p>  <tbody></p>
+<p>    <%= if Enum.empty?(@snippets) do %></p>
+<p>      <tr></p>
+<p>        <td colspan="2" class="empty-row"></p>
+<p>          No snippets found</p>
+<p>        </td></p>
+<p>      </tr></p>
+<p>    <% else %></p>
+<p>      <%= for snippet <- @snippets do %></p>
+<p>        <tr></p>
+<p>          <td><%= snippet.title %></td></p>
+<p>          <td><%= snippet.language %></td></p>
+<p>        </tr></p>
+<p>      <% end %></p>
+<p>    <% end %></p>
+<p>  </tbody></p>
+</table>
+</code></pre></figure>
+
+<h2>Card Grid Layout</h2>
+
+<figure class="code"><pre><code><div class="card-grid">
+<p>  <%= for snippet <- @snippets do %></p>
+<p>    <article class="card"></p>
+<p>      <header class="card-header"></p>
+<p>        <h3><%= snippet.title %></h3></p>
+<p>        <span class="badge"><%= snippet.language %></span></p>
+<p>      </header></p>
+<p>      <div class="card-body"></p>
+<p>        <pre><%= truncate(snippet.content, 200) %></pre></p>
+<p>      </div></p>
+<p>      <footer class="card-footer"></p>
+<p>        <span><%= time_ago(snippet.inserted_at) %></span></p>
+<p>        <a href={~p"/snippets/#{snippet}"}>View</a></p>
+<p>      </footer></p>
+<p>    </article></p>
+<p>  <% end %></p>
+</div>
+</code></pre></figure>
+
+<h2>Nested Iteration</h2>
+
+<h3>Snippets with Tags</h3>
+
+<figure class="code"><pre><code><%= for snippet <- @snippets do %>
+<p>  <article class="snippet"></p>
+<p>    <h2><%= snippet.title %></h2></p>
+<p>    <div class="tags"></p>
+<p>      <%= for tag <- snippet.tags do %></p>
+<p>        <span class="tag"><%= tag.name %></span></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>  </article></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Grouped Data</h3>
+
+<figure class="code"><pre><code><%# Group snippets by language %>
+<% grouped = Enum.group_by(@snippets, & &1.language) %>
+
+<%= for {language, snippets} <- grouped do %>
+<p>  <section class="language-group"></p>
+<p>    <h2><%= language %> (<%= length(snippets) %>)</h2></p>
+<p>    <ul></p>
+<p>      <%= for snippet <- snippets do %></p>
+<p>        <li><%= snippet.title %></li></p>
+<p>      <% end %></p>
+<p>    </ul></p>
+<p>  </section></p>
+<% end %>
+</code></pre></figure>
+
+<h2>List with Separators</h2>
+
+<h3>Comma-Separated</h3>
+
+<figure class="code"><pre><code><%= for {tag, index} <- Enum.with_index(@tags) do %>
+<p>  <%= if index > 0, do: ", " %><%= tag.name %></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Using Intersperse</h3>
+
+<figure class="code"><pre><code># In view helper
+<p>def join_tags(tags) do</p>
+<p>  tags</p>
+<p>  |> Enum.map(& &1.name)</p>
+<p>  |> Enum.intersperse(", ")</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code><%= join_tags(@snippet.tags) %>
+</code></pre></figure>
+
+<h2>Pagination Display</h2>
+
+<figure class="code"><pre><code><nav class="pagination" aria-label="Pagination">
+<p>  <%= if @page > 1 do %></p>
+<p>    <a href={~p"/snippets?#{[page: @page - 1]}"} class="page-link"></p>
+<p>      &laquo; Previous</p>
+<p>    </a></p>
+<p>  <% end %></p>
+
+<p>  <%= for page_num <- max(1, @page - 2)..min(@total_pages, @page + 2) do %></p>
+<p>    <%= if page_num == @page do %></p>
+<p>      <span class="page-link current"><%= page_num %></span></p>
+<p>    <% else %></p>
+<p>      <a href={~p"/snippets?#{[page: page_num]}"} class="page-link"></p>
+<p>        <%= page_num %></p>
+<p>      </a></p>
+<p>    <% end %></p>
+<p>  <% end %></p>
+
+<p>  <%= if @page < @total_pages do %></p>
+<p>    <a href={~p"/snippets?#{[page: @page + 1]}"} class="page-link"></p>
+<p>      Next &raquo;</p>
+<p>    </a></p>
+<p>  <% end %></p>
+</nav>
+</code></pre></figure>
+
+<h2>Conditional Classes in Loops</h2>
+
+<figure class="code"><pre><code><%= for snippet <- @snippets do %>
+<p>  <div class={[</p>
+<p>    "snippet",</p>
+<p>    snippet.is_public && "public",</p>
+<p>    snippet.is_featured && "featured",</p>
+<p>    expired?(snippet) && "expired"</p>
+<p>  ]}></p>
+<p>    <%= snippet.title %></p>
+<p>  </div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Performance: Chunking Large Lists</h2>
+
+<figure class="code"><pre><code><%# Render in columns %>
+<% columns = Enum.chunk_every(@snippets, 3) %>
+
+<div class="row">
+<p>  <%= for column <- columns do %></p>
+<p>    <div class="col"></p>
+<p>      <%= for snippet <- column do %></p>
+<p>        <div class="snippet"><%= snippet.title %></div></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>  <% end %></p>
+</div>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: List Comprehensions</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The <code>for</code> comprehension in Elixir is a powerful tool that combines mapping, filtering, and collecting:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Map and filter in one expression
+<p>for snippet <- snippets,</p>
+<p>    snippet.is_public,</p>
+<p>    snippet.language == "elixir",</p>
+<p>    do: snippet.title</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In templates, this becomes:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> <%= for s <- @snippets, s.is_public, do: s.title %>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>List comprehensions are declarative - you describe what you want, not how to get it.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://elixir-lang.org/getting-started/comprehensions.html">Comprehensions</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Basic iteration with <code>for</code></li>
+<li>Index tracking and first/last detection</li>
+<li>Empty state handling</li>
+<li>Table and grid rendering</li>
+<li>Nested iteration</li>
+<li>Pagination patterns</li>
+<li>Performance considerations</li>
+</ul>
+
+<p>In the next chapter, we'll create reusable Phoenix components.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="05.02-template-actions.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="05.04-components.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

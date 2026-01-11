@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Processing Forms &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Processing Forms</span>
+            </div>
+            <div>
+                &lsaquo; <a href="07.03-custom-routes.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="08.01-form-basics.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 8</div>
+        <h1>Chapter 8: Processing Forms</h1>
+
+<p>Forms are essential for web applications. Phoenix provides powerful form helpers that integrate seamlessly with Ecto changesets for validation and error handling.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>HTML form fundamentals in Phoenix</li>
+<li>Phoenix form components and helpers</li>
+<li>Integrating forms with Ecto changesets</li>
+<li>File uploads</li>
+<li>Form validation and error display</li>
+<li>CSRF protection and form security</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>8.1 Form Basics</strong> - HTML forms and HTTP methods</li>
+<li><strong>8.2 Phoenix Forms</strong> - Form components and helpers</li>
+<li><strong>8.3 Changesets in Forms</strong> - Validation integration</li>
+<li><strong>8.4 File Uploads</strong> - Handling file inputs</li>
+<li><strong>8.5 Form Validation</strong> - Client and server validation</li>
+<li><strong>8.6 Form Security</strong> - CSRF and input sanitization</li>
+</ul>
+
+<h2>The Form Lifecycle</h2>
+
+<p>Understanding how forms flow through Phoenix:</p>
+
+<figure class="code"><pre><code>User submits form
+<p>       ↓</p>
+<p>POST /snippets (with CSRF token)</p>
+<p>       ↓</p>
+<p>Router → SnippetController.create</p>
+<p>       ↓</p>
+<p>Build changeset from params</p>
+<p>       ↓</p>
+<p>Validate changeset</p>
+<p>       ↓</p>
+<p>  Valid? ─────────────────┐</p>
+<p>    │                     │</p>
+<p>   Yes                   No</p>
+<p>    │                     │</p>
+<p>    ↓                     ↓</p>
+<p>Insert to DB        Re-render form</p>
+<p>    │               with errors</p>
+<p>    ↓                     │</p>
+<p>Redirect to             Return</p>
+<p>show page           changeset errors</p>
+</code></pre></figure>
+
+<h2>Form Components Preview</h2>
+
+<p>Phoenix 1.7+ uses function components for forms:</p>
+
+<figure class="code"><pre><code><.form for={@changeset} action={~p"/snippets"}>
+<p>  <.input field={@form[:title]} label="Title" /></p>
+<p>  <.input field={@form[:content]} type="textarea" label="Content" /></p>
+<p>  <.input field={@form[:language]} type="select" label="Language"</p>
+<p>    options={["Elixir", "JavaScript", "Python", "Ruby"]} /></p>
+
+<p>  <.button>Create Snippet</.button></p>
+</.form>
+</code></pre></figure>
+
+<p>This generates:</p>
+<ul>
+<li>Proper HTML structure</li>
+<li>CSRF token automatically included</li>
+<li>Error messages displayed</li>
+<li>Accessible labels and inputs</li>
+</ul>
+
+<p>Let's start with form basics.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="07.03-custom-routes.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="08.01-form-basics.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

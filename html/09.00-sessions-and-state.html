@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Sessions and State &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Sessions and State</span>
+            </div>
+            <div>
+                &lsaquo; <a href="08.06-form-security.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="09.01-session-management.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 9</div>
+        <h1>Chapter 9: Sessions and State</h1>
+
+<p>HTTP is stateless, but web applications need to maintain state across requests. In this chapter, we'll explore how Phoenix manages sessions, flash messages, cookies, and caching.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Session management and configuration</li>
+<li>Flash messages for user feedback</li>
+<li>Working with cookies</li>
+<li>ETS for caching and state</li>
+<li>State management patterns</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>9.1 Session Management</strong> - Storing and retrieving session data</li>
+<li><strong>9.2 Flash Messages</strong> - One-time user notifications</li>
+<li><strong>9.3 Cookies</strong> - Client-side data storage</li>
+<li><strong>9.4 ETS and Caching</strong> - In-memory state</li>
+</ul>
+
+<h2>State in Web Applications</h2>
+
+<figure class="code"><pre><code>┌─────────────────────────────────────────────────────────┐
+<p>│                    State Options                         │</p>
+<p>├─────────────────────────────────────────────────────────┤</p>
+<p>│                                                          │</p>
+<p>│  Client-Side              Server-Side                    │</p>
+<p>│  ┌──────────────┐         ┌──────────────┐              │</p>
+<p>│  │   Cookies    │         │   Session    │              │</p>
+<p>│  │              │         │   (in cookie │              │</p>
+<p>│  │  - Small     │         │    or store) │              │</p>
+<p>│  │  - Visible   │         │              │              │</p>
+<p>│  │  - Unsigned  │         │  - Signed    │              │</p>
+<p>│  └──────────────┘         │  - Encrypted │              │</p>
+<p>│                           └──────────────┘              │</p>
+<p>│  ┌──────────────┐         ┌──────────────┐              │</p>
+<p>│  │ localStorage │         │     ETS      │              │</p>
+<p>│  │              │         │              │              │</p>
+<p>│  │  - Large     │         │  - Fast      │              │</p>
+<p>│  │  - JS only   │         │  - In-memory │              │</p>
+<p>│  └──────────────┘         │  - Per-node  │              │</p>
+<p>│                           └──────────────┘              │</p>
+<p>│                           ┌──────────────┐              │</p>
+<p>│                           │   Database   │              │</p>
+<p>│                           │              │              │</p>
+<p>│                           │  - Persistent│              │</p>
+<p>│                           │  - Shared    │              │</p>
+<p>│                           └──────────────┘              │</p>
+<p>│                                                          │</p>
+<p>└─────────────────────────────────────────────────────────┘</p>
+</code></pre></figure>
+
+<h2>When to Use What</h2>
+
+<p>| Storage | Use Case | Persistence | Size |</p>
+<p>|---------|----------|-------------|------|</p>
+<p>| Session | User authentication | Request-to-request | Small |</p>
+<p>| Flash | One-time messages | Single redirect | Tiny |</p>
+<p>| Cookies | Remember preferences | Configurable | 4KB max |</p>
+<p>| ETS | Caching, rate limits | In-memory | Large |</p>
+<p>| Database | User data, app state | Permanent | Unlimited |</p>
+
+<h2>Phoenix Request Lifecycle with State</h2>
+
+<figure class="code"><pre><code>Request arrives
+<p>      ↓</p>
+<p>Endpoint plugs</p>
+<p>      ↓</p>
+<p>┌─────────────────┐</p>
+<p>│ :fetch_session  │ ← Load session from cookie/store</p>
+<p>└─────────────────┘</p>
+<p>      ↓</p>
+<p>┌─────────────────┐</p>
+<p>│ :fetch_flash    │ ← Load flash messages</p>
+<p>└─────────────────┘</p>
+<p>      ↓</p>
+<p>Router & Controller</p>
+<p>      ↓</p>
+<p>┌─────────────────┐</p>
+<p>│ Modify session  │ ← put_session, delete_session</p>
+<p>│ Set flash       │ ← put_flash</p>
+<p>└─────────────────┘</p>
+<p>      ↓</p>
+<p>Response sent</p>
+<p>      ↓</p>
+<p>Session saved to cookie/store</p>
+<p>Flash cleared (after display)</p>
+</code></pre></figure>
+
+<p>Let's dive into session management.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="08.06-form-security.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="09.01-session-management.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

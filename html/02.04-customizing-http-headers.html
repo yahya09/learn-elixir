@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Customizing HTTP Headers &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Customizing HTTP Headers</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.03-routing-requests.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.05-url-query-strings.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.4</div>
+        <h1>Chapter 2.4: Customizing HTTP Headers</h1>
+
+<p>HTTP headers carry metadata about requests and responses. In this chapter, we'll learn how to read request headers and set custom response headers in Phoenix.</p>
+
+<h2>Understanding HTTP Headers</h2>
+
+<p>Headers are key-value pairs sent with HTTP requests and responses:</p>
+
+<figure class="code"><pre><code>GET /snippets HTTP/1.1
+<p>Host: localhost:4000</p>
+<p>Accept: text/html</p>
+<p>User-Agent: Mozilla/5.0</p>
+<p>Cookie: session_id=abc123</p>
+</code></pre></figure>
+
+<p>Response headers:</p>
+<figure class="code"><pre><code>HTTP/1.1 200 OK
+<p>Content-Type: text/html; charset=utf-8</p>
+<p>Cache-Control: max-age=3600</p>
+<p>X-Request-Id: abc-123-def</p>
+</code></pre></figure>
+
+<h2>Reading Request Headers</h2>
+
+<p>In Phoenix, request headers are available in the <code>conn</code> struct:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    # Get a specific header</p>
+<p>    user_agent = get_req_header(conn, "user-agent")</p>
+
+<p>    # Headers are returned as a list (can have multiple values)</p>
+<p>    case user_agent do</p>
+<p>      [agent | _] -></p>
+<p>        IO.puts("User agent: #{agent}")</p>
+<p>      [] -></p>
+<p>        IO.puts("No user agent header")</p>
+<p>    end</p>
+
+<p>    text(conn, "Snippet #{id}")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The <code>get_req_header/2</code> function returns a list because HTTP allows multiple headers with the same name.</p>
+
+<h3>Common Request Headers</h3>
+
+<figure class="code"><pre><code>def debug_headers(conn, _params) do
+<p>  # Content type of request body</p>
+<p>  content_type = get_req_header(conn, "content-type")</p>
+
+<p>  # Accepted response formats</p>
+<p>  accept = get_req_header(conn, "accept")</p>
+
+<p>  # Client information</p>
+<p>  user_agent = get_req_header(conn, "user-agent")</p>
+
+<p>  # Authentication</p>
+<p>  authorization = get_req_header(conn, "authorization")</p>
+
+<p>  # Cookies</p>
+<p>  cookies = get_req_header(conn, "cookie")</p>
+
+<p>  # Client IP (may be set by proxy)</p>
+<p>  forwarded_for = get_req_header(conn, "x-forwarded-for")</p>
+
+<p>  # Log all headers</p>
+<p>  IO.inspect(conn.req_headers, label: "All request headers")</p>
+
+<p>  text(conn, "Headers logged")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Setting Response Headers</h2>
+
+<p>Use <code>put_resp_header/3</code> to add response headers:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  conn</p>
+<p>  |> put_resp_header("x-snippet-id", id)</p>
+<p>  |> put_resp_header("cache-control", "public, max-age=3600")</p>
+<p>  |> text("Snippet #{id}")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Setting Content-Type</h3>
+
+<p>Phoenix sets <code>Content-Type</code> automatically based on the response format, but you can override it:</p>
+
+<figure class="code"><pre><code>def download(conn, %{"id" => id}) do
+<p>  conn</p>
+<p>  |> put_resp_content_type("text/plain")</p>
+<p>  |> put_resp_header("content-disposition", "attachment; filename=\"snippet-#{id}.txt\"")</p>
+<p>  |> send_resp(200, "Snippet content here")</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>For common content types, use the helper:</p>
+
+<figure class="code"><pre><code># These are equivalent
+<p>put_resp_content_type(conn, "application/json")</p>
+<p>put_resp_header(conn, "content-type", "application/json; charset=utf-8")</p>
+</code></pre></figure>
+
+<h3>Setting Multiple Headers</h3>
+
+<p>Chain multiple header operations:</p>
+
+<figure class="code"><pre><code>def api_response(conn, _params) do
+<p>  conn</p>
+<p>  |> put_resp_header("x-api-version", "1.0")</p>
+<p>  |> put_resp_header("x-request-id", generate_request_id())</p>
+<p>  |> put_resp_header("cache-control", "no-store")</p>
+<p>  |> put_resp_header("x-content-type-options", "nosniff")</p>
+<p>  |> json(%{status: "ok"})</p>
+<p>end</p>
+
+<p>defp generate_request_id do</p>
+<p>  :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Setting Status Codes</h2>
+
+<p>Use <code>put_status/2</code> to set the HTTP status code:</p>
+
+<figure class="code"><pre><code>def not_found(conn, _params) do
+<p>  conn</p>
+<p>  |> put_status(:not_found)  # 404</p>
+<p>  |> text("Resource not found")</p>
+<p>end</p>
+
+<p>def created(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> put_status(:created)  # 201</p>
+<p>  |> put_resp_header("location", "/snippets/123")</p>
+<p>  |> json(%{id: 123})</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Common Status Codes</h3>
+
+<p>Phoenix supports atom shortcuts for status codes:</p>
+
+<figure class="code"><pre><code>:ok                    # 200
+<p>:created               # 201</p>
+<p>:accepted              # 202</p>
+<p>:no_content            # 204</p>
+<p>:moved_permanently     # 301</p>
+<p>:found                 # 302</p>
+<p>:see_other             # 303</p>
+<p>:not_modified          # 304</p>
+<p>:bad_request           # 400</p>
+<p>:unauthorized          # 401</p>
+<p>:forbidden             # 403</p>
+<p>:not_found             # 404</p>
+<p>:unprocessable_entity  # 422</p>
+<p>:internal_server_error # 500</p>
+<p>:service_unavailable   # 503</p>
+</code></pre></figure>
+
+<p>Or use integers directly:</p>
+
+<figure class="code"><pre><code>put_status(conn, 418)  # I'm a teapot
+</code></pre></figure>
+
+<h2>Deleting Headers</h2>
+
+<p>Remove a header from the response:</p>
+
+<figure class="code"><pre><code>def minimal_response(conn, _params) do
+<p>  conn</p>
+<p>  |> delete_resp_header("x-frame-options")</p>
+<p>  |> text("Minimal response")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Security Headers</h2>
+
+<p>Set common security headers:</p>
+
+<figure class="code"><pre><code>def secure_page(conn, _params) do
+<p>  conn</p>
+<p>  |> put_resp_header("x-frame-options", "DENY")</p>
+<p>  |> put_resp_header("x-content-type-options", "nosniff")</p>
+<p>  |> put_resp_header("x-xss-protection", "1; mode=block")</p>
+<p>  |> put_resp_header("referrer-policy", "strict-origin-when-cross-origin")</p>
+<p>  |> put_resp_header("content-security-policy", "default-src 'self'")</p>
+<p>  |> render(:secure_page)</p>
+<p>end</p>
+</code></pre></figure>
+
+<div class="note">
+<strong>Note</strong>: Phoenix's default <code>:browser</code> pipeline already sets several security headers via <code>put_secure_browser_headers/2</code>. We'll cover this in detail in Chapter 6 (Plugs).
+</div>
+
+<h2>Cache Control Headers</h2>
+
+<p>Control how browsers and proxies cache responses:</p>
+
+<figure class="code"><pre><code># Don't cache (for private/dynamic content)
+<p>def private_data(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> put_resp_header("cache-control", "no-store, private")</p>
+<p>  |> json(%{secret: "data"})</p>
+<p>end</p>
+
+<h1>Cache for 1 hour (for public/static content)</h1>
+<p>def public_data(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> put_resp_header("cache-control", "public, max-age=3600")</p>
+<p>  |> put_resp_header("vary", "Accept-Encoding")</p>
+<p>  |> json(%{data: "public"})</p>
+<p>end</p>
+
+<h1>Cache with revalidation</h1>
+<p>def cached_data(conn, _params) do</p>
+<p>  etag = generate_etag(data)</p>
+
+<p>  conn</p>
+<p>  |> put_resp_header("cache-control", "public, max-age=0, must-revalidate")</p>
+<p>  |> put_resp_header("etag", etag)</p>
+<p>  |> json(%{data: "cached"})</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>CORS Headers</h2>
+
+<p>For APIs accessed from browsers on different domains:</p>
+
+<figure class="code"><pre><code>def api_endpoint(conn, _params) do
+<p>  conn</p>
+<p>  |> put_resp_header("access-control-allow-origin", "*")</p>
+<p>  |> put_resp_header("access-control-allow-methods", "GET, POST, PUT, DELETE")</p>
+<p>  |> put_resp_header("access-control-allow-headers", "Content-Type, Authorization")</p>
+<p>  |> json(%{status: "ok"})</p>
+<p>end</p>
+
+<h1>Handle preflight OPTIONS request</h1>
+<p>def options(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> put_resp_header("access-control-allow-origin", "*")</p>
+<p>  |> put_resp_header("access-control-allow-methods", "GET, POST, PUT, DELETE")</p>
+<p>  |> put_resp_header("access-control-allow-headers", "Content-Type, Authorization")</p>
+<p>  |> put_resp_header("access-control-max-age", "86400")</p>
+<p>  |> send_resp(204, "")</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote>
+<strong>Tip</strong>: For production CORS handling, use a library like <code>cors_plug</code> which handles this properly.
+</blockquote>
+
+<h2>Practical Example: Content Negotiation</h2>
+
+<p>Handle different response formats based on the <code>Accept</code> header:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = %{id: id, title: "Example", content: "Hello World"}</p>
+
+<p>  case get_format(conn) do</p>
+<p>    "json" -></p>
+<p>      json(conn, snippet)</p>
+
+<p>    "html" -></p>
+<p>      render(conn, :show, snippet: snippet)</p>
+
+<p>    _ -></p>
+<p>      conn</p>
+<p>      |> put_status(:not_acceptable)</p>
+<p>      |> text("Supported formats: HTML, JSON")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Phoenix handles content negotiation through the router's <code>accepts</code> plug:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser do</p>
+<p>  plug :accepts, ["html"]  # Only accept HTML</p>
+<p>end</p>
+
+<p>pipeline :api do</p>
+<p>  plug :accepts, ["json"]  # Only accept JSON</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Inspecting Headers in IEx</h2>
+
+<p>Debug headers interactively:</p>
+
+<figure class="code"><pre><code># Start your app
+<p>$ iex -S mix phx.server</p>
+
+<h1>In another terminal, make a request</h1>
+<p>$ curl -v http://localhost:4000/snippets/1</p>
+
+<h1>View request headers in your controller</h1>
+<p>def show(conn, params) do</p>
+<p>  IO.inspect(conn.req_headers, label: "Request Headers")</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Immutable Transformations</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Notice how we chain header operations:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> conn
+<p>|> put_status(200)</p>
+<p>|> put_resp_header("x-custom", "value")</p>
+<p>|> put_resp_header("cache-control", "no-store")</p>
+<p>|> json(%{ok: true})</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each function returns a <strong>new</strong> conn struct with the modification. The original <code>conn</code> is never mutated. This is the pipe operator pattern - data flows through a series of transformations.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In imperative code, you might write:</p>
+<figure class="code"><pre><code>> # Python/Flask
+<p>response.status_code = 200</p>
+<p>response.headers["X-Custom"] = "value"</p>
+<p>response.headers["Cache-Control"] = "no-store"</p>
+<p>return jsonify({"ok": True})</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The functional approach:</p>
+<ul>
+<li>Makes the transformation sequence explicit</li>
+<li>Each step is a pure function</li>
+<li>Easy to insert/remove/reorder steps</li>
+<li>No hidden state mutations</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/plug/Plug.Conn.html">Plug.Conn documentation</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How to read request headers with <code>get_req_header/2</code></li>
+<li>How to set response headers with <code>put_resp_header/3</code></li>
+<li>How to set status codes with <code>put_status/2</code></li>
+<li>Common header patterns (security, caching, CORS)</li>
+<li>Content negotiation basics</li>
+</ul>
+
+<p>In the next chapter, we'll explore URL query strings and path parameters in more detail.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Header Case Sensitivity</h3>
+
+<p>HTTP header names are case-insensitive. Phoenix normalizes them to lowercase:</p>
+
+<figure class="code"><pre><code># All equivalent:
+<p>get_req_header(conn, "content-type")</p>
+<p>get_req_header(conn, "Content-Type")</p>
+<p>get_req_header(conn, "CONTENT-TYPE")</p>
+</code></pre></figure>
+
+<h3>Multiple Values for Same Header</h3>
+
+<p>Some headers can appear multiple times (like <code>Set-Cookie</code>):</p>
+
+<figure class="code"><pre><code># Setting multiple cookies
+<p>conn</p>
+<p>|> put_resp_cookie("session", "abc123")</p>
+<p>|> put_resp_cookie("preferences", "dark_mode")</p>
+</code></pre></figure>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Express (Node.js)</strong>:
+<figure class="code"><pre><code>res.set('X-Custom-Header', 'value');
+<p>res.status(200).json({ok: true});</p>
+</code></pre></figure>
+
+<strong>Django (Python)</strong>:
+<figure class="code"><pre><code>response = JsonResponse({'ok': True})
+<p>response['X-Custom-Header'] = 'value'</p>
+<p>return response</p>
+</code></pre></figure>
+
+<strong>Laravel (PHP)</strong>:
+<figure class="code"><pre><code>return response()->json(['ok' => true])
+<p>    ->header('X-Custom-Header', 'value');</p>
+</code></pre></figure>
+
+<strong>Phoenix (Elixir)</strong>:
+<figure class="code"><pre><code>conn
+<p>|> put_resp_header("x-custom-header", "value")</p>
+<p>|> json(%{ok: true})</p>
+</code></pre></figure>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.03-routing-requests.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.05-url-query-strings.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

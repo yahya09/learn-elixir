@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Deployment &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Deployment</span>
+            </div>
+            <div>
+                &lsaquo; <a href="13.06-test-best-practices.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="14.01-releases.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 14</div>
+        <h1>Chapter 14: Deployment</h1>
+
+<p>Deploying Phoenix applications requires understanding releases, configuration, and production environments. In this chapter, we'll explore deployment strategies.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Building Elixir releases</li>
+<li>Docker containerization</li>
+<li>Deploying to Fly.io</li>
+<li>Production configuration</li>
+<li>Monitoring and observability</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>14.1 Releases</strong> - Building self-contained releases</li>
+<li><strong>14.2 Docker</strong> - Containerizing Phoenix apps</li>
+<li><strong>14.3 Fly.io</strong> - Cloud deployment</li>
+<li><strong>14.4 Production Config</strong> - Environment configuration</li>
+<li><strong>14.5 Monitoring</strong> - Observability and debugging</li>
+</ul>
+
+<h2>Deployment Options</h2>
+
+<h3>Platform Options</h3>
+
+<p>| Platform | Pros | Cons |</p>
+<p>|----------|------|------|</p>
+<p>| Fly.io | Easy, built for Elixir | Limited regions |</p>
+<p>| Render | Simple, auto-deploy | No clustering |</p>
+<p>| Gigalixir | Elixir-native | Smaller community |</p>
+<p>| AWS/GCP | Full control | More complex |</p>
+<p>| Docker anywhere | Portable | Self-managed |</p>
+
+<h3>Deployment Strategies</h3>
+
+<figure class="code"><pre><code>Development → Staging → Production
+
+<p>Option 1: Platform-as-a-Service (PaaS)</p>
+<p>├── Push to Git</p>
+<p>├── Auto-deploy triggers</p>
+<p>└── Platform manages infrastructure</p>
+
+<p>Option 2: Container-based</p>
+<p>├── Build Docker image</p>
+<p>├── Push to registry</p>
+<p>└── Deploy to orchestrator (K8s, ECS, etc.)</p>
+
+<p>Option 3: Release-based</p>
+<p>├── Build release locally/CI</p>
+<p>├── Copy to server</p>
+<p>└── Run with systemd/supervisor</p>
+</code></pre></figure>
+
+<h2>Quick Deployment Preview</h2>
+
+<h3>Fly.io (Recommended for Beginners)</h3>
+
+<figure class="code"><pre><code># Install Fly CLI
+<p>curl -L https://fly.io/install.sh | sh</p>
+
+<h1>Login</h1>
+<p>fly auth login</p>
+
+<h1>Launch app (auto-detects Phoenix)</h1>
+<p>fly launch</p>
+
+<h1>Deploy</h1>
+<p>fly deploy</p>
+
+<h1>Open in browser</h1>
+<p>fly open</p>
+</code></pre></figure>
+
+<h3>Docker</h3>
+
+<figure class="code"><pre><code># Dockerfile
+<p>FROM elixir:1.16-alpine AS build</p>
+
+<p>WORKDIR /app</p>
+<p>ENV MIX_ENV=prod</p>
+
+<p>COPY mix.exs mix.lock ./</p>
+<p>RUN mix deps.get --only prod</p>
+
+<p>COPY . .</p>
+<p>RUN mix assets.deploy && mix release</p>
+
+<p>FROM alpine:3.18</p>
+<p>COPY --from=build /app/_build/prod/rel/snippetbox ./</p>
+<p>CMD ["bin/snippetbox", "start"]</p>
+</code></pre></figure>
+
+<h3>Release</h3>
+
+<figure class="code"><pre><code># Build release
+<p>MIX_ENV=prod mix release</p>
+
+<h1>Run</h1>
+<p>_build/prod/rel/snippetbox/bin/snippetbox start</p>
+</code></pre></figure>
+
+<h2>Pre-Deployment Checklist</h2>
+
+<figure class="code"><pre><code>□ Environment variables configured
+<p>□ Database migrations ready</p>
+<p>□ Assets compiled and digested</p>
+<p>□ Secret key base set</p>
+<p>□ Database URL configured</p>
+<p>□ HTTPS/TLS configured</p>
+<p>□ Error tracking set up</p>
+<p>□ Logging configured</p>
+<p>□ Health check endpoint</p>
+<p>□ Backup strategy</p>
+</code></pre></figure>
+
+<h2>Production vs Development</h2>
+
+<p>| Aspect | Development | Production |</p>
+<p>|--------|-------------|------------|</p>
+<p>| Code reloading | Enabled | Disabled |</p>
+<p>| Debug info | Verbose | Minimal |</p>
+<p>| Assets | Uncompiled | Compiled, cached |</p>
+<p>| Database | Local | Managed service |</p>
+<p>| Errors | Detailed | Generic |</p>
+<p>| Secrets | .env files | Environment variables |</p>
+<p>| SSL | Optional | Required |</p>
+
+<h2>Phoenix Release Architecture</h2>
+
+<figure class="code"><pre><code>Release Package
+<p>├── bin/</p>
+<p>│   └── snippetbox           # Start script</p>
+<p>├── lib/</p>
+<p>│   ├── snippetbox-0.1.0/    # App code</p>
+<p>│   └── phoenix-1.7.x/       # Dependencies</p>
+<p>├── releases/</p>
+<p>│   └── 0.1.0/</p>
+<p>│       ├── env.sh           # Environment</p>
+<p>│       ├── remote.sh        # Remote console</p>
+<p>│       └── vm.args          # BEAM args</p>
+<p>└── erts-14.x/               # Erlang runtime</p>
+</code></pre></figure>
+
+<h2>Key Concepts</h2>
+
+<h3>Runtime Configuration</h3>
+
+<figure class="code"><pre><code># config/runtime.exs
+<h1>Runs at application startup, not compile time</h1>
+
+<p>import Config</p>
+
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  url: [host: System.get_env("PHX_HOST")],</p>
+<p>  secret_key_base: System.fetch_env!("SECRET_KEY_BASE")</p>
+
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  url: System.fetch_env!("DATABASE_URL")</p>
+</code></pre></figure>
+
+<h3>Release Commands</h3>
+
+<figure class="code"><pre><code># Start the application
+<p>bin/snippetbox start</p>
+
+<h1>Start with interactive shell</h1>
+<p>bin/snippetbox start_iex</p>
+
+<h1>Run migrations</h1>
+<p>bin/snippetbox eval "Snippetbox.Release.migrate()"</p>
+
+<h1>Open remote console to running app</h1>
+<p>bin/snippetbox remote</p>
+</code></pre></figure>
+
+<h3>Health Checks</h3>
+
+<figure class="code"><pre><code># lib/snippetbox_web/controllers/health_controller.ex
+
+<p>defmodule SnippetboxWeb.HealthController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def check(conn, _params) do</p>
+<p>    case health_status() do</p>
+<p>      :ok -></p>
+<p>        json(conn, %{status: "ok", timestamp: DateTime.utc_now()})</p>
+
+<p>      {:error, reason} -></p>
+<p>        conn</p>
+<p>        |> put_status(:service_unavailable)</p>
+<p>        |> json(%{status: "error", reason: reason})</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp health_status do</p>
+<p>    with :ok <- check_database(),</p>
+<p>         :ok <- check_external_services() do</p>
+<p>      :ok</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_database do</p>
+<p>    case Ecto.Adapters.SQL.query(Snippetbox.Repo, "SELECT 1") do</p>
+<p>      {:ok, _} -> :ok</p>
+<p>      {:error, _} -> {:error, "database unavailable"}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_external_services, do: :ok</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Let's explore each deployment strategy in detail.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="13.06-test-best-practices.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="14.01-releases.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

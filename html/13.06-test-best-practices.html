@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Test Best Practices &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Test Best Practices</span>
+            </div>
+            <div>
+                &lsaquo; <a href="13.05-database-testing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="14.00-deployment.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 13.6</div>
+        <h1>Chapter 13.6: Test Best Practices</h1>
+
+<p>Effective testing requires good organization, coverage, and maintainability. In this chapter, we'll explore testing best practices for Phoenix applications.</p>
+
+<h2>Test Coverage</h2>
+
+<h3>Enabling Coverage</h3>
+
+<figure class="code"><pre><code># Run tests with coverage
+<p>mix test --cover</p>
+
+<h1>Generate HTML report</h1>
+<p>mix test --cover --export-coverage default</p>
+<p>mix phx.coverage</p>
+</code></pre></figure>
+
+<h3>ExCoveralls</h3>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">
+<p>defp deps do</p>
+<p>  [</p>
+<p>    {:excoveralls, "~> 0.18", only: :test}</p>
+<p>  ]</p>
+<p>end</p>
+
+<p>def project do</p>
+<p>  [</p>
+<p>    # ...</p>
+<p>    test_coverage: [tool: ExCoveralls],</p>
+<p>    preferred_cli_env: [</p>
+<p>      coveralls: :test,</p>
+<p>      "coveralls.detail": :test,</p>
+<p>      "coveralls.post": :test,</p>
+<p>      "coveralls.html": :test</p>
+<p>    ]</p>
+<p>  ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># Generate coverage reports
+<p>mix coveralls</p>
+<p>mix coveralls.html</p>
+<p>mix coveralls.detail</p>
+</code></pre></figure>
+
+<h3>Coverage Configuration</h3>
+
+<figure class="code"><figcaption>File: coveralls.json</figcaption><pre><code class="language-elixir">
+<p>{</p>
+<p>  "coverage_options": {</p>
+<p>    "minimum_coverage": 80,</p>
+<p>    "treat_no_relevant_lines_as_covered": true</p>
+<p>  },</p>
+<p>  "skip_files": [</p>
+<p>    "lib/snippetbox_web.ex",</p>
+<p>    "lib/snippetbox/release.ex",</p>
+<p>    "test/support"</p>
+<p>  ]</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>Test Organization</h2>
+
+<h3>Directory Structure</h3>
+
+<figure class="code"><pre><code>test/
+<p>├── snippetbox/</p>
+<p>│   ├── accounts/</p>
+<p>│   │   ├── user_test.exs</p>
+<p>│   │   └── user_token_test.exs</p>
+<p>│   ├── snippets/</p>
+<p>│   │   ├── snippet_test.exs</p>
+<p>│   │   └── tag_test.exs</p>
+<p>│   ├── accounts_test.exs</p>
+<p>│   └── snippets_test.exs</p>
+<p>├── snippetbox_web/</p>
+<p>│   ├── controllers/</p>
+<p>│   │   ├── api/</p>
+<p>│   │   │   └── snippet_controller_test.exs</p>
+<p>│   │   ├── page_controller_test.exs</p>
+<p>│   │   ├── snippet_controller_test.exs</p>
+<p>│   │   └── user_session_controller_test.exs</p>
+<p>│   ├── live/</p>
+<p>│   │   ├── snippet_live_test.exs</p>
+<p>│   │   └── user_settings_live_test.exs</p>
+<p>│   ├── plugs/</p>
+<p>│   │   └── require_auth_test.exs</p>
+<p>│   └── components/</p>
+<p>│       └── core_components_test.exs</p>
+<p>├── support/</p>
+<p>│   ├── conn_case.ex</p>
+<p>│   ├── data_case.ex</p>
+<p>│   ├── feature_case.ex</p>
+<p>│   ├── fixtures/</p>
+<p>│   │   ├── accounts_fixtures.ex</p>
+<p>│   │   └── snippets_fixtures.ex</p>
+<p>│   └── test_helpers.ex</p>
+<p>└── test_helper.exs</p>
+</code></pre></figure>
+
+<h3>Naming Conventions</h3>
+
+<figure class="code"><pre><code># Test module name matches source module
+<h1>lib/snippetbox/snippets.ex</h1>
+<h1>test/snippetbox/snippets_test.exs</h1>
+
+<h1>Describe blocks for grouping</h1>
+<p>describe "create_snippet/1" do</p>
+<p>  test "with valid data creates a snippet" do</p>
+<p>  end</p>
+
+<p>  test "with invalid data returns error" do</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Writing Good Tests</h2>
+
+<h3>Test Structure (Arrange-Act-Assert)</h3>
+
+<figure class="code"><pre><code>test "creates snippet with valid data" do
+<p>  # Arrange</p>
+<p>  user = user_fixture()</p>
+<p>  attrs = %{title: "Test", content: "code", language: "elixir"}</p>
+
+<p>  # Act</p>
+<p>  {:ok, snippet} = Snippets.create_snippet(user, attrs)</p>
+
+<p>  # Assert</p>
+<p>  assert snippet.title == "Test"</p>
+<p>  assert snippet.user_id == user.id</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Descriptive Test Names</h3>
+
+<figure class="code"><pre><code># Bad: vague test names
+<p>test "test snippet" do</p>
+<p>end</p>
+
+<p>test "it works" do</p>
+<p>end</p>
+
+<h1>Good: descriptive test names</h1>
+<p>test "create_snippet/1 with valid data creates a snippet" do</p>
+<p>end</p>
+
+<p>test "create_snippet/1 with empty title returns error changeset" do</p>
+<p>end</p>
+
+<p>test "list_snippets/1 filters by language when language param provided" do</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>One Assertion Per Test (Generally)</h3>
+
+<figure class="code"><pre><code># Multiple related assertions are OK
+<p>test "creates snippet with all attributes" do</p>
+<p>  {:ok, snippet} = Snippets.create_snippet(@valid_attrs)</p>
+
+<p>  assert snippet.title == "Test"</p>
+<p>  assert snippet.content == "code"</p>
+<p>  assert snippet.language == "elixir"</p>
+<p>end</p>
+
+<h1>But separate unrelated assertions</h1>
+<p>test "sets default view_count to 0" do</p>
+<p>  {:ok, snippet} = Snippets.create_snippet(@valid_attrs)</p>
+<p>  assert snippet.view_count == 0</p>
+<p>end</p>
+
+<p>test "sets inserted_at timestamp" do</p>
+<p>  {:ok, snippet} = Snippets.create_snippet(@valid_attrs)</p>
+<p>  assert snippet.inserted_at != nil</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Edge Cases</h2>
+
+<figure class="code"><pre><code>describe "edge cases" do
+<p>  test "handles empty list" do</p>
+<p>    assert Snippets.list_snippets() == []</p>
+<p>  end</p>
+
+<p>  test "handles nil input" do</p>
+<p>    assert {:error, _} = Snippets.create_snippet(nil)</p>
+<p>  end</p>
+
+<p>  test "handles unicode characters" do</p>
+<p>    {:ok, snippet} = Snippets.create_snippet(%{</p>
+<p>      title: "日本語タイトル",</p>
+<p>      content: "# Привет мир",</p>
+<p>      language: "elixir"</p>
+<p>    })</p>
+
+<p>    assert snippet.title == "日本語タイトル"</p>
+<p>  end</p>
+
+<p>  test "handles very long content" do</p>
+<p>    long_content = String.duplicate("a", 100_000)</p>
+
+<p>    {:ok, snippet} = Snippets.create_snippet(%{</p>
+<p>      title: "Long",</p>
+<p>      content: long_content,</p>
+<p>      language: "elixir"</p>
+<p>    })</p>
+
+<p>    assert String.length(snippet.content) == 100_000</p>
+<p>  end</p>
+
+<p>  test "handles concurrent creation" do</p>
+<p>    tasks = for i <- 1..10 do</p>
+<p>      Task.async(fn -></p>
+<p>        Snippets.create_snippet(%{</p>
+<p>          title: "Concurrent #{i}",</p>
+<p>          content: "code",</p>
+<p>          language: "elixir"</p>
+<p>        })</p>
+<p>      end)</p>
+<p>    end</p>
+
+<p>    results = Task.await_many(tasks)</p>
+
+<p>    assert Enum.all?(results, &match?({:ok, _}, &1))</p>
+<p>    assert Snippets.count_snippets() == 10</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Mocking and Stubbing</h2>
+
+<h3>Using Mox</h3>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">{:mox, "~> 1.0", only: :test}
+
+<h1>File: lib/snippetbox/http_client.ex</h1>
+<p>defmodule Snippetbox.HTTPClient do</p>
+<p>  @callback get(String.t()) :: {:ok, map()} | {:error, term()}</p>
+<p>end</p>
+
+<h1>File: lib/snippetbox/http_client/hackney.ex</h1>
+<p>defmodule Snippetbox.HTTPClient.Hackney do</p>
+<p>  @behaviour Snippetbox.HTTPClient</p>
+
+<p>  def get(url) do</p>
+<p>    # Real HTTP call</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>File: config/test.exs</h1>
+<p>config :snippetbox, :http_client, Snippetbox.HTTPClient.Mock</p>
+
+<h1>File: test/support/mocks.ex</h1>
+<p>Mox.defmock(Snippetbox.HTTPClient.Mock, for: Snippetbox.HTTPClient)</p>
+
+<h1>File: test/test_helper.exs</h1>
+<p>Code.require_file("support/mocks.ex", __DIR__)</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># Usage in tests
+<p>defmodule Snippetbox.ExternalApiTest do</p>
+<p>  use Snippetbox.DataCase</p>
+
+<p>  import Mox</p>
+
+<p>  setup :verify_on_exit!</p>
+
+<p>  test "fetches data from external API" do</p>
+<p>    expect(Snippetbox.HTTPClient.Mock, :get, fn url -></p>
+<p>      assert url == "https://api.example.com/data"</p>
+<p>      {:ok, %{"items" => [1, 2, 3]}}</p>
+<p>    end)</p>
+
+<p>    assert {:ok, items} = ExternalApi.fetch_items()</p>
+<p>    assert items == [1, 2, 3]</p>
+<p>  end</p>
+
+<p>  test "handles API error" do</p>
+<p>    expect(Snippetbox.HTTPClient.Mock, :get, fn _ -></p>
+<p>      {:error, :timeout}</p>
+<p>    end)</p>
+
+<p>    assert {:error, :timeout} = ExternalApi.fetch_items()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Bypass for HTTP</h3>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">{:bypass, "~> 2.1", only: :test}
+
+<h1>Usage</h1>
+<p>defmodule Snippetbox.WebhookTest do</p>
+<p>  use Snippetbox.DataCase</p>
+
+<p>  setup do</p>
+<p>    bypass = Bypass.open()</p>
+<p>    {:ok, bypass: bypass}</p>
+<p>  end</p>
+
+<p>  test "sends webhook successfully", %{bypass: bypass} do</p>
+<p>    Bypass.expect_once(bypass, "POST", "/webhook", fn conn -></p>
+<p>      {:ok, body, conn} = Plug.Conn.read_body(conn)</p>
+<p>      assert Jason.decode!(body)["event"] == "snippet_created"</p>
+<p>      Plug.Conn.resp(conn, 200, "OK")</p>
+<p>    end)</p>
+
+<p>    url = "http://localhost:#{bypass.port}/webhook"</p>
+<p>    assert :ok = Webhooks.send(url, %{event: "snippet_created"})</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Property-Based Testing</h2>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">{:stream_data, "~> 1.0", only: [:dev, :test]}
+
+<h1>Usage</h1>
+<p>defmodule Snippetbox.StringHelperPropertyTest do</p>
+<p>  use ExUnit.Case</p>
+<p>  use ExUnitProperties</p>
+
+<p>  alias Snippetbox.Helpers.StringHelper</p>
+
+<p>  property "truncate never exceeds max length" do</p>
+<p>    check all string <- string(:alphanumeric),</p>
+<p>              max_length <- positive_integer(),</p>
+<p>              max_length > 3 do</p>
+<p>      result = StringHelper.truncate(string, max_length)</p>
+<p>      assert String.length(result) <= max_length + 3  # +3 for "..."</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  property "slugify produces valid slugs" do</p>
+<p>    check all string <- string(:alphanumeric, min_length: 1) do</p>
+<p>      slug = StringHelper.slugify(string)</p>
+<p>      assert slug =~ ~r/^[a-z0-9-]*$/</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  property "reversible encoding" do</p>
+<p>    check all data <- binary() do</p>
+<p>      encoded = Base.encode64(data)</p>
+<p>      assert Base.decode64!(encoded) == data</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Test Performance</h2>
+
+<h3>Parallel Testing</h3>
+
+<figure class="code"><pre><code># Enable async for independent tests
+<p>use Snippetbox.DataCase, async: true</p>
+
+<h1>Disable for tests that need shared state</h1>
+<p>use Snippetbox.DataCase, async: false</p>
+</code></pre></figure>
+
+<h3>Avoid Slow Operations</h3>
+
+<figure class="code"><pre><code># Bad: slow password hashing in tests
+<p>config :bcrypt_elixir, :log_rounds, 12  # Slow!</p>
+
+<h1>Good: fast password hashing for tests</h1>
+<h1>config/test.exs</h1>
+<p>config :bcrypt_elixir, :log_rounds, 1</p>
+</code></pre></figure>
+
+<h3>Use ExUnit Tags</h3>
+
+<figure class="code"><pre><code># Tag slow tests
+<p>@tag :slow</p>
+<p>test "complex aggregation query" do</p>
+<p>  # ...</p>
+<p>end</p>
+
+<h1>Run without slow tests</h1>
+<h1>mix test --exclude slow</h1>
+
+<h1>Run only slow tests</h1>
+<h1>mix test --only slow</h1>
+</code></pre></figure>
+
+<h2>Continuous Integration</h2>
+
+<h3>GitHub Actions</h3>
+
+<figure class="code"><figcaption>File: .github/workflows/test.yml</figcaption><pre><code class="language-yaml">
+<p>name: Test</p>
+
+<p>on:</p>
+<p>  push:</p>
+<p>    branches: [main]</p>
+<p>  pull_request:</p>
+<p>    branches: [main]</p>
+
+<p>jobs:</p>
+<p>  test:</p>
+<p>    runs-on: ubuntu-latest</p>
+
+<p>    services:</p>
+<p>      postgres:</p>
+<p>        image: postgres:15</p>
+<p>        env:</p>
+<p>          POSTGRES_PASSWORD: postgres</p>
+<p>        ports:</p>
+<p>          - 5432:5432</p>
+<p>        options: >-</p>
+<p>          --health-cmd pg_isready</p>
+<p>          --health-interval 10s</p>
+<p>          --health-timeout 5s</p>
+<p>          --health-retries 5</p>
+
+<p>    steps:</p>
+<p>      - uses: actions/checkout@v3</p>
+
+<p>      - name: Set up Elixir</p>
+<p>        uses: erlef/setup-beam@v1</p>
+<p>        with:</p>
+<p>          elixir-version: '1.16'</p>
+<p>          otp-version: '26'</p>
+
+<p>      - name: Cache deps</p>
+<p>        uses: actions/cache@v3</p>
+<p>        with:</p>
+<p>          path: deps</p>
+<p>          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}</p>
+
+<p>      - name: Install dependencies</p>
+<p>        run: mix deps.get</p>
+
+<p>      - name: Setup database</p>
+<p>        run: mix ecto.setup</p>
+<p>        env:</p>
+<p>          MIX_ENV: test</p>
+
+<p>      - name: Run tests</p>
+<p>        run: mix test --cover</p>
+
+<p>      - name: Check formatting</p>
+<p>        run: mix format --check-formatted</p>
+
+<p>      - name: Run Credo</p>
+<p>        run: mix credo --strict</p>
+</code></pre></figure>
+
+<h2>Test Helpers</h2>
+
+<figure class="code"><figcaption>File: test/support/test_helpers.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.TestHelpers do</p>
+<p>  @doc """</p>
+<p>  Waits for a condition to be true.</p>
+<p>  """</p>
+<p>  def eventually(func, timeout \\ 1000) do</p>
+<p>    end_time = System.monotonic_time(:millisecond) + timeout</p>
+<p>    do_eventually(func, end_time)</p>
+<p>  end</p>
+
+<p>  defp do_eventually(func, end_time) do</p>
+<p>    if func.() do</p>
+<p>      :ok</p>
+<p>    else</p>
+<p>      if System.monotonic_time(:millisecond) < end_time do</p>
+<p>        Process.sleep(10)</p>
+<p>        do_eventually(func, end_time)</p>
+<p>      else</p>
+<p>        raise "Condition not met within timeout"</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Asserts that a function eventually returns true.</p>
+<p>  """</p>
+<p>  defmacro assert_eventually(expr, timeout \\ 1000) do</p>
+<p>    quote do</p>
+<p>      Snippetbox.TestHelpers.eventually(fn -> unquote(expr) end, unquote(timeout))</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pure Tests</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The best tests verify pure transformations:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Pure function test: predictable, fast, isolated
+<p>test "add/2 returns sum" do</p>
+<p>  assert Calculator.add(2, 3) == 5  # Always true</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Impure function test: requires setup, slower</p>
+<p>test "create_snippet/1 persists data" do</p>
+<p>  # Requires database connection</p>
+<p>  # Has side effects</p>
+<p>  # Order matters</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Maximize pure functions in your codebase to maximize testability.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Test coverage tools (ExCoveralls)</li>
+<li>Test organization and naming</li>
+<li>Writing good tests (AAA pattern)</li>
+<li>Testing edge cases</li>
+<li>Mocking with Mox and Bypass</li>
+<li>Property-based testing</li>
+<li>Test performance optimization</li>
+<li>CI/CD integration</li>
+<li>Useful test helpers</li>
+</ul>
+
+<p>This completes the Testing chapter. In the next chapter, we'll explore deployment strategies for Phoenix applications.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="13.05-database-testing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="14.00-deployment.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

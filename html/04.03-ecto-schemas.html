@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Ecto Schemas &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Ecto Schemas</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.02-creating-database-migrations.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.04-changesets-and-validations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.3</div>
+        <h1>Chapter 4.3: Ecto Schemas</h1>
+
+<p>Schemas define how your database tables map to Elixir structs. In this chapter, we'll create a schema for our snippets and understand how Ecto transforms database rows into Elixir data.</p>
+
+<h2>What is a Schema?</h2>
+
+<p>An Ecto schema:</p>
+
+<ol>
+<li><strong>Maps</strong> database columns to struct fields</li>
+<li><strong>Defines</strong> field types for casting and validation</li>
+<li><strong>Declares</strong> associations between tables</li>
+<li><strong>Provides</strong> a struct for working with data</li>
+</ol>
+
+<h2>Creating a Snippet Schema</h2>
+
+<h3>Generate with Mix</h3>
+
+<figure class="code"><pre><code>$ mix phx.gen.schema Snippets.Snippet snippets title:string content:text expires_at:utc_datetime
+<ul>
+<li>creating lib/snippetbox/snippets/snippet.ex</li>
+</ul>
+</code></pre></figure>
+
+<h3>Manual Creation</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets.Snippet do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+<p>    field :expires_at, :utc_datetime</p>
+
+<p>    timestamps(type: :utc_datetime)</p>
+<p>  end</p>
+
+<p>  @doc false</p>
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :expires_at])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Schema Structure</h2>
+
+<h3>The <code>schema</code> Block</h3>
+
+<figure class="code"><pre><code>schema "snippets" do          # "snippets" is the table name
+<p>  field :title, :string       # Maps title column to :title field</p>
+<p>  field :content, :string</p>
+<p>  field :views, :integer, default: 0</p>
+<p>  field :is_public, :boolean, default: true</p>
+
+<p>  timestamps()                # Adds :inserted_at and :updated_at</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Field Types</h3>
+
+<p>| Schema Type | Elixir Type | Database Type |</p>
+<p>|-------------|-------------|---------------|</p>
+<p>| <code>:string</code> | <code>String.t()</code> | <code>varchar</code> |</p>
+<p>| <code>:integer</code> | <code>integer()</code> | <code>integer</code> |</p>
+<p>| <code>:float</code> | <code>float()</code> | <code>float</code> |</p>
+<p>| <code>:decimal</code> | <code>Decimal.t()</code> | <code>decimal</code> |</p>
+<p>| <code>:boolean</code> | <code>boolean()</code> | <code>boolean</code> |</p>
+<p>| <code>:date</code> | <code>Date.t()</code> | <code>date</code> |</p>
+<p>| <code>:time</code> | <code>Time.t()</code> | <code>time</code> |</p>
+<p>| <code>:naive_datetime</code> | <code>NaiveDateTime.t()</code> | <code>timestamp</code> |</p>
+<p>| <code>:utc_datetime</code> | <code>DateTime.t()</code> | <code>timestamptz</code> |</p>
+<p>| <code>:uuid</code> | <code>String.t()</code> | <code>uuid</code> |</p>
+<p>| <code>:binary</code> | <code>binary()</code> | <code>bytea</code> |</p>
+<p>| <code>:map</code> | <code>map()</code> | <code>jsonb</code> |</p>
+<p>| <code>{:array, :string}</code> | <code>[String.t()]</code> | <code>varchar[]</code> |</p>
+
+<h3>Field Options</h3>
+
+<figure class="code"><pre><code>schema "snippets" do
+<p>  field :title, :string                         # Required in migration</p>
+<p>  field :views, :integer, default: 0            # Default value</p>
+<p>  field :metadata, :map, default: %{}           # Default empty map</p>
+<p>  field :password, :string, virtual: true       # Not persisted</p>
+<p>  field :password_hash, :string, redact: true   # Hidden in logs</p>
+<p>  field :type, :string, source: :snippet_type   # Different column name</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Timestamps</h3>
+
+<figure class="code"><pre><code># Default (naive_datetime)
+<p>timestamps()</p>
+
+<h1>With timezone (recommended)</h1>
+<p>timestamps(type: :utc_datetime)</p>
+
+<h1>Custom field names</h1>
+<p>timestamps(inserted_at: :created_at, updated_at: :modified_at)</p>
+
+<h1>Disable one</h1>
+<p>timestamps(updated_at: false)</p>
+</code></pre></figure>
+
+<h2>Primary Keys</h2>
+
+<h3>Auto-incrementing Integer (Default)</h3>
+
+<figure class="code"><pre><code>schema "snippets" do
+<p>  # id field is automatically added as :id, :bigserial</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>UUID Primary Key</h3>
+
+<figure class="code"><pre><code># In schema
+<p>@primary_key {:id, :binary_id, autogenerate: true}</p>
+<p>@foreign_key_type :binary_id</p>
+
+<p>schema "snippets" do</p>
+<p>  field :title, :string</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># In migration
+<p>create table(:snippets, primary_key: false) do</p>
+<p>  add :id, :binary_id, primary_key: true</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Application-wide UUID</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/schema.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Schema do</p>
+<p>  defmacro __using__(_) do</p>
+<p>    quote do</p>
+<p>      use Ecto.Schema</p>
+<p>      @primary_key {:id, :binary_id, autogenerate: true}</p>
+<p>      @foreign_key_type :binary_id</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Usage in schemas</h1>
+<p>defmodule Snippetbox.Snippets.Snippet do</p>
+<p>  use Snippetbox.Schema  # Instead of use Ecto.Schema</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Working with Schemas</h2>
+
+<h3>Creating Structs</h3>
+
+<figure class="code"><pre><code># Empty struct
+<p>%Snippetbox.Snippets.Snippet{}</p>
+<h1>=> %Snippet{id: nil, title: nil, content: nil, ...}</h1>
+
+<h1>With values</h1>
+<p>%Snippet{title: "Hello", content: "World"}</p>
+
+<h1>Alias for convenience</h1>
+<p>alias Snippetbox.Snippets.Snippet</p>
+<p>%Snippet{title: "Hello"}</p>
+</code></pre></figure>
+
+<h3>Querying Returns Structs</h3>
+
+<figure class="code"><pre><code>alias Snippetbox.Repo
+<p>alias Snippetbox.Snippets.Snippet</p>
+
+<h1>Returns a Snippet struct</h1>
+<p>Repo.get(Snippet, 1)</p>
+<h1>=> %Snippet{id: 1, title: "Example", content: "..."}</h1>
+
+<h1>Returns list of Snippet structs</h1>
+<p>Repo.all(Snippet)</p>
+<h1>=> [%Snippet{...}, %Snippet{...}]</h1>
+</code></pre></figure>
+
+<h3>Accessing Fields</h3>
+
+<figure class="code"><pre><code>snippet = Repo.get!(Snippet, 1)
+
+<p>snippet.title      # => "Example"</p>
+<p>snippet.content    # => "Hello World"</p>
+<p>snippet.id         # => 1</p>
+
+<h1>Pattern matching</h1>
+<p>%Snippet{title: title} = snippet</p>
+<p>title  # => "Example"</p>
+</code></pre></figure>
+
+<h2>The Complete Snippet Schema</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets.Snippet do</p>
+<p>  @moduledoc """</p>
+<p>  Schema for code snippets.</p>
+<p>  """</p>
+
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+<p>    field :language, :string, default: "text"</p>
+<p>    field :expires_at, :utc_datetime</p>
+<p>    field :is_public, :boolean, default: true</p>
+<p>    field :views_count, :integer, default: 0</p>
+
+<p>    timestamps(type: :utc_datetime)</p>
+<p>  end</p>
+
+<p>  @required_fields [:title, :content]</p>
+<p>  @optional_fields [:language, :expires_at, :is_public]</p>
+
+<p>  @doc """</p>
+<p>  Creates a changeset for creating/updating a snippet.</p>
+<p>  """</p>
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, @required_fields ++ @optional_fields)</p>
+<p>    |> validate_required(@required_fields)</p>
+<p>    |> validate_length(:title, min: 1, max: 100)</p>
+<p>    |> validate_length(:content, min: 1, max: 100_000)</p>
+<p>    |> validate_inclusion(:language, supported_languages())</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  List of supported syntax highlighting languages.</p>
+<p>  """</p>
+<p>  def supported_languages do</p>
+<p>    ~w(text elixir ruby python javascript go rust java c cpp)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Schema Introspection</h2>
+
+<figure class="code"><pre><code>alias Snippetbox.Snippets.Snippet
+
+<h1>Get table name</h1>
+<p>Snippet.__schema__(:source)</p>
+<h1>=> "snippets"</h1>
+
+<h1>Get all fields</h1>
+<p>Snippet.__schema__(:fields)</p>
+<h1>=> [:id, :title, :content, :language, :expires_at, :is_public, :views_count, :inserted_at, :updated_at]</h1>
+
+<h1>Get field type</h1>
+<p>Snippet.__schema__(:type, :title)</p>
+<h1>=> :string</h1>
+
+<h1>Get primary key</h1>
+<p>Snippet.__schema__(:primary_key)</p>
+<h1>=> [:id]</h1>
+</code></pre></figure>
+
+<h2>Virtual Fields</h2>
+
+<p>Virtual fields exist on the struct but not in the database:</p>
+
+<figure class="code"><pre><code>schema "users" do
+<p>  field :email, :string</p>
+<p>  field :password_hash, :string</p>
+
+<p>  # Virtual - not persisted</p>
+<p>  field :password, :string, virtual: true</p>
+<p>  field :password_confirmation, :string, virtual: true</p>
+<p>end</p>
+
+<p>def registration_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :password, :password_confirmation])</p>
+<p>  |> validate_required([:email, :password, :password_confirmation])</p>
+<p>  |> validate_confirmation(:password)</p>
+<p>  |> hash_password()</p>
+<p>end</p>
+
+<p>defp hash_password(changeset) do</p>
+<p>  case changeset do</p>
+<p>    %{valid?: true, changes: %{password: password}} -></p>
+<p>      put_change(changeset, :password_hash, Bcrypt.hash_pwd_salt(password))</p>
+<p>    _ -></p>
+<p>      changeset</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Embedded Schemas</h2>
+
+<p>For nested data stored as JSON:</p>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets.Snippet do
+<p>  use Ecto.Schema</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    embeds_one :metadata, Metadata</p>
+<p>    timestamps()</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defmodule Snippetbox.Snippets.Snippet.Metadata do</p>
+<p>  use Ecto.Schema</p>
+
+<p>  @primary_key false</p>
+<p>  embedded_schema do</p>
+<p>    field :syntax_theme, :string, default: "monokai"</p>
+<p>    field :line_numbers, :boolean, default: true</p>
+<p>    field :word_wrap, :boolean, default: false</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code>%Snippet{
+<p>  title: "Example",</p>
+<p>  metadata: %Metadata{</p>
+<p>    syntax_theme: "dracula",</p>
+<p>    line_numbers: true</p>
+<p>  }</p>
+<p>}</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Data Transformation</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Schemas define a transformation between two representations:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> Database Row (map with strings)
+<p>       ↓ load</p>
+<p>Elixir Struct (typed fields)</p>
+<p>       ↓ dump</p>
+<p>Database Row</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is similar to serialization/deserialization, but with automatic type coercion:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Database returns: %{"title" => "Hello", "views_count" => "42"}
+<p># Schema transforms to: %Snippet{title: "Hello", views_count: 42}</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The schema acts as a contract defining the shape of your data.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Schema.html">Ecto.Schema</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating schemas with <code>use Ecto.Schema</code></li>
+<li>Mapping database columns to struct fields</li>
+<li>Field types and options</li>
+<li>Primary key configuration</li>
+<li>Virtual and embedded fields</li>
+<li>Schema introspection</li>
+</ul>
+
+<p>In the next chapter, we'll learn about changesets for validating and transforming data.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Schema vs Migration Types</h3>
+
+<p>Schemas and migrations use slightly different type names:</p>
+
+<p>| Migration | Schema |</p>
+<p>|-----------|--------|</p>
+<p>| <code>:text</code> | <code>:string</code> |</p>
+<p>| <code>:timestamptz</code> | <code>:utc_datetime</code> |</p>
+<p>| <code>references(:users)</code> | <code>belongs_to :user, User</code> |</p>
+
+<h3>Read-Only Schemas</h3>
+
+<p>For database views or external tables:</p>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Reports.SnippetStats do
+<p>  use Ecto.Schema</p>
+
+<p>  @primary_key false</p>
+<p>  schema "snippet_stats_view" do</p>
+<p>    field :snippet_id, :integer</p>
+<p>    field :total_views, :integer</p>
+<p>    field :unique_viewers, :integer</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Comparing to Other ORMs</h3>
+
+<strong>ActiveRecord (Rails)</strong>:
+<figure class="code"><pre><code>class Snippet < ApplicationRecord
+<p>  # Schema inferred from database</p>
+<p>end</p>
+</code></pre></figure>
+
+<strong>Django</strong>:
+<figure class="code"><pre><code>class Snippet(models.Model):
+<p>    title = models.CharField(max_length=100)</p>
+<p>    content = models.TextField()</p>
+</code></pre></figure>
+
+<strong>Ecto</strong>:
+<figure class="code"><pre><code>schema "snippets" do
+<p>  field :title, :string</p>
+<p>  field :content, :string</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Ecto requires explicit schema definition, providing better type safety and documentation.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.02-creating-database-migrations.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.04-changesets-and-validations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

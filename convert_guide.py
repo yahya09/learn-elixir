@@ -19,18 +19,140 @@ except ImportError:
 
 # Chapter navigation mapping
 CHAPTERS = [
+    # Front matter
     ("00.00-front-matter", "Front Matter", None, "00.01-contents"),
     ("00.01-contents", "Contents", "00.00-front-matter", "01.00-introduction"),
+
+    # Chapter 1: Introduction
     ("01.00-introduction", "Introduction", "00.01-contents", "01.01-prerequisites"),
     ("01.01-prerequisites", "Prerequisites", "01.00-introduction", "02.00-foundations"),
+
+    # Chapter 2: Foundations
     ("02.00-foundations", "Foundations", "01.01-prerequisites", "02.01-project-setup"),
     ("02.01-project-setup", "Project Setup", "02.00-foundations", "02.02-web-application-basics"),
     ("02.02-web-application-basics", "Web Application Basics", "02.01-project-setup", "02.03-routing-requests"),
-    ("02.03-routing-requests", "Routing Requests", "02.02-web-application-basics", "04.00-database-driven-responses"),
-    ("04.00-database-driven-responses", "Database-Driven Responses", "02.03-routing-requests", "15.00-conclusion"),
-    ("15.00-conclusion", "Conclusion", "04.00-database-driven-responses", "16.00-further-reading"),
+    ("02.03-routing-requests", "Routing Requests", "02.02-web-application-basics", "02.04-customizing-http-headers"),
+    ("02.04-customizing-http-headers", "Customizing HTTP Headers", "02.03-routing-requests", "02.05-url-query-strings"),
+    ("02.05-url-query-strings", "URL Query Strings", "02.04-customizing-http-headers", "02.06-project-structure"),
+    ("02.06-project-structure", "Project Structure", "02.05-url-query-strings", "02.07-html-templating"),
+    ("02.07-html-templating", "HTML Templating", "02.06-project-structure", "02.08-serving-static-files"),
+    ("02.08-serving-static-files", "Serving Static Files", "02.07-html-templating", "02.09-the-controller-pattern"),
+    ("02.09-the-controller-pattern", "The Controller Pattern", "02.08-serving-static-files", "03.00-configuration-and-error-handling"),
+
+    # Chapter 3: Configuration and Error Handling
+    ("03.00-configuration-and-error-handling", "Configuration and Error Handling", "02.09-the-controller-pattern", "03.01-managing-configuration"),
+    ("03.01-managing-configuration", "Managing Configuration", "03.00-configuration-and-error-handling", "03.02-environment-variables"),
+    ("03.02-environment-variables", "Environment Variables", "03.01-managing-configuration", "03.03-custom-error-responses"),
+    ("03.03-custom-error-responses", "Custom Error Responses", "03.02-environment-variables", "03.04-error-pages"),
+    ("03.04-error-pages", "Error Pages", "03.03-custom-error-responses", "03.05-logging"),
+    ("03.05-logging", "Logging", "03.04-error-pages", "04.00-database-driven-responses"),
+
+    # Chapter 4: Database with Ecto
+    ("04.00-database-driven-responses", "Database-Driven Responses", "03.05-logging", "04.01-setting-up-postgresql"),
+    ("04.01-setting-up-postgresql", "Setting Up PostgreSQL", "04.00-database-driven-responses", "04.02-creating-database-migrations"),
+    ("04.02-creating-database-migrations", "Database Migrations", "04.01-setting-up-postgresql", "04.03-ecto-schemas"),
+    ("04.03-ecto-schemas", "Ecto Schemas", "04.02-creating-database-migrations", "04.04-changesets-and-validations"),
+    ("04.04-changesets-and-validations", "Changesets and Validations", "04.03-ecto-schemas", "04.05-crud-operations"),
+    ("04.05-crud-operations", "CRUD Operations", "04.04-changesets-and-validations", "04.06-ecto-queries"),
+    ("04.06-ecto-queries", "Ecto Queries", "04.05-crud-operations", "04.07-associations"),
+    ("04.07-associations", "Associations", "04.06-ecto-queries", "04.08-transactions"),
+    ("04.08-transactions", "Transactions", "04.07-associations", "04.09-database-best-practices"),
+    ("04.09-database-best-practices", "Database Best Practices", "04.08-transactions", "05.00-dynamic-templates"),
+
+    # Chapter 5: Dynamic Templates
+    ("05.00-dynamic-templates", "Dynamic Templates", "04.09-database-best-practices", "05.01-displaying-data"),
+    ("05.01-displaying-data", "Displaying Data", "05.00-dynamic-templates", "05.02-template-actions"),
+    ("05.02-template-actions", "Template Actions", "05.01-displaying-data", "05.03-iterating-collections"),
+    ("05.03-iterating-collections", "Iterating Collections", "05.02-template-actions", "05.04-components"),
+    ("05.04-components", "Components", "05.03-iterating-collections", "05.05-layouts"),
+    ("05.05-layouts", "Layouts", "05.04-components", "05.06-helpers-and-formatting"),
+    ("05.06-helpers-and-formatting", "Helpers and Formatting", "05.05-layouts", "06.00-plugs-and-middleware"),
+
+    # Chapter 6: Plugs and Middleware
+    ("06.00-plugs-and-middleware", "Plugs and Middleware", "05.06-helpers-and-formatting", "06.01-understanding-plugs"),
+    ("06.01-understanding-plugs", "Understanding Plugs", "06.00-plugs-and-middleware", "06.02-phoenix-pipelines"),
+    ("06.02-phoenix-pipelines", "Phoenix Pipelines", "06.01-understanding-plugs", "06.03-creating-custom-plugs"),
+    ("06.03-creating-custom-plugs", "Creating Custom Plugs", "06.02-phoenix-pipelines", "06.04-common-plug-patterns"),
+    ("06.04-common-plug-patterns", "Common Plug Patterns", "06.03-creating-custom-plugs", "06.05-testing-plugs"),
+    ("06.05-testing-plugs", "Testing Plugs", "06.04-common-plug-patterns", "07.00-advanced-routing"),
+
+    # Chapter 7: Advanced Routing
+    ("07.00-advanced-routing", "Advanced Routing", "06.05-testing-plugs", "07.01-nested-resources"),
+    ("07.01-nested-resources", "Nested Resources", "07.00-advanced-routing", "07.02-scopes-and-namespaces"),
+    ("07.02-scopes-and-namespaces", "Scopes and Namespaces", "07.01-nested-resources", "07.03-custom-routes"),
+    ("07.03-custom-routes", "Custom Routes", "07.02-scopes-and-namespaces", "08.00-processing-forms"),
+
+    # Chapter 8: Processing Forms
+    ("08.00-processing-forms", "Processing Forms", "07.03-custom-routes", "08.01-form-basics"),
+    ("08.01-form-basics", "Form Basics", "08.00-processing-forms", "08.02-phoenix-forms"),
+    ("08.02-phoenix-forms", "Phoenix Forms", "08.01-form-basics", "08.03-changesets-in-forms"),
+    ("08.03-changesets-in-forms", "Changesets in Forms", "08.02-phoenix-forms", "08.04-file-uploads"),
+    ("08.04-file-uploads", "File Uploads", "08.03-changesets-in-forms", "08.05-form-validation"),
+    ("08.05-form-validation", "Form Validation", "08.04-file-uploads", "08.06-form-security"),
+    ("08.06-form-security", "Form Security", "08.05-form-validation", "09.00-sessions-and-state"),
+
+    # Chapter 9: Sessions and State
+    ("09.00-sessions-and-state", "Sessions and State", "08.06-form-security", "09.01-session-management"),
+    ("09.01-session-management", "Session Management", "09.00-sessions-and-state", "09.02-flash-messages"),
+    ("09.02-flash-messages", "Flash Messages", "09.01-session-management", "09.03-cookies"),
+    ("09.03-cookies", "Cookies", "09.02-flash-messages", "09.04-ets-and-caching"),
+    ("09.04-ets-and-caching", "ETS and Caching", "09.03-cookies", "10.00-security"),
+
+    # Chapter 10: Security
+    ("10.00-security", "Security", "09.04-ets-and-caching", "10.01-https-and-tls"),
+    ("10.01-https-and-tls", "HTTPS and TLS", "10.00-security", "10.02-csrf-protection"),
+    ("10.02-csrf-protection", "CSRF Protection", "10.01-https-and-tls", "10.03-sql-injection"),
+    ("10.03-sql-injection", "SQL Injection", "10.02-csrf-protection", "10.04-xss-prevention"),
+    ("10.04-xss-prevention", "XSS Prevention", "10.03-sql-injection", "10.05-security-headers"),
+    ("10.05-security-headers", "Security Headers", "10.04-xss-prevention", "10.06-common-vulnerabilities"),
+    ("10.06-common-vulnerabilities", "Common Vulnerabilities", "10.05-security-headers", "11.00-authentication"),
+
+    # Chapter 11: Authentication
+    ("11.00-authentication", "Authentication", "10.06-common-vulnerabilities", "11.01-password-hashing"),
+    ("11.01-password-hashing", "Password Hashing", "11.00-authentication", "11.02-user-registration"),
+    ("11.02-user-registration", "User Registration", "11.01-password-hashing", "11.03-login-logout"),
+    ("11.03-login-logout", "Login and Logout", "11.02-user-registration", "11.04-remember-me"),
+    ("11.04-remember-me", "Remember Me", "11.03-login-logout", "11.05-password-reset"),
+    ("11.05-password-reset", "Password Reset", "11.04-remember-me", "11.06-email-verification"),
+    ("11.06-email-verification", "Email Verification", "11.05-password-reset", "11.07-oauth"),
+    ("11.07-oauth", "OAuth Integration", "11.06-email-verification", "12.00-liveview"),
+
+    # Chapter 12: LiveView
+    ("12.00-liveview", "Phoenix LiveView", "11.07-oauth", "12.01-liveview-basics"),
+    ("12.01-liveview-basics", "LiveView Basics", "12.00-liveview", "12.02-liveview-forms"),
+    ("12.02-liveview-forms", "LiveView Forms", "12.01-liveview-basics", "12.03-live-components"),
+    ("12.03-live-components", "Live Components", "12.02-liveview-forms", "12.04-real-time-features"),
+    ("12.04-real-time-features", "Real-Time Features", "12.03-live-components", "13.00-testing"),
+
+    # Chapter 13: Testing
+    ("13.00-testing", "Testing", "12.04-real-time-features", "13.01-unit-testing"),
+    ("13.01-unit-testing", "Unit Testing", "13.00-testing", "13.02-controller-testing"),
+    ("13.02-controller-testing", "Controller Testing", "13.01-unit-testing", "13.03-integration-testing"),
+    ("13.03-integration-testing", "Integration Testing", "13.02-controller-testing", "13.04-liveview-testing"),
+    ("13.04-liveview-testing", "LiveView Testing", "13.03-integration-testing", "13.05-database-testing"),
+    ("13.05-database-testing", "Database Testing", "13.04-liveview-testing", "13.06-test-best-practices"),
+    ("13.06-test-best-practices", "Test Best Practices", "13.05-database-testing", "14.00-deployment"),
+
+    # Chapter 14: Deployment
+    ("14.00-deployment", "Deployment", "13.06-test-best-practices", "14.01-releases"),
+    ("14.01-releases", "Elixir Releases", "14.00-deployment", "14.02-docker"),
+    ("14.02-docker", "Docker Deployment", "14.01-releases", "14.03-fly-io"),
+    ("14.03-fly-io", "Fly.io Deployment", "14.02-docker", "14.04-production-config"),
+    ("14.04-production-config", "Production Config", "14.03-fly-io", "14.05-monitoring"),
+    ("14.05-monitoring", "Monitoring", "14.04-production-config", "15.00-conclusion"),
+
+    # Conclusion and Appendix
+    ("15.00-conclusion", "Conclusion", "14.05-monitoring", "16.00-further-reading"),
     ("16.00-further-reading", "Further Reading", "15.00-conclusion", "17.00-guided-exercises"),
-    ("17.00-guided-exercises", "Guided Exercises", "16.00-further-reading", None),
+
+    # Chapter 17: Exercises
+    ("17.00-guided-exercises", "Guided Exercises", "16.00-further-reading", "17.01-foundations-exercises"),
+    ("17.01-foundations-exercises", "Foundations Exercises", "17.00-guided-exercises", "17.02-database-exercises"),
+    ("17.02-database-exercises", "Database Exercises", "17.01-foundations-exercises", "17.03-web-exercises"),
+    ("17.03-web-exercises", "Web Layer Exercises", "17.02-database-exercises", "17.04-auth-exercises"),
+    ("17.04-auth-exercises", "Authentication Exercises", "17.03-web-exercises", "17.05-liveview-exercises"),
+    ("17.05-liveview-exercises", "LiveView Exercises", "17.04-auth-exercises", "17.06-deployment-exercises"),
+    ("17.06-deployment-exercises", "Deployment Exercises", "17.05-liveview-exercises", None),
 ]
 
 def basic_markdown_to_html(text):

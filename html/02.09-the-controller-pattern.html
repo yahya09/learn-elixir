@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>The Controller Pattern &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; The Controller Pattern</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.08-serving-static-files.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="03.00-configuration-and-error-handling.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.9</div>
+        <h1>Chapter 2.9: The Controller Pattern</h1>
+
+<p>Controllers are the heart of request handling in Phoenix. In this chapter, we'll explore the controller pattern in depth, understanding how to organize controller code effectively.</p>
+
+<h2>What is a Controller?</h2>
+
+<p>A controller is a module that receives HTTP requests, processes them, and returns responses. It acts as the coordinator between:</p>
+
+<ul>
+<li><strong>Router</strong> - Determines which controller handles a request</li>
+<li><strong>Context</strong> - Business logic and data access</li>
+<li><strong>View/Template</strong> - Response rendering</li>
+</ul>
+
+<figure class="code"><pre><code>Request → Router → Controller → Context → Controller → View → Response
+</code></pre></figure>
+
+<h2>Anatomy of a Controller</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    snippets = Snippets.list_snippets()</p>
+<p>    render(conn, :index, snippets: snippets)</p>
+<p>  end</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+
+<p>  def new(conn, _params) do</p>
+<p>    changeset = Snippets.change_snippet(%Snippet{})</p>
+<p>    render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"snippet" => snippet_params}) do</p>
+<p>    case Snippets.create_snippet(snippet_params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Snippet created successfully.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>      {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>        render(conn, :new, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def edit(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    changeset = Snippets.change_snippet(snippet)</p>
+<p>    render(conn, :edit, snippet: snippet, changeset: changeset)</p>
+<p>  end</p>
+
+<p>  def update(conn, %{"id" => id, "snippet" => snippet_params}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+
+<p>    case Snippets.update_snippet(snippet, snippet_params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Snippet updated successfully.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>      {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>        render(conn, :edit, snippet: snippet, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def delete(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    {:ok, _snippet} = Snippets.delete_snippet(snippet)</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "Snippet deleted successfully.")</p>
+<p>    |> redirect(to: ~p"/snippets")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The Connection Struct</h2>
+
+<p>Every controller action receives a <code>conn</code> (Plug.Conn) struct containing:</p>
+
+<figure class="code"><pre><code>%Plug.Conn{
+<p>  # Request information</p>
+<p>  host: "localhost",</p>
+<p>  port: 4000,</p>
+<p>  method: "GET",</p>
+<p>  path_info: ["snippets", "123"],</p>
+<p>  query_string: "page=1",</p>
+<p>  request_path: "/snippets/123",</p>
+
+<p>  # Headers</p>
+<p>  req_headers: [{"accept", "text/html"}, ...],</p>
+<p>  resp_headers: [{"cache-control", "max-age=0"}, ...],</p>
+
+<p>  # Parameters (merged from all sources)</p>
+<p>  params: %{"id" => "123", "page" => "1"},</p>
+<p>  path_params: %{"id" => "123"},</p>
+<p>  query_params: %{"page" => "1"},</p>
+<p>  body_params: %{},</p>
+
+<p>  # Assigns (data you set)</p>
+<p>  assigns: %{},</p>
+
+<p>  # State</p>
+<p>  state: :unset,  # :unset, :set, :chunked, :sent</p>
+<p>  status: nil,</p>
+<p>  resp_body: nil,</p>
+
+<p>  # Phoenix-specific</p>
+<p>  private: %{</p>
+<p>    phoenix_controller: SnippetboxWeb.SnippetController,</p>
+<p>    phoenix_action: :show,</p>
+<p>    phoenix_format: "html",</p>
+<p>    ...</p>
+<p>  }</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>Controller Actions</h2>
+
+<p>Actions are functions that:</p>
+<ol>
+<li>Take <code>conn</code> and <code>params</code> as arguments</li>
+<li>Return a modified <code>conn</code> (or raise an exception)</li>
+</ol>
+
+<h3>Action Parameters</h3>
+
+<figure class="code"><pre><code># All params merged together
+<p>def show(conn, params) do</p>
+<p>  IO.inspect(params)</p>
+<p>  # %{"id" => "123", "page" => "1", "format" => "html"}</p>
+<p>end</p>
+
+<h1>Pattern match specific params</h1>
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  # id = "123"</p>
+<p>end</p>
+
+<h1>Ignore params you don't need</h1>
+<p>def index(conn, _params) do</p>
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Response Types</h2>
+
+<h3>Rendering HTML</h3>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The <code>render/3</code> function:</p>
+<ol>
+<li>Looks up the view module (<code>SnippetHTML</code>)</li>
+<li>Calls the template function (<code>:show</code>)</li>
+<li>Passes assigns (<code>snippet: snippet</code>)</li>
+<li>Sets response body and content-type</li>
+</ol>
+
+<h3>Rendering JSON</h3>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  json(conn, %{</p>
+<p>    id: snippet.id,</p>
+<p>    title: snippet.title,</p>
+<p>    content: snippet.content</p>
+<p>  })</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Plain Text</h3>
+
+<figure class="code"><pre><code>def health(conn, _params) do
+<p>  text(conn, "OK")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Sending Raw Response</h3>
+
+<figure class="code"><pre><code>def custom(conn, _params) do
+<p>  conn</p>
+<p>  |> put_resp_content_type("text/csv")</p>
+<p>  |> send_resp(200, "id,name\n1,Alice\n2,Bob")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Redirects</h3>
+
+<figure class="code"><pre><code>def create(conn, params) do
+<p>  # Internal redirect</p>
+<p>  redirect(conn, to: ~p"/snippets/123")</p>
+
+<p>  # External redirect</p>
+<p>  redirect(conn, external: "https://example.com")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>No Content</h3>
+
+<figure class="code"><pre><code>def delete(conn, %{"id" => id}) do
+<p>  Snippets.delete_snippet!(id)</p>
+<p>  send_resp(conn, :no_content, "")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Flash Messages</h2>
+
+<p>Flash messages persist across redirects:</p>
+
+<figure class="code"><pre><code>def create(conn, params) do
+<p>  case Snippets.create_snippet(params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Snippet created!")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, changeset} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "Failed to create snippet.")</p>
+<p>      |> render(:new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Flash types:</p>
+<ul>
+<li><code>:info</code> - Success/information messages</li>
+<li><code>:error</code> - Error messages</li>
+</ul>
+
+<p>Display in templates:</p>
+
+<figure class="code"><pre><code><%= if info = Phoenix.Flash.get(@flash, :info) do %>
+<p>  <div class="flash flash-info"><%= info %></div></p>
+<% end %>
+
+<%= if error = Phoenix.Flash.get(@flash, :error) do %>
+<p>  <div class="flash flash-error"><%= error %></div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Action Plugs</h2>
+
+<p>Run code before or around specific actions:</p>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetController do
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  # Run for all actions</p>
+<p>  plug :set_layout</p>
+
+<p>  # Run for specific actions</p>
+<p>  plug :require_auth when action in [:new, :create, :edit, :update, :delete]</p>
+
+<p>  # Run for all except some</p>
+<p>  plug :track_view when action not in [:new, :create]</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    # ...</p>
+<p>  end</p>
+
+<p>  # Plug implementations</p>
+<p>  defp set_layout(conn, _opts) do</p>
+<p>    put_layout(conn, html: :snippets)</p>
+<p>  end</p>
+
+<p>  defp require_auth(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "You must be logged in.")</p>
+<p>      |> redirect(to: ~p"/login")</p>
+<p>      |> halt()  # Important! Stop the pipeline</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp track_view(conn, _opts) do</p>
+<p>    # Analytics tracking</p>
+<p>    conn</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Error Handling</h2>
+
+<h3>Using Bang Functions</h3>
+
+<p>Bang functions (<code>!</code>) raise exceptions on failure:</p>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  # Raises Ecto.NoResultsError if not found</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Phoenix converts <code>Ecto.NoResultsError</code> to a 404 response automatically.</p>
+
+<h3>Explicit Error Handling</h3>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  case Snippets.get_snippet(id) do</p>
+<p>    nil -></p>
+<p>      conn</p>
+<p>      |> put_status(:not_found)</p>
+<p>      |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>      |> render(:"404")</p>
+
+<p>    snippet -></p>
+<p>      render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>With Pattern</h3>
+
+<figure class="code"><pre><code>def create(conn, %{"snippet" => params}) do
+<p>  with {:ok, snippet} <- Snippets.create_snippet(params),</p>
+<p>       {:ok, _} <- notify_subscribers(snippet) do</p>
+<p>    conn</p>
+<p>    |> put_flash(:info, "Created!")</p>
+<p>    |> redirect(to: ~p"/snippets/#{snippet}")</p>
+<p>  else</p>
+<p>    {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>      render(conn, :new, changeset: changeset)</p>
+
+<p>    {:error, :notification_failed} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:warning, "Created but notification failed")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Organizing Large Controllers</h2>
+
+<h3>Extract Helper Functions</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetController do
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def index(conn, params) do</p>
+<p>    {snippets, pagination} = fetch_snippets(params)</p>
+<p>    render(conn, :index, snippets: snippets, pagination: pagination)</p>
+<p>  end</p>
+
+<p>  # Private helpers</p>
+<p>  defp fetch_snippets(params) do</p>
+<p>    page = parse_page(params)</p>
+<p>    per_page = parse_per_page(params)</p>
+<p>    sort = parse_sort(params)</p>
+
+<p>    Snippets.list_snippets(page: page, per_page: per_page, sort: sort)</p>
+<p>  end</p>
+
+<p>  defp parse_page(%{"page" => page}) when is_binary(page) do</p>
+<p>    case Integer.parse(page) do</p>
+<p>      {n, ""} when n > 0 -> n</p>
+<p>      _ -> 1</p>
+<p>    end</p>
+<p>  end</p>
+<p>  defp parse_page(_), do: 1</p>
+
+<p>  defp parse_per_page(%{"per_page" => per_page}) when is_binary(per_page) do</p>
+<p>    case Integer.parse(per_page) do</p>
+<p>      {n, ""} when n in 1..100 -> n</p>
+<p>      _ -> 20</p>
+<p>    end</p>
+<p>  end</p>
+<p>  defp parse_per_page(_), do: 20</p>
+
+<p>  defp parse_sort(%{"sort" => sort}) when sort in ~w(newest oldest popular) do</p>
+<p>    String.to_existing_atom(sort)</p>
+<p>  end</p>
+<p>  defp parse_sort(_), do: :newest</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Separate Concerns into Contexts</h3>
+
+<p>Keep controllers thin, move logic to contexts:</p>
+
+<figure class="code"><pre><code># Bad: Business logic in controller
+<p>def create(conn, %{"snippet" => params}) do</p>
+<p>  params = Map.put(params, "user_id", conn.assigns.current_user.id)</p>
+<p>  expires_at = DateTime.add(DateTime.utc_now(), params["duration"] * 86400)</p>
+<p>  params = Map.put(params, "expires_at", expires_at)</p>
+<p>  # ... more logic</p>
+<p>end</p>
+
+<h1>Good: Delegate to context</h1>
+<p>def create(conn, %{"snippet" => params}) do</p>
+<p>  user = conn.assigns.current_user</p>
+<p>  case Snippets.create_snippet(user, params) do</p>
+<p>    {:ok, snippet} -> redirect(conn, to: ~p"/snippets/#{snippet}")</p>
+<p>    {:error, changeset} -> render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Split into Multiple Controllers</h3>
+
+<p>If a controller grows too large, split by resource or feature:</p>
+
+<figure class="code"><pre><code>controllers/
+<p>├── snippet_controller.ex      # CRUD actions</p>
+<p>├── snippet_export_controller.ex   # Export features</p>
+<p>└── snippet_share_controller.ex    # Sharing features</p>
+</code></pre></figure>
+
+<h2>Controller Testing</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/snippet_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  describe "index" do</p>
+<p>    test "lists all snippets", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/snippets")</p>
+<p>      assert html_response(conn, 200) =~ "Snippets"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "show" do</p>
+<p>    test "shows snippet", %{conn: conn} do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      conn = get(conn, ~p"/snippets/#{snippet}")</p>
+<p>      assert html_response(conn, 200) =~ snippet.title</p>
+<p>    end</p>
+
+<p>    test "returns 404 for non-existent snippet", %{conn: conn} do</p>
+<p>      assert_error_sent 404, fn -></p>
+<p>        get(conn, ~p"/snippets/999999")</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create" do</p>
+<p>    test "creates snippet with valid data", %{conn: conn} do</p>
+<p>      params = %{title: "Test", content: "Hello"}</p>
+<p>      conn = post(conn, ~p"/snippets", snippet: params)</p>
+
+<p>      assert %{id: id} = redirected_params(conn)</p>
+<p>      assert redirected_to(conn) == ~p"/snippets/#{id}"</p>
+<p>    end</p>
+
+<p>    test "returns errors with invalid data", %{conn: conn} do</p>
+<p>      params = %{title: "", content: ""}</p>
+<p>      conn = post(conn, ~p"/snippets", snippet: params)</p>
+<p>      assert html_response(conn, 200) =~ "can&#39;t be blank"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Best Practices</h2>
+
+<h3>1. Keep Actions Simple</h3>
+
+<p>Each action should do one thing:</p>
+
+<figure class="code"><pre><code># Good: Simple, focused action
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+
+<h1>Bad: Doing too much</h1>
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  Snippets.increment_view_count(snippet)</p>
+<p>  related = Snippets.find_related(snippet)</p>
+<p>  comments = Comments.for_snippet(snippet)</p>
+<p>  user = Accounts.get_user(snippet.user_id)</p>
+<p>  render(conn, :show, snippet: snippet, related: related,</p>
+<p>         comments: comments, author: user)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>2. Use Pattern Matching</h3>
+
+<figure class="code"><pre><code># Pattern match in function heads
+<p>def show(conn, %{"id" => id, "format" => "json"}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  json(conn, snippet)</p>
+<p>end</p>
+
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>3. Handle Errors Gracefully</h3>
+
+<figure class="code"><pre><code>def create(conn, %{"snippet" => params}) do
+<p>  case Snippets.create_snippet(params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Created successfully!")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, changeset} -></p>
+<p>      conn</p>
+<p>      |> put_status(:unprocessable_entity)</p>
+<p>      |> render(:new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>4. Validate Early</h3>
+
+<figure class="code"><pre><code>plug :validate_id when action in [:show, :edit, :update, :delete]
+
+<p>defp validate_id(conn, _opts) do</p>
+<p>  case Integer.parse(conn.params["id"]) do</p>
+<p>    {id, ""} when id > 0 -></p>
+<p>      assign(conn, :snippet_id, id)</p>
+<p>    _ -></p>
+<p>      conn</p>
+<p>      |> put_status(:bad_request)</p>
+<p>      |> text("Invalid ID")</p>
+<p>      |> halt()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: The Conn Pipeline</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix controllers embrace the pipeline pattern:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> conn
+<p>|> put_status(:created)</p>
+<p>|> put_resp_header("location", ~p"/snippets/#{snippet}")</p>
+<p>|> put_flash(:info, "Created!")</p>
+<p>|> redirect(to: ~p"/snippets/#{snippet}")</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each function transforms <code>conn</code> and returns a new <code>conn</code>. This is:</p>
+<ul>
+<li><strong>Composable</strong>: Easy to add/remove/reorder steps</li>
+<li><strong>Testable</strong>: Each step is a pure function</li>
+<li><strong>Traceable</strong>: Data flow is explicit</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Compare to imperative style:</p>
+<figure class="code"><pre><code>> # Imperative (mutations)
+<p>response.status = 201</p>
+<p>response.headers["Location"] = url</p>
+<p>flash["info"] = "Created!"</p>
+<p>return redirect(url)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/plug/Plug.Conn.html">Plug.Conn Documentation</a></li>
+<li><a href="https://hexdocs.pm/phoenix/controllers.html">Phoenix Controller Guide</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Controller structure and the Plug.Conn struct</li>
+<li>Different response types (HTML, JSON, text, redirects)</li>
+<li>Flash messages for user feedback</li>
+<li>Action plugs for cross-cutting concerns</li>
+<li>Error handling strategies</li>
+<li>Best practices for organizing controller code</li>
+</ul>
+
+<p>This completes the Foundations chapter. In the next chapter, we'll explore Configuration and Error Handling.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>RESTful Actions Convention</h3>
+
+<p>Phoenix follows RESTful conventions:</p>
+
+<p>| Action | HTTP Method | Path | Purpose |</p>
+<p>|--------|-------------|------|---------|</p>
+<p>| index | GET | /snippets | List all |</p>
+<p>| show | GET | /snippets/:id | Show one |</p>
+<p>| new | GET | /snippets/new | New form |</p>
+<p>| create | POST | /snippets | Create |</p>
+<p>| edit | GET | /snippets/:id/edit | Edit form |</p>
+<p>| update | PUT/PATCH | /snippets/:id | Update |</p>
+<p>| delete | DELETE | /snippets/:id | Delete |</p>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Rails Controller</strong>:
+<figure class="code"><pre><code>class SnippetsController < ApplicationController
+<p>  def show</p>
+<p>    @snippet = Snippet.find(params[:id])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<strong>Django View</strong>:
+<figure class="code"><pre><code>def show(request, id):
+<p>    snippet = get_object_or_404(Snippet, pk=id)</p>
+<p>    return render(request, 'show.html', {'snippet': snippet})</p>
+</code></pre></figure>
+
+<strong>Express Handler</strong>:
+<figure class="code"><pre><code>app.get('/snippets/:id', (req, res) => {
+<p>  const snippet = Snippet.find(req.params.id);</p>
+<p>  res.render('show', { snippet });</p>
+<p>});</p>
+</code></pre></figure>
+
+<strong>Phoenix Controller</strong>:
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Phoenix is explicit about both parameters and response - no magic instance variables or implicit rendering.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.08-serving-static-files.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="03.00-configuration-and-error-handling.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

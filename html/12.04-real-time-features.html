@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Real-Time Features &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Real-Time Features</span>
+            </div>
+            <div>
+                &lsaquo; <a href="12.03-live-components.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="13.00-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 12.4</div>
+        <h1>Chapter 12.4: Real-Time Features</h1>
+
+<p>LiveView excels at real-time features. In this chapter, we'll explore PubSub, presence, and live updates.</p>
+
+<h2>Phoenix PubSub</h2>
+
+<p>PubSub enables message broadcasting across processes:</p>
+
+<figure class="code"><pre><code># Subscribe to a topic
+<p>Phoenix.PubSub.subscribe(Snippetbox.PubSub, "snippets")</p>
+
+<h1>Broadcast to all subscribers</h1>
+<p>Phoenix.PubSub.broadcast(Snippetbox.PubSub, "snippets", {:snippet_created, snippet})</p>
+</code></pre></figure>
+
+<h2>Real-Time Snippet Updates</h2>
+
+<h3>Broadcasting Changes</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+<p>  alias Snippetbox.Repo</p>
+
+<p>  @pubsub Snippetbox.PubSub</p>
+<p>  @topic "snippets"</p>
+
+<p>  def subscribe do</p>
+<p>    Phoenix.PubSub.subscribe(@pubsub, @topic)</p>
+<p>  end</p>
+
+<p>  def subscribe(snippet_id) do</p>
+<p>    Phoenix.PubSub.subscribe(@pubsub, "#{@topic}:#{snippet_id}")</p>
+<p>  end</p>
+
+<p>  def create_snippet(attrs \\ %{}) do</p>
+<p>    %Snippet{}</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.insert()</p>
+<p>    |> broadcast(:snippet_created)</p>
+<p>  end</p>
+
+<p>  def update_snippet(%Snippet{} = snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.update()</p>
+<p>    |> broadcast(:snippet_updated)</p>
+<p>  end</p>
+
+<p>  def delete_snippet(%Snippet{} = snippet) do</p>
+<p>    snippet</p>
+<p>    |> Repo.delete()</p>
+<p>    |> broadcast(:snippet_deleted)</p>
+<p>  end</p>
+
+<p>  defp broadcast({:ok, snippet}, event) do</p>
+<p>    Phoenix.PubSub.broadcast(@pubsub, @topic, {event, snippet})</p>
+<p>    Phoenix.PubSub.broadcast(@pubsub, "#{@topic}:#{snippet.id}", {event, snippet})</p>
+<p>    {:ok, snippet}</p>
+<p>  end</p>
+
+<p>  defp broadcast({:error, changeset}, _event), do: {:error, changeset}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Receiving Updates in LiveView</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/snippet_live/index.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetLive.Index do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    if connected?(socket) do</p>
+<p>      Snippets.subscribe()</p>
+<p>    end</p>
+
+<p>    {:ok, stream(socket, :snippets, Snippets.list_snippets())}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:snippet_created, snippet}, socket) do</p>
+<p>    {:noreply, stream_insert(socket, :snippets, snippet, at: 0)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:snippet_updated, snippet}, socket) do</p>
+<p>    {:noreply, stream_insert(socket, :snippets, snippet)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:snippet_deleted, snippet}, socket) do</p>
+<p>    {:noreply, stream_delete(socket, :snippets, snippet)}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Live Notifications</h2>
+
+<h3>Notification System</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/notifications.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Notifications do</p>
+<p>  @pubsub Snippetbox.PubSub</p>
+
+<p>  def subscribe(user_id) do</p>
+<p>    Phoenix.PubSub.subscribe(@pubsub, "user:#{user_id}:notifications")</p>
+<p>  end</p>
+
+<p>  def notify(user_id, notification) do</p>
+<p>    Phoenix.PubSub.broadcast(</p>
+<p>      @pubsub,</p>
+<p>      "user:#{user_id}:notifications",</p>
+<p>      {:new_notification, notification}</p>
+<p>    )</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Notification Component</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/components/notification_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.NotificationLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Notifications</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    if connected?(socket) do</p>
+<p>      user_id = socket.assigns.current_user.id</p>
+<p>      Notifications.subscribe(user_id)</p>
+<p>    end</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:notifications, [])</p>
+<p>     |> assign(:unread_count, 0)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="relative"></p>
+<p>      <button</p>
+<p>        phx-click="toggle"</p>
+<p>        class="relative p-2 text-gray-600 hover:text-gray-900"</p>
+<p>      ></p>
+<p>        <.icon name="hero-bell" class="h-6 w-6" /></p>
+<p>        <span</p>
+<p>          :if={@unread_count > 0}</p>
+<p>          class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"</p>
+<p>        ></p>
+<p>          <%= @unread_count %></p>
+<p>        </span></p>
+<p>      </button></p>
+
+<p>      <div</p>
+<p>        :if={@show_panel}</p>
+<p>        class="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg z-50"</p>
+<p>      ></p>
+<p>        <div class="p-4 border-b"></p>
+<p>          <h3 class="font-semibold">Notifications</h3></p>
+<p>        </div></p>
+
+<p>        <div class="max-h-96 overflow-y-auto"></p>
+<p>          <div</p>
+<p>            :for={notification <- @notifications}</p>
+<p>            class={["p-4 border-b hover:bg-gray-50", !notification.read && "bg-blue-50"]}</p>
+<p>          ></p>
+<p>            <p class="text-sm"><%= notification.message %></p></p>
+<p>            <p class="text-xs text-gray-500 mt-1"></p>
+<p>              <%= format_time(notification.inserted_at) %></p>
+</p>
+<p>          </div></p>
+
+<p>          <p :if={@notifications == []} class="p-4 text-gray-500 text-center"></p>
+<p>            No notifications</p>
+</p>
+<p>        </div></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("toggle", _params, socket) do</p>
+<p>    {:noreply, update(socket, :show_panel, &(!&1))}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:new_notification, notification}, socket) do</p>
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> update(:notifications, &[notification | &1])</p>
+<p>     |> update(:unread_count, &(&1 + 1))}</p>
+<p>  end</p>
+
+<p>  defp format_time(datetime) do</p>
+<p>    # Simple relative time</p>
+<p>    diff = NaiveDateTime.diff(NaiveDateTime.utc_now(), datetime)</p>
+
+<p>    cond do</p>
+<p>      diff < 60 -> "just now"</p>
+<p>      diff < 3600 -> "#{div(diff, 60)}m ago"</p>
+<p>      diff < 86400 -> "#{div(diff, 3600)}h ago"</p>
+<p>      true -> Calendar.strftime(datetime, "%b %d")</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Presence</h2>
+
+<p>Track who's online in real-time:</p>
+
+<h3>Presence Module</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/presence.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Presence do</p>
+<p>  use Phoenix.Presence,</p>
+<p>    otp_app: :snippetbox,</p>
+<p>    pubsub_server: Snippetbox.PubSub</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Application Supervisor</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>def start(_type, _args) do</p>
+<p>  children = [</p>
+<p>    # ...</p>
+<p>    SnippetboxWeb.Presence</p>
+<p>  ]</p>
+
+<p>  opts = [strategy: :one_for_one, name: Snippetbox.Supervisor]</p>
+<p>  Supervisor.start_link(children, opts)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Tracking Users</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/snippet_live/show.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetLive.Show do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Snippets</p>
+<p>  alias SnippetboxWeb.Presence</p>
+
+<p>  @impl true</p>
+<p>  def mount(%{"id" => id}, _session, socket) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    topic = "snippet:#{id}"</p>
+
+<p>    if connected?(socket) do</p>
+<p>      # Subscribe to presence changes</p>
+<p>      Phoenix.PubSub.subscribe(Snippetbox.PubSub, topic)</p>
+
+<p>      # Track this user's presence</p>
+<p>      Presence.track(self(), topic, socket.assigns.current_user.id, %{</p>
+<p>        name: socket.assigns.current_user.name,</p>
+<p>        joined_at: DateTime.utc_now()</p>
+<p>      })</p>
+<p>    end</p>
+
+<p>    presences = Presence.list(topic)</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:snippet, snippet)</p>
+<p>     |> assign(:presences, presences)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div></p>
+<p>      <.header></p>
+<p>        <%= @snippet.title %></p>
+<p>        <:subtitle></p>
+<p>          <span class="flex items-center gap-2"></p>
+<p>            <span class="inline-block w-2 h-2 bg-green-500 rounded-full"></span></p>
+<p>            <%= map_size(@presences) %> viewing</p>
+<p>          </span></p>
+<p>        </:subtitle></p>
+<p>      </.header></p>
+
+<p>      <div class="mt-4 flex -space-x-2"></p>
+<p>        <%= for {_user_id, %{metas: [meta | _]}} <- @presences do %></p>
+<p>          <div</p>
+<p>            class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm border-2 border-white"</p>
+<p>            title={meta.name}</p>
+<p>          ></p>
+<p>            <%= String.first(meta.name) %></p>
+<p>          </div></p>
+<p>        <% end %></p>
+<p>      </div></p>
+
+<p>      <pre class="mt-6 bg-gray-100 p-4 rounded-lg overflow-auto"></p>
+<p>        <code><%= @snippet.content %></code></p>
+<p>      </pre></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff", payload: diff}, socket) do</p>
+<p>    presences =</p>
+<p>      socket.assigns.presences</p>
+<p>      |> Presence.sync_diff(diff)</p>
+
+<p>    {:noreply, assign(socket, :presences, presences)}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Live Chat</h2>
+
+<h3>Chat Messages</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/chat.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Chat do</p>
+<p>  @pubsub Snippetbox.PubSub</p>
+
+<p>  def subscribe(room_id) do</p>
+<p>    Phoenix.PubSub.subscribe(@pubsub, "chat:#{room_id}")</p>
+<p>  end</p>
+
+<p>  def send_message(room_id, user, content) do</p>
+<p>    message = %{</p>
+<p>      id: System.unique_integer([:positive]),</p>
+<p>      user: user,</p>
+<p>      content: content,</p>
+<p>      sent_at: DateTime.utc_now()</p>
+<p>    }</p>
+
+<p>    Phoenix.PubSub.broadcast(@pubsub, "chat:#{room_id}", {:new_message, message})</p>
+<p>    {:ok, message}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Chat LiveView</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/chat_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ChatLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Chat</p>
+<p>  alias SnippetboxWeb.Presence</p>
+
+<p>  @impl true</p>
+<p>  def mount(%{"room_id" => room_id}, _session, socket) do</p>
+<p>    topic = "chat:#{room_id}"</p>
+
+<p>    if connected?(socket) do</p>
+<p>      Chat.subscribe(room_id)</p>
+<p>      Phoenix.PubSub.subscribe(Snippetbox.PubSub, topic)</p>
+
+<p>      Presence.track(self(), topic, socket.assigns.current_user.id, %{</p>
+<p>        name: socket.assigns.current_user.name,</p>
+<p>        typing: false</p>
+<p>      })</p>
+<p>    end</p>
+
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:room_id, room_id)</p>
+<p>     |> assign(:message, "")</p>
+<p>     |> assign(:presences, Presence.list(topic))</p>
+<p>     |> stream(:messages, [])}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="flex h-[600px]"></p>
+<p>      <%# Messages area %></p>
+<p>      <div class="flex-1 flex flex-col"></p>
+<p>        <div</p>
+<p>          id="messages"</p>
+<p>          phx-update="stream"</p>
+<p>          class="flex-1 overflow-y-auto p-4 space-y-4"</p>
+<p>        ></p>
+<p>          <div</p>
+<p>            :for={{dom_id, message} <- @streams.messages}</p>
+<p>            id={dom_id}</p>
+<p>            class={[</p>
+<p>              "flex gap-3",</p>
+<p>              message.user.id == @current_user.id && "flex-row-reverse"</p>
+<p>            ]}</p>
+<p>          ></p>
+<p>            <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center"></p>
+<p>              <%= String.first(message.user.name) %></p>
+<p>            </div></p>
+<p>            <div class={[</p>
+<p>              "max-w-xs px-4 py-2 rounded-lg",</p>
+<p>              message.user.id == @current_user.id && "bg-blue-500 text-white",</p>
+<p>              message.user.id != @current_user.id && "bg-gray-200"</p>
+<p>            ]}></p>
+<p>              <p class="text-xs font-medium mb-1"><%= message.user.name %></p></p>
+<p>              <p><%= message.content %></p></p>
+<p>            </div></p>
+<p>          </div></p>
+<p>        </div></p>
+
+<p>        <%# Typing indicator %></p>
+<p>        <div :if={typing_users(@presences, @current_user.id) != []} class="px-4 py-2 text-sm text-gray-500"></p>
+<p>          <%= Enum.join(typing_users(@presences, @current_user.id), ", ") %> typing...</p>
+<p>        </div></p>
+
+<p>        <%# Message input %></p>
+<p>        <form phx-submit="send" phx-change="typing" class="p-4 border-t"></p>
+<p>          <div class="flex gap-2"></p>
+<p>            <input</p>
+<p>              type="text"</p>
+<p>              name="message"</p>
+<p>              value={@message}</p>
+<p>              placeholder="Type a message..."</p>
+<p>              class="flex-1 rounded-lg border-gray-300"</p>
+<p>              autocomplete="off"</p>
+<p>            /></p>
+<p>            <.button type="submit">Send</.button></p>
+<p>          </div></p>
+<p>        </form></p>
+<p>      </div></p>
+
+<p>      <%# Online users sidebar %></p>
+<p>      <div class="w-64 border-l p-4"></p>
+<p>        <h3 class="font-semibold mb-4">Online (<%= map_size(@presences) %>)</h3></p>
+<p>        <ul class="space-y-2"></p>
+<p>          <%= for {_user_id, %{metas: [meta | _]}} <- @presences do %></p>
+<p>            <li class="flex items-center gap-2"></p>
+<p>              <span class="w-2 h-2 bg-green-500 rounded-full"></span></p>
+<p>              <%= meta.name %></p>
+<p>            </li></p>
+<p>          <% end %></p>
+<p>        </ul></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("send", %{"message" => content}, socket) when content != "" do</p>
+<p>    Chat.send_message(socket.assigns.room_id, socket.assigns.current_user, content)</p>
+<p>    update_typing(socket, false)</p>
+<p>    {:noreply, assign(socket, :message, "")}</p>
+<p>  end</p>
+
+<p>  def handle_event("send", _params, socket), do: {:noreply, socket}</p>
+
+<p>  def handle_event("typing", %{"message" => message}, socket) do</p>
+<p>    is_typing = String.length(message) > 0</p>
+<p>    update_typing(socket, is_typing)</p>
+<p>    {:noreply, assign(socket, :message, message)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:new_message, message}, socket) do</p>
+<p>    {:noreply, stream_insert(socket, :messages, message)}</p>
+<p>  end</p>
+
+<p>  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff", payload: diff}, socket) do</p>
+<p>    presences = Presence.sync_diff(socket.assigns.presences, diff)</p>
+<p>    {:noreply, assign(socket, :presences, presences)}</p>
+<p>  end</p>
+
+<p>  defp update_typing(socket, typing) do</p>
+<p>    topic = "chat:#{socket.assigns.room_id}"</p>
+
+<p>    Presence.update(self(), topic, socket.assigns.current_user.id, fn meta -></p>
+<p>      Map.put(meta, :typing, typing)</p>
+<p>    end)</p>
+<p>  end</p>
+
+<p>  defp typing_users(presences, current_user_id) do</p>
+<p>    presences</p>
+<p>    |> Enum.filter(fn {user_id, %{metas: [meta | _]}} -></p>
+<p>      user_id != to_string(current_user_id) && meta.typing</p>
+<p>    end)</p>
+<p>    |> Enum.map(fn {_, %{metas: [meta | _]}} -> meta.name end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Live Dashboard</h2>
+
+<h3>Real-Time Metrics</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/dashboard_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.DashboardLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    if connected?(socket) do</p>
+<p>      # Update every 5 seconds</p>
+<p>      :timer.send_interval(5000, self(), :update_metrics)</p>
+<p>    end</p>
+
+<p>    {:ok, assign_metrics(socket)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="grid grid-cols-1 md:grid-cols-3 gap-6"></p>
+<p>      <.metric_card</p>
+<p>        title="Total Snippets"</p>
+<p>        value={@total_snippets}</p>
+<p>        change={@snippets_change}</p>
+<p>      /></p>
+<p>      <.metric_card</p>
+<p>        title="Active Users"</p>
+<p>        value={@active_users}</p>
+<p>        change={@users_change}</p>
+<p>      /></p>
+<p>      <.metric_card</p>
+<p>        title="Views Today"</p>
+<p>        value={@views_today}</p>
+<p>        change={@views_change}</p>
+<p>      /></p>
+<p>    </div></p>
+
+<p>    <div class="mt-8"></p>
+<p>      <h2 class="text-lg font-semibold mb-4">Recent Activity</h2></p>
+<p>      <div id="activity" phx-update="stream" class="space-y-2"></p>
+<p>        <div</p>
+<p>          :for={{dom_id, activity} <- @streams.activities}</p>
+<p>          id={dom_id}</p>
+<p>          class="flex items-center gap-3 p-3 bg-gray-50 rounded"</p>
+<p>        ></p>
+<p>          <.icon name={activity_icon(activity.type)} class="h-5 w-5 text-gray-500" /></p>
+<p>          <span><%= activity.message %></span></p>
+<p>          <span class="ml-auto text-sm text-gray-500"><%= activity.time %></span></p>
+<p>        </div></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  attr :title, :string, required: true</p>
+<p>  attr :value, :integer, required: true</p>
+<p>  attr :change, :float, required: true</p>
+
+<p>  defp metric_card(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="bg-white rounded-lg shadow p-6"></p>
+<p>      <h3 class="text-sm font-medium text-gray-500"><%= @title %></h3></p>
+<p>      <div class="mt-2 flex items-baseline gap-2"></p>
+<p>        <span class="text-3xl font-bold"><%= @value %></span></p>
+<p>        <span class={[</p>
+<p>          "text-sm",</p>
+<p>          @change >= 0 && "text-green-600",</p>
+<p>          @change < 0 && "text-red-600"</p>
+<p>        ]}></p>
+<p>          <%= if @change >= 0, do: "+", else: "" %><%= Float.round(@change, 1) %>%</p>
+<p>        </span></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info(:update_metrics, socket) do</p>
+<p>    {:noreply, assign_metrics(socket)}</p>
+<p>  end</p>
+
+<p>  def handle_info({:new_activity, activity}, socket) do</p>
+<p>    {:noreply, stream_insert(socket, :activities, activity, at: 0)}</p>
+<p>  end</p>
+
+<p>  defp assign_metrics(socket) do</p>
+<p>    socket</p>
+<p>    |> assign(:total_snippets, Snippetbox.Snippets.count_snippets())</p>
+<p>    |> assign(:snippets_change, calculate_change(:snippets))</p>
+<p>    |> assign(:active_users, Snippetbox.Accounts.count_active_users())</p>
+<p>    |> assign(:users_change, calculate_change(:users))</p>
+<p>    |> assign(:views_today, Snippetbox.Analytics.views_today())</p>
+<p>    |> assign(:views_change, calculate_change(:views))</p>
+<p>    |> stream(:activities, Snippetbox.Activities.recent(10), reset: true)</p>
+<p>  end</p>
+
+<p>  defp calculate_change(_metric) do</p>
+<p>    # Calculate percentage change from yesterday</p>
+<p>    :rand.uniform() * 20 - 5  # Placeholder</p>
+<p>  end</p>
+
+<p>  defp activity_icon(:create), do: "hero-plus-circle"</p>
+<p>  defp activity_icon(:update), do: "hero-pencil"</p>
+<p>  defp activity_icon(:delete), do: "hero-trash"</p>
+<p>  defp activity_icon(_), do: "hero-information-circle"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Debounced Search</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/search_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SearchLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:query, "")</p>
+<p>     |> assign(:results, [])</p>
+<p>     |> assign(:loading, false)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="max-w-2xl mx-auto"></p>
+<p>      <form phx-change="search" phx-submit="search"></p>
+<p>        <div class="relative"></p>
+<p>          <input</p>
+<p>            type="text"</p>
+<p>            name="query"</p>
+<p>            value={@query}</p>
+<p>            placeholder="Search snippets..."</p>
+<p>            phx-debounce="300"</p>
+<p>            class="w-full pl-10 pr-4 py-3 rounded-lg border-gray-300 shadow-sm"</p>
+<p>          /></p>
+<p>          <.icon</p>
+<p>            name="hero-magnifying-glass"</p>
+<p>            class="absolute left-3 top-3.5 h-5 w-5 text-gray-400"</p>
+<p>          /></p>
+<p>          <div</p>
+<p>            :if={@loading}</p>
+<p>            class="absolute right-3 top-3"</p>
+<p>          ></p>
+<p>            <.spinner /></p>
+<p>          </div></p>
+<p>        </div></p>
+<p>      </form></p>
+
+<p>      <div :if={@query != "" && @results == []} class="mt-8 text-center text-gray-500"></p>
+<p>        No results found for "<%= @query %>"</p>
+<p>      </div></p>
+
+<p>      <ul :if={@results != []} class="mt-4 divide-y"></p>
+<p>        <li :for={snippet <- @results} class="py-4"></p>
+<p>          <.link navigate={~p"/snippets/#{snippet}"} class="block hover:bg-gray-50 -mx-4 px-4 py-2 rounded"></p>
+<p>            <h3 class="font-medium"><%= snippet.title %></h3></p>
+<p>            <p class="text-sm text-gray-500 mt-1"></p>
+<p>              <%= String.slice(snippet.content, 0, 100) %>...</p>
+</p>
+<p>            <div class="flex gap-2 mt-2"></p>
+<p>              <span class="text-xs bg-gray-100 px-2 py-1 rounded"><%= snippet.language %></span></p>
+<p>            </div></p>
+<p>          </.link></p>
+<p>        </li></p>
+<p>      </ul></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("search", %{"query" => query}, socket) when byte_size(query) >= 2 do</p>
+<p>    send(self(), {:search, query})</p>
+
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> assign(:query, query)</p>
+<p>     |> assign(:loading, true)}</p>
+<p>  end</p>
+
+<p>  def handle_event("search", %{"query" => query}, socket) do</p>
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> assign(:query, query)</p>
+<p>     |> assign(:results, [])</p>
+<p>     |> assign(:loading, false)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:search, query}, socket) do</p>
+<p>    results = Snippets.search(query)</p>
+
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> assign(:results, results)</p>
+<p>     |> assign(:loading, false)}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Async Operations</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/export_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ExportLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:status, :idle)</p>
+<p>     |> assign(:progress, 0)</p>
+<p>     |> assign(:download_url, nil)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="max-w-md mx-auto text-center"></p>
+<p>      <h1 class="text-2xl font-bold mb-6">Export Snippets</h1></p>
+
+<p>      <div :if={@status == :idle}></p>
+<p>        <p class="text-gray-600 mb-4"></p>
+<p>          Export all your snippets as a ZIP file.</p>
+</p>
+<p>        <.button phx-click="start_export"></p>
+<p>          Start Export</p>
+<p>        </.button></p>
+<p>      </div></p>
+
+<p>      <div :if={@status == :processing}></p>
+<p>        <p class="text-gray-600 mb-4">Processing...</p></p>
+<p>        <div class="w-full bg-gray-200 rounded-full h-4"></p>
+<p>          <div</p>
+<p>            class="bg-blue-600 h-4 rounded-full transition-all duration-300"</p>
+<p>            style={"width: #{@progress}%"}</p>
+<p>          ></p>
+<p>          </div></p>
+<p>        </div></p>
+<p>        <p class="text-sm text-gray-500 mt-2"><%= @progress %>%</p></p>
+<p>      </div></p>
+
+<p>      <div :if={@status == :complete}></p>
+<p>        <p class="text-green-600 mb-4">Export complete!</p></p>
+<p>        <a</p>
+<p>          href={@download_url}</p>
+<p>          download</p>
+<p>          class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg"</p>
+<p>        ></p>
+<p>          <.icon name="hero-arrow-down-tray" class="h-5 w-5" /></p>
+<p>          Download ZIP</p>
+<p>        </a></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("start_export", _params, socket) do</p>
+<p>    user_id = socket.assigns.current_user.id</p>
+<p>    lv_pid = self()</p>
+
+<p>    # Start async export task</p>
+<p>    Task.Supervisor.start_child(Snippetbox.TaskSupervisor, fn -></p>
+<p>      export_snippets(user_id, lv_pid)</p>
+<p>    end)</p>
+
+<p>    {:noreply, assign(socket, :status, :processing)}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_info({:export_progress, progress}, socket) do</p>
+<p>    {:noreply, assign(socket, :progress, progress)}</p>
+<p>  end</p>
+
+<p>  def handle_info({:export_complete, url}, socket) do</p>
+<p>    {:noreply,</p>
+<p>     socket</p>
+<p>     |> assign(:status, :complete)</p>
+<p>     |> assign(:progress, 100)</p>
+<p>     |> assign(:download_url, url)}</p>
+<p>  end</p>
+
+<p>  defp export_snippets(user_id, lv_pid) do</p>
+<p>    snippets = Snippetbox.Snippets.list_user_snippets(user_id)</p>
+<p>    total = length(snippets)</p>
+
+<p>    # Process snippets and report progress</p>
+<p>    Enum.with_index(snippets, 1)</p>
+<p>    |> Enum.each(fn {_snippet, index} -></p>
+<p>      # Simulate processing</p>
+<p>      Process.sleep(100)</p>
+<p>      progress = round(index / total * 100)</p>
+<p>      send(lv_pid, {:export_progress, progress})</p>
+<p>    end)</p>
+
+<p>    # Create ZIP and return URL</p>
+<p>    url = "/downloads/export-#{user_id}.zip"</p>
+<p>    send(lv_pid, {:export_complete, url})</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Message Passing</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>LiveView real-time features use Erlang's message passing model:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Processes communicate via messages
+<p>send(pid, {:event, data})</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Handled in receive/handle_info</p>
+<p>def handle_info({:event, data}, socket) do</p>
+<p>  {:noreply, update_socket(socket, data)}</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># PubSub is broadcast messaging</p>
+<p>Phoenix.PubSub.broadcast(pubsub, topic, message)</p>
+<p># All subscribers receive the message</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This model enables real-time features without shared mutable state.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Phoenix PubSub for broadcasting</li>
+<li>Real-time updates with streams</li>
+<li>Presence tracking</li>
+<li>Live chat implementation</li>
+<li>Live dashboards</li>
+<li>Debounced search</li>
+<li>Async operations with progress</li>
+</ul>
+
+<p>This completes the LiveView chapter. In the next chapter, we'll explore testing Phoenix applications.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="12.03-live-components.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="13.00-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

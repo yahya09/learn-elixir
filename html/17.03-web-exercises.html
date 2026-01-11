@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Web Layer Exercises &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Web Layer Exercises</span>
+            </div>
+            <div>
+                &lsaquo; <a href="17.02-database-exercises.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="17.04-auth-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 17.3</div>
+        <h1>Chapter 17.3: Web Layer Exercises</h1>
+
+<p>These exercises reinforce concepts from Chapters 5-8 covering templates, routing, forms, and controllers.</p>
+
+<h2>Exercise 1: Custom Component</h2>
+
+<p>Create a reusable card component with slots.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/card_component.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Components.Card do</p>
+<p>  use Phoenix.Component</p>
+
+<p>  # Create a card component with:</p>
+<p>  # - Required :title attribute</p>
+<p>  # - Optional :subtitle attribute</p>
+<p>  # - Optional :class attribute</p>
+<p>  # - Required :inner_block slot (main content)</p>
+<p>  # - Optional :footer slot</p>
+<p>  # - Optional :actions slot (appears in header)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Components.Card do
+<p>  use Phoenix.Component</p>
+
+<p>  attr :title, :string, required: true</p>
+<p>  attr :subtitle, :string, default: nil</p>
+<p>  attr :class, :string, default: ""</p>
+
+<p>  slot :inner_block, required: true</p>
+<p>  slot :footer</p>
+<p>  slot :actions</p>
+
+<p>  def card(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class={["bg-white rounded-lg shadow-md overflow-hidden", @class]}></p>
+<p>      <div class="px-6 py-4 border-b flex justify-between items-center"></p>
+<p>        <div></p>
+<p>          <h3 class="text-lg font-semibold"><%= @title %></h3></p>
+<p>          <p :if={@subtitle} class="text-sm text-gray-500"><%= @subtitle %></p></p>
+<p>        </div></p>
+<p>        <div :if={@actions != []} class="flex gap-2"></p>
+<p>          <%= render_slot(@actions) %></p>
+<p>        </div></p>
+<p>      </div></p>
+
+<p>      <div class="px-6 py-4"></p>
+<p>        <%= render_slot(@inner_block) %></p>
+<p>      </div></p>
+
+<p>      <div :if={@footer != []} class="px-6 py-4 bg-gray-50 border-t"></p>
+<p>        <%= render_slot(@footer) %></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 2: Nested Resources</h2>
+
+<p>Set up routes for nested comments under snippets.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<h1>Create routes for:</h1>
+<h1>GET    /snippets/:snippet_id/comments          -> index</h1>
+<h1>GET    /snippets/:snippet_id/comments/:id      -> show</h1>
+<h1>POST   /snippets/:snippet_id/comments          -> create</h1>
+<h1>DELETE /snippets/:snippet_id/comments/:id      -> delete</h1>
+</code></pre></figure>
+
+<p>Then implement the controller:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/comment_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.CommentController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  # Implement index, show, create, delete</p>
+<p>  # Each action should load the parent snippet first</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code># Router
+<p>resources "/snippets", SnippetController do</p>
+<p>  resources "/comments", CommentController, only: [:index, :show, :create, :delete]</p>
+<p>end</p>
+
+<h1>Controller</h1>
+<p>defmodule SnippetboxWeb.CommentController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.{Snippets, Comments}</p>
+
+<p>  plug :load_snippet</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    comments = Comments.list_comments_for_snippet(conn.assigns.snippet.id)</p>
+<p>    render(conn, :index, comments: comments)</p>
+<p>  end</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    comment = Comments.get_comment!(id)</p>
+<p>    render(conn, :show, comment: comment)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"comment" => comment_params}) do</p>
+<p>    params = Map.put(comment_params, "snippet_id", conn.assigns.snippet.id)</p>
+
+<p>    case Comments.create_comment(params) do</p>
+<p>      {:ok, comment} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Comment created.")</p>
+<p>        |> redirect(to: ~p"/snippets/#{conn.assigns.snippet}")</p>
+
+<p>      {:error, changeset} -></p>
+<p>        render(conn, :new, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def delete(conn, %{"id" => id}) do</p>
+<p>    comment = Comments.get_comment!(id)</p>
+<p>    {:ok, _} = Comments.delete_comment(comment)</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "Comment deleted.")</p>
+<p>    |> redirect(to: ~p"/snippets/#{conn.assigns.snippet}")</p>
+<p>  end</p>
+
+<p>  defp load_snippet(conn, _opts) do</p>
+<p>    snippet = Snippets.get_snippet!(conn.params["snippet_id"])</p>
+<p>    assign(conn, :snippet, snippet)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 3: Form with Dynamic Fields</h2>
+
+<p>Create a form that allows adding/removing tag inputs dynamically.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_html/form.html.heex</figcaption><pre><code class="language-elixir">
+<h1>Create a form with:</h1>
+<h1>- Standard snippet fields (title, content, language)</h1>
+<h1>- Dynamic tag fields that can be added/removed</h1>
+<h1>- JavaScript-free solution using LiveView or form submissions</h1>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code><.simple_form for={@form} action={@action} phx-change="validate" phx-submit="save">
+<p>  <.input field={@form[:title]} label="Title" /></p>
+<p>  <.input field={@form[:content]} type="textarea" label="Content" /></p>
+<p>  <.input field={@form[:language]} type="select" label="Language"</p>
+<p>    options={~w(elixir javascript python ruby)} /></p>
+
+<p>  <div class="mt-4"></p>
+<p>    <label class="block text-sm font-medium mb-2">Tags</label></p>
+
+<p>    <.inputs_for :let={tag_form} field={@form[:tags]}></p>
+<p>      <div class="flex gap-2 mb-2"></p>
+<p>        <input type="hidden" name="snippet[tags_sort][]" value={tag_form.index} /></p>
+<p>        <.input field={tag_form[:name]} placeholder="Tag name" class="flex-1" /></p>
+<p>        <button</p>
+<p>          type="button"</p>
+<p>          name="snippet[tags_drop][]"</p>
+<p>          value={tag_form.index}</p>
+<p>          phx-click={JS.dispatch("change")}</p>
+<p>          class="text-red-600"</p>
+<p>        ></p>
+<p>          Remove</p>
+<p>        </button></p>
+<p>      </div></p>
+<p>    </.inputs_for></p>
+
+<p>    <input type="hidden" name="snippet[tags_drop][]" /></p>
+
+<p>    <button</p>
+<p>      type="button"</p>
+<p>      name="snippet[tags_sort][]"</p>
+<p>      value="new"</p>
+<p>      phx-click={JS.dispatch("change")}</p>
+<p>      class="text-blue-600"</p>
+<p>    ></p>
+<p>      + Add Tag</p>
+<p>    </button></p>
+<p>  </div></p>
+
+<p>  <:actions></p>
+<p>    <.button>Save</.button></p>
+<p>  </:actions></p>
+</.simple_form>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 4: File Upload with Preview</h2>
+
+<p>Create a file upload component that shows a preview before submission.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/live/upload_live.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UploadLive do</p>
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  # Implement:</p>
+<p>  # 1. File upload configuration (accept .ex, .exs, .txt)</p>
+<p>  # 2. Preview showing file content</p>
+<p>  # 3. Syntax highlighting for code files</p>
+<p>  # 4. Error handling for invalid files</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.UploadLive do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok,</p>
+<p>     socket</p>
+<p>     |> assign(:preview, nil)</p>
+<p>     |> allow_upload(:file,</p>
+<p>       accept: ~w(.ex .exs .txt),</p>
+<p>       max_entries: 1,</p>
+<p>       max_file_size: 100_000</p>
+<p>     )}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <div class="max-w-2xl mx-auto"></p>
+<p>      <form phx-submit="save" phx-change="validate"></p>
+<p>        <.live_file_input upload={@uploads.file} /></p>
+
+<p>        <%= for entry <- @uploads.file.entries do %></p>
+<p>          <div class="mt-4 p-4 border rounded"></p>
+<p>            <div class="flex justify-between items-center"></p>
+<p>              <span><%= entry.client_name %></span></p>
+<p>              <button type="button" phx-click="cancel" phx-value-ref={entry.ref}></p>
+<p>                Cancel</p>
+<p>              </button></p>
+<p>            </div></p>
+
+<p>            <progress value={entry.progress} max="100" class="w-full mt-2"></p>
+<p>              <%= entry.progress %>%</p>
+<p>            </progress></p>
+
+<p>            <%= for err <- upload_errors(@uploads.file, entry) do %></p>
+<p>              <p class="text-red-600"><%= error_message(err) %></p></p>
+<p>            <% end %></p>
+<p>          </div></p>
+<p>        <% end %></p>
+
+<p>        <div :if={@preview} class="mt-4"></p>
+<p>          <h3 class="font-semibold mb-2">Preview:</h3></p>
+<p>          <pre class="bg-gray-100 p-4 rounded overflow-auto max-h-96"></p>
+<p>            <code><%= @preview %></code></p>
+<p>          </pre></p>
+<p>        </div></p>
+
+<p>        <.button type="submit" class="mt-4">Upload</.button></p>
+<p>      </form></p>
+<p>    </div></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("validate", _params, socket) do</p>
+<p>    preview =</p>
+<p>      case socket.assigns.uploads.file.entries do</p>
+<p>        [entry | _] -></p>
+<p>          consume_uploaded_entry(socket, entry, fn %{path: path} -></p>
+<p>            {:ok, File.read!(path)}</p>
+<p>          end)</p>
+<p>        _ -></p>
+<p>          nil</p>
+<p>      end</p>
+
+<p>    {:noreply, assign(socket, :preview, preview)}</p>
+<p>  end</p>
+
+<p>  def handle_event("cancel", %{"ref" => ref}, socket) do</p>
+<p>    {:noreply, cancel_upload(socket, :file, ref)}</p>
+<p>  end</p>
+
+<p>  def handle_event("save", _params, socket) do</p>
+<p>    # Process upload</p>
+<p>    {:noreply, socket}</p>
+<p>  end</p>
+
+<p>  defp error_message(:too_large), do: "File is too large (max 100KB)"</p>
+<p>  defp error_message(:not_accepted), do: "Invalid file type"</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 5: Rate Limiting Plug</h2>
+
+<p>Create a plug that rate limits requests per IP.</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/rate_limit.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RateLimit do</p>
+<p>  import Plug.Conn</p>
+
+<p>  # Implement rate limiting:</p>
+<p>  # - 100 requests per minute per IP</p>
+<p>  # - Return 429 Too Many Requests when exceeded</p>
+<p>  # - Include Retry-After header</p>
+<p>  # - Use ETS for storage</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.RateLimit do
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  @max_requests 100</p>
+<p>  @window_ms 60_000</p>
+<p>  @table :rate_limit</p>
+
+<p>  def init(opts) do</p>
+<p>    # Ensure ETS table exists</p>
+<p>    if :ets.whereis(@table) == :undefined do</p>
+<p>      :ets.new(@table, [:set, :public, :named_table])</p>
+<p>    end</p>
+<p>    opts</p>
+<p>  end</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    ip = get_ip(conn)</p>
+<p>    now = System.monotonic_time(:millisecond)</p>
+
+<p>    case check_rate(ip, now) do</p>
+<p>      {:allow, _count} -></p>
+<p>        conn</p>
+
+<p>      {:deny, retry_after} -></p>
+<p>        conn</p>
+<p>        |> put_resp_header("retry-after", Integer.to_string(div(retry_after, 1000)))</p>
+<p>        |> put_status(:too_many_requests)</p>
+<p>        |> json(%{error: "Rate limit exceeded", retry_after: div(retry_after, 1000)})</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_rate(ip, now) do</p>
+<p>    case :ets.lookup(@table, ip) do</p>
+<p>      [] -></p>
+<p>        :ets.insert(@table, {ip, 1, now})</p>
+<p>        {:allow, 1}</p>
+
+<p>      [{^ip, count, window_start}] when now - window_start < @window_ms -></p>
+<p>        if count < @max_requests do</p>
+<p>          :ets.update_counter(@table, ip, {2, 1})</p>
+<p>          {:allow, count + 1}</p>
+<p>        else</p>
+<p>          retry_after = @window_ms - (now - window_start)</p>
+<p>          {:deny, retry_after}</p>
+<p>        end</p>
+
+<p>      [{^ip, _count, _window_start}] -></p>
+<p>        :ets.insert(@table, {ip, 1, now})</p>
+<p>        {:allow, 1}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp get_ip(conn) do</p>
+<p>    conn.remote_ip |> :inet.ntoa() |> to_string()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Exercise 6: API Versioning</h2>
+
+<p>Implement API versioning using path prefixes.</p>
+
+<figure class="code"><pre><code># Implement:
+<h1>/api/v1/snippets - returns basic fields</h1>
+<h1>/api/v2/snippets - returns extended fields with stats</h1>
+
+<h1>Create versioned controllers and views</h1>
+</code></pre></figure>
+
+<h3>Solution</h3>
+<details>
+<summary>Click to reveal</summary>
+
+<figure class="code"><pre><code># Router
+<p>scope "/api" do</p>
+<p>  pipe_through :api</p>
+
+<p>  scope "/v1", as: :v1 do</p>
+<p>    resources "/snippets", Api.V1.SnippetController, only: [:index, :show]</p>
+<p>  end</p>
+
+<p>  scope "/v2", as: :v2 do</p>
+<p>    resources "/snippets", Api.V2.SnippetController, only: [:index, :show]</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>V1 Controller</h1>
+<p>defmodule SnippetboxWeb.Api.V1.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    snippets = Snippets.list_snippets()</p>
+<p>    json(conn, %{data: Enum.map(snippets, &serialize_v1/1)})</p>
+<p>  end</p>
+
+<p>  defp serialize_v1(snippet) do</p>
+<p>    %{</p>
+<p>      id: snippet.id,</p>
+<p>      title: snippet.title,</p>
+<p>      language: snippet.language</p>
+<p>    }</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>V2 Controller</h1>
+<p>defmodule SnippetboxWeb.Api.V2.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    snippets = Snippets.list_snippets_with_stats()</p>
+<p>    json(conn, %{data: Enum.map(snippets, &serialize_v2/1)})</p>
+<p>  end</p>
+
+<p>  defp serialize_v2(%{snippet: snippet, comment_count: count, avg_rating: rating}) do</p>
+<p>    %{</p>
+<p>      id: snippet.id,</p>
+<p>      title: snippet.title,</p>
+<p>      language: snippet.language,</p>
+<p>      content: snippet.content,</p>
+<p>      stats: %{</p>
+<p>        comment_count: count,</p>
+<p>        average_rating: rating</p>
+<p>      },</p>
+<p>      created_at: snippet.inserted_at</p>
+<p>    }</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+</details>
+
+<h2>Challenge: Build a Search Interface</h2>
+
+<p>Create a search page with:</p>
+
+<ol>
+<li>Real-time search as you type (debounced)</li>
+<li>Filter by language, date range, author</li>
+<li>Sort options (relevance, date, popularity)</li>
+<li>Pagination</li>
+<li>URL reflects search state (shareable)</li>
+</ol>
+
+<p>This combines LiveView, queries, and URL handling concepts.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="17.02-database-exercises.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="17.04-auth-exercises.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

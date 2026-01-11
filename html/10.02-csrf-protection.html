@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>CSRF Protection &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; CSRF Protection</span>
+            </div>
+            <div>
+                &lsaquo; <a href="10.01-https-and-tls.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="10.03-sql-injection.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 10.2</div>
+        <h1>Chapter 10.2: CSRF Protection</h1>
+
+<p>Cross-Site Request Forgery (CSRF) tricks users into performing unwanted actions. In this chapter, we'll explore how Phoenix protects against CSRF attacks.</p>
+
+<h2>Understanding CSRF</h2>
+
+<h3>The Attack</h3>
+
+<figure class="code"><pre><code>1. Alice logs into bank.com (gets session cookie)
+<ol>
+<li>Alice visits malicious-site.com</li>
+<li>Malicious site contains hidden form:</li>
+</ol>
+<p>   <form action="https://bank.com/transfer" method="POST"></p>
+<p>     <input name="to" value="attacker"></p>
+<p>     <input name="amount" value="10000"></p>
+<p>   </form></p>
+<p>   <script>document.forms[0].submit()</script></p>
+<ol>
+<li>Alice's browser sends request WITH her session cookie</li>
+<li>Bank processes the "legitimate" request</li>
+<li>Alice's money is transferred to attacker</li>
+</ol>
+</code></pre></figure>
+
+<h3>Why It Works</h3>
+
+<ul>
+<li>Cookies are sent automatically with requests</li>
+<li>The server can't distinguish legitimate from forged requests</li>
+<li>The request looks exactly like a real user action</li>
+</ul>
+
+<h2>Phoenix CSRF Protection</h2>
+
+<h3>How It Works</h3>
+
+<figure class="code"><pre><code>1. Server generates unique CSRF token
+<ol>
+<li>Token embedded in form as hidden field</li>
+<li>Token also stored in session</li>
+<li>On form submission, tokens are compared</li>
+<li>Request rejected if tokens don't match</li>
+</ol>
+</code></pre></figure>
+
+<h3>Enabling CSRF Protection</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser do</p>
+<p>  plug :accepts, ["html"]</p>
+<p>  plug :fetch_session</p>
+<p>  plug :fetch_live_flash</p>
+<p>  plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>  plug :protect_from_forgery  # ← CSRF protection</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Token in Forms</h3>
+
+<p>Phoenix automatically includes the token:</p>
+
+<figure class="code"><pre><code><.form for={@changeset} action={~p"/snippets"}>
+<p>  <%# Automatically generates: %></p>
+<p>  <%# <input type="hidden" name="_csrf_token" value="IwoGFgM..."> %></p>
+
+<p>  <.input field={@form[:title]} label="Title" /></p>
+<p>  <.button>Save</.button></p>
+</.form>
+</code></pre></figure>
+
+<h3>Token in Meta Tag</h3>
+
+<p>For JavaScript requests:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/root.html.heex %>
+
+<head>
+<p>  <meta name="csrf-token" content={get_csrf_token()} /></p>
+<p>  <%# ... %></p>
+</head>
+</code></pre></figure>
+
+<h2>CSRF in JavaScript</h2>
+
+<h3>Fetch API</h3>
+
+<figure class="code"><pre><code>// Get token from meta tag
+<p>const csrfToken = document.querySelector("meta[name='csrf-token']").content;</p>
+
+<p>// Include in fetch requests</p>
+<p>fetch('/api/snippets', {</p>
+<p>  method: 'POST',</p>
+<p>  headers: {</p>
+<p>    'Content-Type': 'application/json',</p>
+<p>    'X-CSRF-Token': csrfToken  // Phoenix checks this header</p>
+<p>  },</p>
+<p>  body: JSON.stringify({ title: 'New Snippet' })</p>
+<p>});</p>
+</code></pre></figure>
+
+<h3>Axios</h3>
+
+<figure class="code"><pre><code>// Configure Axios globally
+<p>import axios from 'axios';</p>
+
+<p>const csrfToken = document.querySelector("meta[name='csrf-token']").content;</p>
+
+<p>axios.defaults.headers.common['X-CSRF-Token'] = csrfToken;</p>
+
+<p>// Now all requests include the token</p>
+<p>axios.post('/api/snippets', { title: 'New Snippet' });</p>
+</code></pre></figure>
+
+<h3>Phoenix LiveView Socket</h3>
+
+<p>LiveView handles CSRF automatically:</p>
+
+<figure class="code"><pre><code>// assets/js/app.js
+<p>import { Socket } from "phoenix";</p>
+<p>import { LiveSocket } from "phoenix_live_view";</p>
+
+<p>let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content");</p>
+
+<p>let liveSocket = new LiveSocket("/live", Socket, {</p>
+<p>  params: { _csrf_token: csrfToken }  // Included automatically</p>
+<p>});</p>
+</code></pre></figure>
+
+<h2>API Routes (No CSRF)</h2>
+
+<p>For API routes using token authentication, CSRF isn't needed:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :api do</p>
+<p>  plug :accepts, ["json"]</p>
+<p>  # No :protect_from_forgery</p>
+<p>  # API uses Bearer token authentication instead</p>
+<p>end</p>
+
+<p>scope "/api", SnippetboxWeb.API do</p>
+<p>  pipe_through :api</p>
+
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Why APIs Don't Need CSRF</h3>
+
+<ul>
+<li>APIs use token-based authentication (Bearer tokens)</li>
+<li>Tokens are sent in Authorization header, not cookies</li>
+<li>Attackers can't forge the Authorization header</li>
+<li>CSRF relies on automatic cookie sending</li>
+</ul>
+
+<h2>Custom CSRF Handling</h2>
+
+<h3>Skipping CSRF for Specific Routes</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser_no_csrf do</p>
+<p>  plug :accepts, ["html"]</p>
+<p>  plug :fetch_session</p>
+<p>  plug :fetch_live_flash</p>
+<p>  plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>  # No :protect_from_forgery</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+
+<h1>Webhook endpoints (external services can't include CSRF token)</h1>
+<p>scope "/webhooks", SnippetboxWeb do</p>
+<p>  pipe_through :browser_no_csrf</p>
+
+<p>  post "/stripe", WebhookController, :stripe</p>
+<p>  post "/github", WebhookController, :github</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Verify Webhooks Differently</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/webhook_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.WebhookController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def stripe(conn, params) do</p>
+<p>    # Verify using Stripe's signature instead of CSRF</p>
+<p>    signature = get_req_header(conn, "stripe-signature") |> List.first()</p>
+<p>    payload = conn.assigns[:raw_body]</p>
+
+<p>    case Stripe.Webhook.construct_event(payload, signature, webhook_secret()) do</p>
+<p>      {:ok, event} -></p>
+<p>        handle_stripe_event(event)</p>
+<p>        json(conn, %{status: "ok"})</p>
+
+<p>      {:error, reason} -></p>
+<p>        conn</p>
+<p>        |> put_status(:bad_request)</p>
+<p>        |> json(%{error: reason})</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp webhook_secret, do: Application.get_env(:snippetbox, :stripe_webhook_secret)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>CSRF Token Management</h2>
+
+<h3>Token Rotation</h3>
+
+<figure class="code"><pre><code># Tokens are tied to session
+<h1>Renewing session generates new token</h1>
+
+<p>def login(conn, params) do</p>
+<p>  # After successful login</p>
+<p>  conn</p>
+<p>  |> configure_session(renew: true)  # New session = new CSRF token</p>
+<p>  |> put_session(:user_id, user.id)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Getting Token Programmatically</h3>
+
+<figure class="code"><pre><code># In controller or plug
+<p>def some_action(conn, _params) do</p>
+<p>  token = Plug.CSRFProtection.get_csrf_token()</p>
+<p>  # Use token...</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Validating Token Manually</h3>
+
+<figure class="code"><pre><code>def custom_action(conn, %{"_csrf_token" => token}) do
+<p>  if Plug.CSRFProtection.valid_state_and_csrf_token?(</p>
+<p>       Plug.CSRFProtection.get_csrf_token_for(token),</p>
+<p>       token</p>
+<p>     ) do</p>
+<p>    # Valid token</p>
+<p>  else</p>
+<p>    # Invalid token</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Double Submit Cookie</h2>
+
+<p>Alternative CSRF protection pattern:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/double_submit_csrf.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.DoubleSubmitCSRF do</p>
+<p>  import Plug.Conn</p>
+
+<p>  @cookie_name "_csrf_double"</p>
+<p>  @header_name "x-csrf-token"</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    if safe_method?(conn.method) do</p>
+<p>      ensure_token_cookie(conn)</p>
+<p>    else</p>
+<p>      validate_token(conn)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp safe_method?(method) when method in ["GET", "HEAD", "OPTIONS"], do: true</p>
+<p>  defp safe_method?(_), do: false</p>
+
+<p>  defp ensure_token_cookie(conn) do</p>
+<p>    if conn.cookies[@cookie_name] do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      token = generate_token()</p>
+<p>      put_resp_cookie(conn, @cookie_name, token, http_only: false)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp validate_token(conn) do</p>
+<p>    cookie_token = conn.cookies[@cookie_name]</p>
+<p>    header_token = get_req_header(conn, @header_name) |> List.first()</p>
+
+<p>    if cookie_token && cookie_token == header_token do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_status(:forbidden)</p>
+<p>      |> Phoenix.Controller.json(%{error: "Invalid CSRF token"})</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp generate_token do</p>
+<p>    :crypto.strong_rand_bytes(32) |> Base.url_encode64()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing CSRF</h2>
+
+<h3>Controller Tests</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/snippet_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>describe "CSRF protection" do</p>
+<p>  test "rejects POST without CSRF token", %{conn: conn} do</p>
+<p>    conn =</p>
+<p>      conn</p>
+<p>      |> delete_req_header("x-csrf-token")</p>
+<p>      |> post(~p"/snippets", snippet: %{title: "Test"})</p>
+
+<p>    assert html_response(conn, 403)</p>
+<p>  end</p>
+
+<p>  test "accepts POST with valid CSRF token", %{conn: conn} do</p>
+<p>    conn =</p>
+<p>      conn</p>
+<p>      |> get(~p"/snippets/new")  # Get token</p>
+
+<p>    token = conn.cookies["_csrf_token"]</p>
+
+<p>    conn =</p>
+<p>      recycle(conn)</p>
+<p>      |> put_req_header("x-csrf-token", token)</p>
+<p>      |> post(~p"/snippets", snippet: %{title: "Test", content: "Code"})</p>
+
+<p>    assert redirected_to(conn)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Integration Tests</h3>
+
+<figure class="code"><pre><code># ConnCase already handles CSRF for you
+<h1>But you can test explicitly:</h1>
+
+<p>test "form includes CSRF token", %{conn: conn} do</p>
+<p>  conn = get(conn, ~p"/snippets/new")</p>
+<p>  html = html_response(conn, 200)</p>
+
+<p>  assert html =~ ~r/<input[^>]<em>name="_csrf_token"[^>]</em>>/</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Common Issues</h2>
+
+<h3>Token Mismatch After Deploy</h3>
+
+<figure class="code"><pre><code># If secret_key_base changes, all tokens become invalid
+<h1>Solution: Use consistent secret_key_base</h1>
+
+<h1>config/prod.exs</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  secret_key_base: System.get_env("SECRET_KEY_BASE")</p>
+</code></pre></figure>
+
+<h3>Ajax Requests Failing</h3>
+
+<figure class="code"><pre><code>// Ensure token is included
+<p>const csrfToken = document.querySelector("meta[name='csrf-token']")?.content;</p>
+
+<p>if (!csrfToken) {</p>
+<p>  console.error("CSRF token not found!");</p>
+<p>}</p>
+
+<p>// Include in request</p>
+<p>fetch(url, {</p>
+<p>  headers: { 'X-CSRF-Token': csrfToken }</p>
+<p>});</p>
+</code></pre></figure>
+
+<h3>Cross-Origin Requests</h3>
+
+<figure class="code"><pre><code># CORS requests from different origin won't have CSRF token
+<h1>Use API authentication instead</h1>
+
+<p>pipeline :api do</p>
+<p>  plug CORSPlug</p>
+<p>  plug :accepts, ["json"]</p>
+<p>  plug :fetch_api_token  # Token auth, not CSRF</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Stateless Verification</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>CSRF protection uses cryptographic verification:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Token generation (deterministic from session)
+<p>token = hmac(secret_key, session_id)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Verification (compare computed vs submitted)</p>
+<p>valid? = secure_compare(computed_token, submitted_token)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The token isn't stored—it's computed from session data. This is a functional approach: same input always produces same output, no mutable state needed.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How CSRF attacks work</li>
+<li>Phoenix's automatic CSRF protection</li>
+<li>Including tokens in forms and JavaScript</li>
+<li>API routes without CSRF</li>
+<li>Custom CSRF handling for webhooks</li>
+<li>Token management and rotation</li>
+<li>Testing CSRF protection</li>
+<li>Common issues and solutions</li>
+</ul>
+
+<p>In the next chapter, we'll explore SQL injection prevention.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="10.01-https-and-tls.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="10.03-sql-injection.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

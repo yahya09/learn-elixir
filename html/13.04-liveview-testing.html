@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>LiveView Testing &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; LiveView Testing</span>
+            </div>
+            <div>
+                &lsaquo; <a href="13.03-integration-testing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="13.05-database-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 13.4</div>
+        <h1>Chapter 13.4: LiveView Testing</h1>
+
+<p>LiveView provides built-in testing utilities for testing real-time components. In this chapter, we'll explore LiveView-specific testing patterns.</p>
+
+<h2>LiveView Test Setup</h2>
+
+<figure class="code"><figcaption>File: test/support/conn_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ConnCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      @endpoint SnippetboxWeb.Endpoint</p>
+
+<p>      use SnippetboxWeb, :verified_routes</p>
+
+<p>      import Plug.Conn</p>
+<p>      import Phoenix.ConnTest</p>
+<p>      import Phoenix.LiveViewTest</p>
+<p>      import SnippetboxWeb.ConnCase</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  # ... rest of setup</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Basic LiveView Tests</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/live/counter_live_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.CounterLiveTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Phoenix.LiveViewTest</p>
+
+<p>  describe "counter" do</p>
+<p>    test "renders initial count", %{conn: conn} do</p>
+<p>      {:ok, view, html} = live(conn, ~p"/counter")</p>
+
+<p>      assert html =~ "0"</p>
+<p>    end</p>
+
+<p>    test "increments count", %{conn: conn} do</p>
+<p>      {:ok, view, _html} = live(conn, ~p"/counter")</p>
+
+<p>      assert view</p>
+<p>             |> element("button", "+")</p>
+<p>             |> render_click() =~ "1"</p>
+<p>    end</p>
+
+<p>    test "decrements count", %{conn: conn} do</p>
+<p>      {:ok, view, _html} = live(conn, ~p"/counter")</p>
+
+<p>      # First increment to 1</p>
+<p>      view |> element("button", "+") |> render_click()</p>
+
+<p>      # Then decrement</p>
+<p>      assert view</p>
+<p>             |> element("button", "-")</p>
+<p>             |> render_click() =~ "0"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing LiveView Events</h2>
+
+<h3>Click Events</h3>
+
+<figure class="code"><pre><code>describe "click events" do
+<p>  test "handles button click", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    # Click by selector</p>
+<p>    view |> element("#delete-btn") |> render_click()</p>
+
+<p>    # Click with phx-value</p>
+<p>    view</p>
+<p>    |> element("button[phx-click=delete]", "Delete")</p>
+<p>    |> render_click(%{"id" => "123"})</p>
+
+<p>    # Direct event push</p>
+<p>    view |> render_click("delete", %{"id" => "123"})</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Form Events</h3>
+
+<figure class="code"><pre><code>describe "form events" do
+<p>  setup [:register_and_log_in_user]</p>
+
+<p>  test "validates form on change", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/new")</p>
+
+<p>    assert view</p>
+<p>           |> form("#snippet-form", snippet: %{title: ""})</p>
+<p>           |> render_change() =~ "can&#39;t be blank"</p>
+<p>  end</p>
+
+<p>  test "submits form", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/new")</p>
+
+<p>    {:ok, conn} =</p>
+<p>      view</p>
+<p>      |> form("#snippet-form", snippet: %{title: "Test", content: "code", language: "elixir"})</p>
+<p>      |> render_submit()</p>
+<p>      |> follow_redirect(conn)</p>
+
+<p>    assert html_response(conn, 200) =~ "Test"</p>
+<p>  end</p>
+
+<p>  test "shows validation error on submit", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/new")</p>
+
+<p>    assert view</p>
+<p>           |> form("#snippet-form", snippet: %{title: ""})</p>
+<p>           |> render_submit() =~ "can&#39;t be blank"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Key Events</h3>
+
+<figure class="code"><pre><code>describe "key events" do
+<p>  test "handles escape key", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    # Open modal</p>
+<p>    view |> element("button", "New") |> render_click()</p>
+<p>    assert has_element?(view, "#modal")</p>
+
+<p>    # Press escape</p>
+<p>    view |> render_keydown(%{"key" => "Escape"})</p>
+<p>    refute has_element?(view, "#modal")</p>
+<p>  end</p>
+
+<p>  test "handles enter key in search", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    view</p>
+<p>    |> element("#search-input")</p>
+<p>    |> render_keyup(%{"key" => "Enter", "value" => "elixir"})</p>
+
+<p>    assert has_element?(view, "#search-results")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing LiveView Navigation</h2>
+
+<figure class="code"><pre><code>describe "navigation" do
+<p>  test "patches to edit route", %{conn: conn, user: user} do</p>
+<p>    snippet = snippet_fixture(%{user_id: user.id})</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    view</p>
+<p>    |> element("a", "Edit")</p>
+<p>    |> render_click()</p>
+
+<p>    assert_patch(view, ~p"/snippets/#{snippet}/edit")</p>
+<p>  end</p>
+
+<p>  test "navigates to show page", %{conn: conn} do</p>
+<p>    snippet = snippet_fixture()</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    {:ok, conn} =</p>
+<p>      view</p>
+<p>      |> element("a", snippet.title)</p>
+<p>      |> render_click()</p>
+<p>      |> follow_redirect(conn, ~p"/snippets/#{snippet}")</p>
+
+<p>    assert html_response(conn, 200) =~ snippet.title</p>
+<p>  end</p>
+
+<p>  test "handles params change", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets?page=1")</p>
+
+<p>    view</p>
+<p>    |> element("a", "Next")</p>
+<p>    |> render_click()</p>
+
+<p>    assert_patch(view, ~p"/snippets?page=2")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Streams</h2>
+
+<figure class="code"><pre><code>describe "streams" do
+<p>  test "stream inserts new item", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    # Create snippet which broadcasts to PubSub</p>
+<p>    snippet = snippet_fixture(%{title: "New Snippet"})</p>
+
+<p>    # Simulate broadcast</p>
+<p>    send(view.pid, {:snippet_created, snippet})</p>
+
+<p>    assert has_element?(view, "#snippets-#{snippet.id}")</p>
+<p>    assert render(view) =~ "New Snippet"</p>
+<p>  end</p>
+
+<p>  test "stream deletes item", %{conn: conn, user: user} do</p>
+<p>    snippet = snippet_fixture(%{user_id: user.id})</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    assert has_element?(view, "#snippets-#{snippet.id}")</p>
+
+<p>    view</p>
+<p>    |> element("#snippets-#{snippet.id} button", "Delete")</p>
+<p>    |> render_click()</p>
+
+<p>    refute has_element?(view, "#snippets-#{snippet.id}")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Live Components</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/live/components/snippet_form_component_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetLive.FormComponentTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Phoenix.LiveViewTest</p>
+<p>  import Snippetbox.SnippetsFixtures</p>
+
+<p>  describe "new snippet" do</p>
+<p>    setup [:register_and_log_in_user]</p>
+
+<p>    test "renders form", %{conn: conn} do</p>
+<p>      {:ok, view, html} = live(conn, ~p"/snippets/new")</p>
+
+<p>      assert html =~ "New Snippet"</p>
+<p>      assert has_element?(view, "form#snippet-form")</p>
+<p>    end</p>
+
+<p>    test "saves new snippet", %{conn: conn} do</p>
+<p>      {:ok, view, _html} = live(conn, ~p"/snippets/new")</p>
+
+<p>      {:ok, conn} =</p>
+<p>        view</p>
+<p>        |> form("#snippet-form", snippet: %{</p>
+<p>          title: "Test Snippet",</p>
+<p>          content: "code",</p>
+<p>          language: "elixir"</p>
+<p>        })</p>
+<p>        |> render_submit()</p>
+<p>        |> follow_redirect(conn)</p>
+
+<p>      assert html_response(conn, 200) =~ "Snippet created"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "edit snippet" do</p>
+<p>    setup [:register_and_log_in_user]</p>
+
+<p>    test "updates snippet", %{conn: conn, user: user} do</p>
+<p>      snippet = snippet_fixture(%{user_id: user.id})</p>
+<p>      {:ok, view, _html} = live(conn, ~p"/snippets/#{snippet}/edit")</p>
+
+<p>      {:ok, conn} =</p>
+<p>        view</p>
+<p>        |> form("#snippet-form", snippet: %{title: "Updated"})</p>
+<p>        |> render_submit()</p>
+<p>        |> follow_redirect(conn)</p>
+
+<p>      assert html_response(conn, 200) =~ "Updated"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing PubSub Updates</h2>
+
+<figure class="code"><pre><code>describe "real-time updates" do
+<p>  test "receives snippet created broadcast", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    # Simulate another process creating a snippet</p>
+<p>    snippet = snippet_fixture(%{title: "From Another User"})</p>
+<p>    Phoenix.PubSub.broadcast(</p>
+<p>      Snippetbox.PubSub,</p>
+<p>      "snippets",</p>
+<p>      {:snippet_created, snippet}</p>
+<p>    )</p>
+
+<p>    # Give time for message to arrive</p>
+<p>    assert render(view) =~ "From Another User"</p>
+<p>  end</p>
+
+<p>  test "receives snippet updated broadcast", %{conn: conn} do</p>
+<p>    snippet = snippet_fixture(%{title: "Original"})</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets")</p>
+
+<p>    updated_snippet = %{snippet | title: "Updated Title"}</p>
+<p>    Phoenix.PubSub.broadcast(</p>
+<p>      Snippetbox.PubSub,</p>
+<p>      "snippets",</p>
+<p>      {:snippet_updated, updated_snippet}</p>
+<p>    )</p>
+
+<p>    assert render(view) =~ "Updated Title"</p>
+<p>    refute render(view) =~ "Original"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Presence</h2>
+
+<figure class="code"><pre><code>describe "presence" do
+<p>  test "shows online users", %{conn: conn, user: user} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/123")</p>
+
+<p>    assert render(view) =~ "1 viewing"</p>
+<p>    assert has_element?(view, "[data-user-id='#{user.id}']")</p>
+<p>  end</p>
+
+<p>  test "updates when user joins", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/123")</p>
+
+<p>    # Simulate another user joining</p>
+<p>    other_user = user_fixture()</p>
+<p>    Phoenix.PubSub.broadcast(</p>
+<p>      Snippetbox.PubSub,</p>
+<p>      "snippet:123",</p>
+<p>      %Phoenix.Socket.Broadcast{</p>
+<p>        event: "presence_diff",</p>
+<p>        payload: %{</p>
+<p>          joins: %{other_user.id => %{metas: [%{name: other_user.name}]}},</p>
+<p>          leaves: %{}</p>
+<p>        }</p>
+<p>      }</p>
+<p>    )</p>
+
+<p>    assert render(view) =~ "2 viewing"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing File Uploads</h2>
+
+<figure class="code"><pre><code>describe "file uploads" do
+<p>  setup [:register_and_log_in_user]</p>
+
+<p>  test "renders upload form", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/import")</p>
+
+<p>    assert has_element?(view, "input[type=file]")</p>
+<p>  end</p>
+
+<p>  test "validates file type", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/import")</p>
+
+<p>    file_input = file_input(view, "#upload-form", :file, [</p>
+<p>      %{</p>
+<p>        last_modified: 1_594_171_879_000,</p>
+<p>        name: "image.png",</p>
+<p>        content: "...",</p>
+<p>        type: "image/png"</p>
+<p>      }</p>
+<p>    ])</p>
+
+<p>    assert render_upload(file_input, "image.png") =~ "not accepted"</p>
+<p>  end</p>
+
+<p>  test "uploads file successfully", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/snippets/import")</p>
+
+<p>    file_input = file_input(view, "#upload-form", :file, [</p>
+<p>      %{</p>
+<p>        last_modified: 1_594_171_879_000,</p>
+<p>        name: "snippet.ex",</p>
+<p>        content: "defmodule Test do\nend",</p>
+<p>        type: "text/plain"</p>
+<p>      }</p>
+<p>    ])</p>
+
+<p>    render_upload(file_input, "snippet.ex")</p>
+
+<p>    assert view</p>
+<p>           |> form("#upload-form")</p>
+<p>           |> render_submit() =~ "imported"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Async Operations</h2>
+
+<figure class="code"><pre><code>describe "async operations" do
+<p>  test "shows loading state", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/export")</p>
+
+<p>    view |> element("button", "Start Export") |> render_click()</p>
+
+<p>    assert has_element?(view, ".loading-spinner")</p>
+<p>  end</p>
+
+<p>  test "shows progress updates", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/export")</p>
+
+<p>    view |> element("button", "Start Export") |> render_click()</p>
+
+<p>    # Simulate progress update</p>
+<p>    send(view.pid, {:export_progress, 50})</p>
+
+<p>    assert render(view) =~ "50%"</p>
+<p>  end</p>
+
+<p>  test "shows completion", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/export")</p>
+
+<p>    view |> element("button", "Start Export") |> render_click()</p>
+
+<p>    send(view.pid, {:export_complete, "/downloads/export.zip"})</p>
+
+<p>    assert has_element?(view, "a[href='/downloads/export.zip']")</p>
+<p>    assert render(view) =~ "Download"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Hooks</h2>
+
+<figure class="code"><pre><code>describe "JavaScript hooks" do
+<p>  test "initializes hook on mount", %{conn: conn} do</p>
+<p>    {:ok, view, html} = live(conn, ~p"/editor")</p>
+
+<p>    # Hook elements should have phx-hook attribute</p>
+<p>    assert html =~ "phx-hook=\"CodeEditor\""</p>
+<p>  end</p>
+
+<p>  test "handles hook events", %{conn: conn} do</p>
+<p>    {:ok, view, _html} = live(conn, ~p"/editor")</p>
+
+<p>    # Push event from JavaScript</p>
+<p>    view</p>
+<p>    |> render_hook("cursor_moved", %{"line" => 10, "column" => 5})</p>
+
+<p>    assert render(view) =~ "Line: 10, Col: 5"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Assertions</h2>
+
+<figure class="code"><pre><code># Element presence
+<p>assert has_element?(view, "#my-element")</p>
+<p>refute has_element?(view, ".hidden-element")</p>
+
+<h1>Text content</h1>
+<p>assert render(view) =~ "Expected text"</p>
+
+<h1>Specific element</h1>
+<p>assert element(view, "h1") |> render() =~ "Title"</p>
+
+<h1>Navigation</h1>
+<p>assert_redirect(view, "/path")</p>
+<p>assert_patch(view, "/path")</p>
+
+<h1>Events</h1>
+<p>assert_push_event(view, "event_name", %{})</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Process-Based Testing</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>LiveView tests interact with actual Elixir processes:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # view.pid is the LiveView process
+<p>{:ok, view, html} = live(conn, "/path")</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Events are sent to the process</p>
+<p>view |> render_click("event")</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Messages can be sent directly</p>
+<p>send(view.pid, {:custom_message, data})</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># State changes are observed through re-renders</p>
+<p>assert render(view) =~ "Updated content"</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This tests real process behavior, not mocks.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>LiveView test setup</li>
+<li>Testing click, form, and key events</li>
+<li>Testing navigation and params</li>
+<li>Testing streams</li>
+<li>Testing live components</li>
+<li>Testing PubSub and presence</li>
+<li>Testing file uploads</li>
+<li>Testing async operations</li>
+</ul>
+
+<p>In the next chapter, we'll explore database testing.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="13.03-integration-testing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="13.05-database-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

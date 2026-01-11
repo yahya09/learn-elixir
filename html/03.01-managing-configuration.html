@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Managing Configuration &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Managing Configuration</span>
+            </div>
+            <div>
+                &lsaquo; <a href="03.00-configuration-and-error-handling.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="03.02-environment-variables.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 3.1</div>
+        <h1>Chapter 3.1: Managing Configuration</h1>
+
+<p>Phoenix uses Elixir's built-in configuration system with a clear file structure. In this chapter, we'll explore how configuration works and how to manage settings across environments.</p>
+
+<h2>Configuration File Structure</h2>
+
+<p>A Phoenix project has these configuration files:</p>
+
+<figure class="code"><pre><code>config/
+<p>├── config.exs      # Base configuration (loaded first)</p>
+<p>├── dev.exs         # Development overrides</p>
+<p>├── test.exs        # Test overrides</p>
+<p>├── prod.exs        # Production defaults</p>
+<p>└── runtime.exs     # Runtime config (env vars)</p>
+</code></pre></figure>
+
+<h2>The Base Configuration (config.exs)</h2>
+
+<p>This file contains configuration shared across all environments:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Application-wide settings</h1>
+<p>config :snippetbox,</p>
+<p>  ecto_repos: [Snippetbox.Repo],</p>
+<p>  generators: [timestamp_type: :utc_datetime]</p>
+
+<h1>Endpoint configuration</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  url: [host: "localhost"],</p>
+<p>  adapter: Bandit.PhoenixAdapter,</p>
+<p>  render_errors: [</p>
+<p>    formats: [html: SnippetboxWeb.ErrorHTML, json: SnippetboxWeb.ErrorJSON],</p>
+<p>    layout: false</p>
+<p>  ],</p>
+<p>  pubsub_server: Snippetbox.PubSub,</p>
+<p>  live_view: [signing_salt: "abc123xyz"]</p>
+
+<h1>Logger configuration</h1>
+<p>config :logger, :console,</p>
+<p>  format: "$time $metadata[$level] $message\n",</p>
+<p>  metadata: [:request_id]</p>
+
+<h1>Phoenix configuration</h1>
+<p>config :phoenix, :json_library, Jason</p>
+
+<h1>Import environment-specific config</h1>
+<p>import_config "#{config_env()}.exs"</p>
+</code></pre></figure>
+
+<p>Key points:</p>
+<ul>
+<li><code>import Config</code> loads the configuration module</li>
+<li><code>config :app, key: value</code> sets app-level config</li>
+<li><code>config :app, Module, key: value</code> sets module-specific config</li>
+<li><code>import_config</code> loads environment-specific files</li>
+</ul>
+
+<h2>Development Configuration (dev.exs)</h2>
+
+<p>Settings optimized for development:</p>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Database configuration</h1>
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  hostname: "localhost",</p>
+<p>  database: "snippetbox_dev",</p>
+<p>  stacktrace: true,</p>
+<p>  show_sensitive_data_on_connection_error: true,</p>
+<p>  pool_size: 10</p>
+
+<h1>Endpoint configuration for development</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  http: [ip: {127, 0, 0, 1}, port: 4000],</p>
+<p>  check_origin: false,</p>
+<p>  code_reloader: true,</p>
+<p>  debug_errors: true,</p>
+<p>  secret_key_base: "dev-secret-key-at-least-64-bytes-long-for-development-only!!!!",</p>
+<p>  watchers: [</p>
+<p>    esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]},</p>
+<p>    tailwind: {Tailwind, :install_and_run, [:default, ~w(--watch)]}</p>
+<p>  ]</p>
+
+<h1>Live reload for development</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  live_reload: [</p>
+<p>    patterns: [</p>
+<p>      ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",</p>
+<p>      ~r"priv/gettext/.*(po)$",</p>
+<p>      ~r"lib/snippetbox_web/(controllers|live|components)/.*(ex|heex)$"</p>
+<p>    ]</p>
+<p>  ]</p>
+
+<h1>More detailed logging in development</h1>
+<p>config :logger, :console, format: "[$level] $message\n"</p>
+
+<h1>Disable Swoosh (email) in dev, use local adapter</h1>
+<p>config :snippetbox, Snippetbox.Mailer, adapter: Swoosh.Adapters.Local</p>
+
+<h1>Phoenix dev tools</h1>
+<p>config :phoenix, :plug_init_mode, :runtime</p>
+<p>config :phoenix_live_view, :debug_heex_annotations, true</p>
+</code></pre></figure>
+
+<p>Development settings include:</p>
+<ul>
+<li>Local database connection</li>
+<li>Debug error pages</li>
+<li>Code reloading</li>
+<li>Live reload on file changes</li>
+<li>Verbose logging</li>
+</ul>
+
+<h2>Test Configuration (test.exs)</h2>
+
+<p>Optimized for running tests quickly:</p>
+
+<figure class="code"><figcaption>File: config/test.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Test database configuration</h1>
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  hostname: "localhost",</p>
+<p>  database: "snippetbox_test#{System.get_env("MIX_TEST_PARTITION")}",</p>
+<p>  pool: Ecto.Adapters.SQL.Sandbox,</p>
+<p>  pool_size: System.schedulers_online() * 2</p>
+
+<h1>Minimal endpoint config for tests</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  http: [ip: {127, 0, 0, 1}, port: 4002],</p>
+<p>  secret_key_base: "test-secret-key-at-least-64-bytes-long-for-testing-purposes-only!",</p>
+<p>  server: false</p>
+
+<h1>Reduce logging noise in tests</h1>
+<p>config :logger, level: :warning</p>
+
+<h1>Speed up password hashing in tests</h1>
+<p>config :bcrypt_elixir, :log_rounds, 1</p>
+
+<h1>Disable email sending in tests</h1>
+<p>config :snippetbox, Snippetbox.Mailer, adapter: Swoosh.Adapters.Test</p>
+</code></pre></figure>
+
+<p>Test settings include:</p>
+<ul>
+<li>Separate test database (with partition support)</li>
+<li>Sandbox pool for isolated tests</li>
+<li>Server disabled (tests use conn directly)</li>
+<li>Minimal logging</li>
+<li>Fast bcrypt for quick tests</li>
+</ul>
+
+<h2>Production Configuration (prod.exs)</h2>
+
+<p>Secure defaults for production:</p>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Production endpoint</h1>
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  cache_static_manifest: "priv/static/cache_manifest.json",</p>
+<p>  force_ssl: [rewrite_on: [:x_forwarded_proto]]</p>
+
+<h1>Production logging</h1>
+<p>config :logger, level: :info</p>
+
+<h1>Production mailer (configured at runtime)</h1>
+<p>config :snippetbox, Snippetbox.Mailer, adapter: Swoosh.Adapters.SMTP</p>
+</code></pre></figure>
+
+<p>Note: <code>prod.exs</code> contains minimal configuration. Sensitive values like database URLs and secret keys are in <code>runtime.exs</code>.</p>
+
+<h2>Runtime Configuration (runtime.exs)</h2>
+
+<p>For configuration that needs environment variables:</p>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">
+<p>import Config</p>
+
+<h1>Only configure in production</h1>
+<p>if config_env() == :prod do</p>
+<p>  # Database configuration from DATABASE_URL</p>
+<p>  database_url =</p>
+<p>    System.get_env("DATABASE_URL") ||</p>
+<p>      raise """</p>
+<p>      environment variable DATABASE_URL is missing.</p>
+<p>      For example: ecto://USER:PASS@HOST/DATABASE</p>
+<p>      """</p>
+
+<p>  config :snippetbox, Snippetbox.Repo,</p>
+<p>    url: database_url,</p>
+<p>    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),</p>
+<p>    ssl: true,</p>
+<p>    ssl_opts: [verify: :verify_none]</p>
+
+<p>  # Secret key base for sessions/tokens</p>
+<p>  secret_key_base =</p>
+<p>    System.get_env("SECRET_KEY_BASE") ||</p>
+<p>      raise """</p>
+<p>      environment variable SECRET_KEY_BASE is missing.</p>
+<p>      You can generate one by calling: mix phx.gen.secret</p>
+<p>      """</p>
+
+<p>  # Host configuration</p>
+<p>  host = System.get_env("PHX_HOST") || "example.com"</p>
+<p>  port = String.to_integer(System.get_env("PORT") || "4000")</p>
+
+<p>  config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>    url: [host: host, port: 443, scheme: "https"],</p>
+<p>    http: [</p>
+<p>      ip: {0, 0, 0, 0, 0, 0, 0, 0},</p>
+<p>      port: port</p>
+<p>    ],</p>
+<p>    secret_key_base: secret_key_base</p>
+
+<p>  # Optional: Configure email</p>
+<p>  if smtp_host = System.get_env("SMTP_HOST") do</p>
+<p>    config :snippetbox, Snippetbox.Mailer,</p>
+<p>      adapter: Swoosh.Adapters.SMTP,</p>
+<p>      relay: smtp_host,</p>
+<p>      username: System.get_env("SMTP_USERNAME"),</p>
+<p>      password: System.get_env("SMTP_PASSWORD"),</p>
+<p>      port: String.to_integer(System.get_env("SMTP_PORT") || "587")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Key patterns:</p>
+<ul>
+<li>Check <code>config_env()</code> to apply only in specific environments</li>
+<li>Use <code>System.get_env/1</code> for environment variables</li>
+<li>Raise helpful errors for required variables</li>
+<li>Provide sensible defaults with <code>||</code></li>
+</ul>
+
+<h2>Accessing Configuration</h2>
+
+<h3>At Runtime</h3>
+
+<figure class="code"><pre><code># Get application config
+<p>Application.get_env(:snippetbox, :some_key)</p>
+<p>Application.get_env(:snippetbox, :some_key, "default")</p>
+
+<h1>Get module config</h1>
+<p>Application.get_env(:snippetbox, Snippetbox.Repo)</p>
+<h1>Returns: [username: "postgres", password: "postgres", ...]</h1>
+
+<h1>Get specific key from module config</h1>
+<p>Application.get_env(:snippetbox, Snippetbox.Repo)[:pool_size]</p>
+
+<h1>Fetch (raises if missing)</h1>
+<p>Application.fetch_env!(:snippetbox, :required_key)</p>
+</code></pre></figure>
+
+<h3>In Modules</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.SomeModule do
+<p>  # At compile time (for module attributes)</p>
+<p>  @api_url Application.compile_env(:snippetbox, :api_url)</p>
+
+<p>  # At runtime (recommended)</p>
+<p>  def api_url do</p>
+<p>    Application.get_env(:snippetbox, :api_url)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Compile-time vs Runtime</h3>
+
+<figure class="code"><pre><code># Compile-time: Value is baked in at compile
+<p>@value Application.compile_env(:app, :key)</p>
+
+<h1>Runtime: Value is read when function is called</h1>
+<p>def value do</p>
+<p>  Application.get_env(:app, :key)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Use runtime for values that might change; compile-time for optimization.</p>
+
+<h2>Custom Configuration</h2>
+
+<p>Add your own configuration:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<h1>Application settings</h1>
+<p>config :snippetbox,</p>
+<p>  snippet_expiry_days: 7,</p>
+<p>  max_snippet_size: 100_000,</p>
+<p>  allowed_languages: ~w(elixir ruby python javascript go rust)</p>
+
+<h1>Feature flags</h1>
+<p>config :snippetbox, :features,</p>
+<p>  syntax_highlighting: true,</p>
+<p>  user_registration: true,</p>
+<p>  api_enabled: false</p>
+</code></pre></figure>
+
+<p>Access in your code:</p>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets do
+<p>  def max_size do</p>
+<p>    Application.get_env(:snippetbox, :max_snippet_size, 50_000)</p>
+<p>  end</p>
+
+<p>  def expiry_days do</p>
+<p>    Application.get_env(:snippetbox, :snippet_expiry_days, 7)</p>
+<p>  end</p>
+
+<p>  def feature_enabled?(feature) do</p>
+<p>    features = Application.get_env(:snippetbox, :features, %{})</p>
+<p>    Map.get(features, feature, false)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Configuration for Libraries</h2>
+
+<p>Configure third-party libraries:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<h1>Timezone database</h1>
+<p>config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase</p>
+
+<h1>JSON library</h1>
+<p>config :phoenix, :json_library, Jason</p>
+
+<h1>Ecto timestamps</h1>
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  migration_timestamps: [type: :utc_datetime]</p>
+
+<h1>HTTP client</h1>
+<p>config :snippetbox, :http_client,</p>
+<p>  adapter: Finch,</p>
+<p>  pool_size: 25,</p>
+<p>  timeout: 30_000</p>
+</code></pre></figure>
+
+<h2>Environment-Specific Overrides</h2>
+
+<p>Override per environment:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">config :snippetbox, :features,
+<p>  syntax_highlighting: true,</p>
+<p>  experimental_feature: false</p>
+
+<h1>File: config/dev.exs</h1>
+<p>config :snippetbox, :features,</p>
+<p>  experimental_feature: true  # Enable in dev only</p>
+</code></pre></figure>
+
+<p>The dev.exs value overrides the config.exs value.</p>
+
+<h2>Validating Configuration</h2>
+
+<p>Create a module to validate configuration at startup:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/config.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Config do</p>
+<p>  @moduledoc """</p>
+<p>  Application configuration with validation.</p>
+<p>  """</p>
+
+<p>  def snippet_expiry_days do</p>
+<p>    get_env!(:snippet_expiry_days)</p>
+<p>  end</p>
+
+<p>  def max_snippet_size do</p>
+<p>    get_env!(:max_snippet_size)</p>
+<p>  end</p>
+
+<p>  def validate! do</p>
+<p>    # Validate required config exists</p>
+<p>    _ = snippet_expiry_days()</p>
+<p>    _ = max_snippet_size()</p>
+
+<p>    # Validate values are sensible</p>
+<p>    if snippet_expiry_days() < 1 do</p>
+<p>      raise "snippet_expiry_days must be at least 1"</p>
+<p>    end</p>
+
+<p>    if max_snippet_size() < 1000 do</p>
+<p>      raise "max_snippet_size must be at least 1000 bytes"</p>
+<p>    end</p>
+
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  defp get_env!(key) do</p>
+<p>    Application.get_env(:snippetbox, key) ||</p>
+<p>      raise "Missing configuration: config :snippetbox, #{inspect(key)}"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Call from application startup:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>def start(_type, _args) do</p>
+<p>  # Validate configuration before starting</p>
+<p>  Snippetbox.Config.validate!()</p>
+
+<p>  children = [</p>
+<p>    # ...</p>
+<p>  ]</p>
+
+<p>  opts = [strategy: :one_for_one, name: Snippetbox.Supervisor]</p>
+<p>  Supervisor.start_link(children, opts)</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Configuration as Data</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In Elixir, configuration is just data - maps and keyword lists:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> config :snippetbox, Snippetbox.Repo,
+<p>  username: "postgres",</p>
+<p>  pool_size: 10</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># This creates:</p>
+<p># %{Snippetbox.Repo => [username: "postgres", pool_size: 10]}</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li><strong>Inspectable</strong>: Print config with <code>IO.inspect/1</code></li>
+<li><strong>Transformable</strong>: Use <code>Keyword</code> and <code>Map</code> functions</li>
+<li><strong>Testable</strong>: Override config in tests easily</li>
+<li><strong>No Magic</strong>: What you see is what you get</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/elixir/Config.html">Elixir Config</a></li>
+<li><a href="https://hexdocs.pm/phoenix/deployment.html">Phoenix Configuration Guide</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Phoenix's configuration file structure</li>
+<li>Environment-specific configuration (dev, test, prod)</li>
+<li>Runtime configuration with environment variables</li>
+<li>Accessing configuration in code</li>
+<li>Creating custom configuration</li>
+<li>Validating configuration at startup</li>
+</ul>
+
+<p>In the next chapter, we'll explore how to work with environment variables and secrets.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Generate Secret Key Base</h3>
+
+<figure class="code"><pre><code>$ mix phx.gen.secret
+<h1>Outputs a random 64-byte secret key</h1>
+</code></pre></figure>
+
+<h3>Configuration in Releases</h3>
+
+<p>For releases, configuration is evaluated at release build time except for <code>runtime.exs</code>. To change config after building:</p>
+
+<figure class="code"><pre><code># Use runtime.exs for all environment-dependent config
+<h1>Or use releases config providers</h1>
+</code></pre></figure>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Rails (YAML-based)</strong>:
+<figure class="code"><pre><code># config/database.yml
+<p>development:</p>
+<p>  adapter: postgresql</p>
+<p>  database: app_dev</p>
+</code></pre></figure>
+
+<strong>Django (Python)</strong>:
+<figure class="code"><pre><code># settings.py
+<p>DATABASES = {</p>
+<p>    'default': {</p>
+<p>        'ENGINE': 'django.db.backends.postgresql',</p>
+<p>    }</p>
+<p>}</p>
+</code></pre></figure>
+
+<strong>Laravel (PHP)</strong>:
+<figure class="code"><pre><code>// config/database.php
+<p>return [</p>
+<p>    'default' => env('DB_CONNECTION', 'mysql'),</p>
+<p>];</p>
+</code></pre></figure>
+
+<strong>Phoenix (Elixir)</strong>:
+<figure class="code"><pre><code># config/dev.exs
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  database: "snippetbox_dev"</p>
+</code></pre></figure>
+
+<p>Phoenix's approach is more explicit and type-safe, with clear compile-time vs runtime distinction.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="03.00-configuration-and-error-handling.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="03.02-environment-variables.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

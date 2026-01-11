@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Setting Up PostgreSQL &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Setting Up PostgreSQL</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.00-database-driven-responses.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.02-creating-database-migrations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.1</div>
+        <h1>Chapter 4.1: Setting Up PostgreSQL</h1>
+
+<p>Before we can store snippets in a database, we need to set up PostgreSQL. In this chapter, we'll install PostgreSQL and configure it for our Phoenix application.</p>
+
+<h2>Why PostgreSQL?</h2>
+
+<p>Phoenix works with multiple databases through Ecto, but PostgreSQL is the default and most popular choice:</p>
+
+<ul>
+<li><strong>Production-ready</strong>: Battle-tested at massive scale</li>
+<li><strong>Feature-rich</strong>: JSON, full-text search, arrays, and more</li>
+<li><strong>Great Ecto support</strong>: Best-supported adapter</li>
+<li><strong>Phoenix default</strong>: Generated projects use PostgreSQL</li>
+</ul>
+
+<h2>Installing PostgreSQL</h2>
+
+<h3>macOS (Homebrew)</h3>
+
+<figure class="code"><pre><code># Install PostgreSQL
+<p>$ brew install postgresql@15</p>
+
+<h1>Start PostgreSQL service</h1>
+<p>$ brew services start postgresql@15</p>
+
+<h1>Verify installation</h1>
+<p>$ psql --version</p>
+<p>psql (PostgreSQL) 15.4</p>
+</code></pre></figure>
+
+<h3>macOS (Postgres.app)</h3>
+
+<p>Download from https://postgresapp.com/ - provides a menubar app with easy start/stop.</p>
+
+<h3>Ubuntu/Debian</h3>
+
+<figure class="code"><pre><code>$ sudo apt update
+<p>$ sudo apt install postgresql postgresql-contrib</p>
+
+<h1>Start service</h1>
+<p>$ sudo systemctl start postgresql</p>
+<p>$ sudo systemctl enable postgresql</p>
+
+<h1>Verify</h1>
+<p>$ psql --version</p>
+</code></pre></figure>
+
+<h3>Docker</h3>
+
+<figure class="code"><pre><code># Run PostgreSQL in Docker
+<p>$ docker run --name snippetbox-db \</p>
+<p>    -e POSTGRES_USER=postgres \</p>
+<p>    -e POSTGRES_PASSWORD=postgres \</p>
+<p>    -p 5432:5432 \</p>
+<p>    -d postgres:15</p>
+
+<h1>Verify</h1>
+<p>$ docker exec -it snippetbox-db psql -U postgres -c "SELECT version();"</p>
+</code></pre></figure>
+
+<p>Docker Compose for development:</p>
+
+<figure class="code"><figcaption>File: docker-compose.yml</figcaption><pre><code class="language-yaml">
+<p>version: '3.8'</p>
+<p>services:</p>
+<p>  db:</p>
+<p>    image: postgres:15</p>
+<p>    environment:</p>
+<p>      POSTGRES_USER: postgres</p>
+<p>      POSTGRES_PASSWORD: postgres</p>
+<p>    ports:</p>
+<p>      - "5432:5432"</p>
+<p>    volumes:</p>
+<p>      - postgres_data:/var/lib/postgresql/data</p>
+
+<p>volumes:</p>
+<p>  postgres_data:</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code>$ docker-compose up -d
+</code></pre></figure>
+
+<h2>Configuring PostgreSQL Access</h2>
+
+<h3>Create a User (Optional)</h3>
+
+<p>By default, Phoenix uses the <code>postgres</code> user. To create a dedicated user:</p>
+
+<figure class="code"><pre><code># Connect as postgres superuser
+<p>$ psql -U postgres</p>
+
+<h1>Create user with password</h1>
+<p>postgres=# CREATE USER snippetbox WITH PASSWORD 'yourpassword' CREATEDB;</p>
+
+<h1>Exit</h1>
+<p>postgres=# \q</p>
+</code></pre></figure>
+
+<h3>Configure pg_hba.conf (If Needed)</h3>
+
+<p>If you get authentication errors, check PostgreSQL's authentication configuration:</p>
+
+<figure class="code"><pre><code># Find config file location
+<p>$ psql -U postgres -c "SHOW hba_file;"</p>
+
+<h1>Common locations:</h1>
+<h1>macOS: /usr/local/var/postgres/pg_hba.conf</h1>
+<h1>Linux: /etc/postgresql/15/main/pg_hba.conf</h1>
+</code></pre></figure>
+
+<p>For development, ensure local connections use <code>md5</code> or <code>trust</code>:</p>
+
+<figure class="code"><pre><code># pg_hba.conf
+<h1>TYPE  DATABASE        USER            ADDRESS                 METHOD</h1>
+<p>local   all             all                                     trust</p>
+<p>host    all             all             127.0.0.1/32            md5</p>
+<p>host    all             all             ::1/128                 md5</p>
+</code></pre></figure>
+
+<p>Restart PostgreSQL after changes:</p>
+
+<figure class="code"><pre><code># macOS
+<p>$ brew services restart postgresql@15</p>
+
+<h1>Linux</h1>
+<p>$ sudo systemctl restart postgresql</p>
+</code></pre></figure>
+
+<h2>Phoenix Database Configuration</h2>
+
+<h3>Default Configuration</h3>
+
+<p>Phoenix generates database config in <code>config/dev.exs</code>:</p>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  hostname: "localhost",</p>
+<p>  database: "snippetbox_dev",</p>
+<p>  stacktrace: true,</p>
+<p>  show_sensitive_data_on_connection_error: true,</p>
+<p>  pool_size: 10</p>
+</code></pre></figure>
+
+<h3>Configuration Options</h3>
+
+<figure class="code"><pre><code>config :snippetbox, Snippetbox.Repo,
+<p>  # Connection</p>
+<p>  username: "postgres",</p>
+<p>  password: "postgres",</p>
+<p>  hostname: "localhost",</p>
+<p>  port: 5432,</p>
+<p>  database: "snippetbox_dev",</p>
+
+<p>  # Pool</p>
+<p>  pool_size: 10,              # Number of connections</p>
+<p>  pool: Ecto.Adapters.SQL.Sandbox,  # For tests</p>
+
+<p>  # SSL (production)</p>
+<p>  ssl: true,</p>
+<p>  ssl_opts: [verify: :verify_none],</p>
+
+<p>  # Timeouts</p>
+<p>  timeout: 15_000,            # Query timeout (ms)</p>
+<p>  connect_timeout: 10_000,    # Connection timeout (ms)</p>
+
+<p>  # Logging</p>
+<p>  log: :debug,                # Log SQL queries</p>
+
+<p>  # Development helpers</p>
+<p>  stacktrace: true,</p>
+<p>  show_sensitive_data_on_connection_error: true</p>
+</code></pre></figure>
+
+<h3>Using DATABASE_URL</h3>
+
+<p>For production and some development setups:</p>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">
+<p>if config_env() == :prod do</p>
+<p>  database_url = System.get_env("DATABASE_URL") ||</p>
+<p>    raise "DATABASE_URL not set"</p>
+
+<p>  config :snippetbox, Snippetbox.Repo,</p>
+<p>    url: database_url,</p>
+<p>    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>DATABASE_URL format:</p>
+<figure class="code"><pre><code>ecto://username:password@hostname:port/database_name
+</code></pre></figure>
+
+<h2>Creating the Database</h2>
+
+<h3>Using Mix Tasks</h3>
+
+<figure class="code"><pre><code># Create the database
+<p>$ mix ecto.create</p>
+<p>The database for Snippetbox.Repo has been created</p>
+
+<h1>Drop the database (if needed)</h1>
+<p>$ mix ecto.drop</p>
+<p>The database for Snippetbox.Repo has been dropped</p>
+
+<h1>Reset (drop + create + migrate)</h1>
+<p>$ mix ecto.reset</p>
+</code></pre></figure>
+
+<h3>Verify Connection</h3>
+
+<figure class="code"><pre><code># Start IEx with your app
+<p>$ iex -S mix</p>
+
+<h1>Test connection</h1>
+<p>iex> Snippetbox.Repo.query("SELECT 1")</p>
+<p>{:ok, %Postgrex.Result{columns: ["?column?"], rows: [[1]]}}</p>
+</code></pre></figure>
+
+<h2>The Repo Module</h2>
+
+<p>Phoenix generates a Repo module that wraps Ecto:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/repo.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Repo do</p>
+<p>  use Ecto.Repo,</p>
+<p>    otp_app: :snippetbox,</p>
+<p>    adapter: Ecto.Adapters.Postgres</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The Repo is started by your application supervisor:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>def start(_type, _args) do</p>
+<p>  children = [</p>
+<p>    Snippetbox.Repo,  # Start database pool</p>
+<p>    # ... other children</p>
+<p>  ]</p>
+
+<p>  Supervisor.start_link(children, strategy: :one_for_one)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Common Database Tasks</h2>
+
+<h3>Check Connection Status</h3>
+
+<figure class="code"><pre><code># In IEx
+<p>iex> Snippetbox.Repo.checkout(fn -> :connected end)</p>
+<p>:connected</p>
+</code></pre></figure>
+
+<h3>Run Raw SQL</h3>
+
+<figure class="code"><pre><code>iex> Snippetbox.Repo.query("SELECT current_database()")
+<p>{:ok, %Postgrex.Result{columns: ["current_database"], rows: [["snippetbox_dev"]]}}</p>
+
+<p>iex> Snippetbox.Repo.query("SELECT version()")</p>
+<p>{:ok, %Postgrex.Result{columns: ["version"], rows: [["PostgreSQL 15.4..."]]}}</p>
+</code></pre></figure>
+
+<h3>Database Info</h3>
+
+<figure class="code"><pre><code># List databases
+<p>$ psql -U postgres -c "\l"</p>
+
+<h1>Connect to database</h1>
+<p>$ psql -U postgres -d snippetbox_dev</p>
+
+<h1>List tables (after migrations)</h1>
+<p>snippetbox_dev=# \dt</p>
+
+<h1>Describe table</h1>
+<p>snippetbox_dev=# \d snippets</p>
+</code></pre></figure>
+
+<h2>Troubleshooting</h2>
+
+<h3>Connection Refused</h3>
+
+<figure class="code"><pre><code>** (DBConnection.ConnectionError) tcp connect (localhost:5432): connection refused
+</code></pre></figure>
+
+<p>Fix: Ensure PostgreSQL is running:</p>
+<figure class="code"><pre><code>$ brew services start postgresql@15
+<h1>or</h1>
+<p>$ sudo systemctl start postgresql</p>
+</code></pre></figure>
+
+<h3>Authentication Failed</h3>
+
+<figure class="code"><pre><code>** (Postgrex.Error) FATAL 28P01 (invalid_password)
+</code></pre></figure>
+
+<p>Fix: Check username/password in config or update pg_hba.conf.</p>
+
+<h3>Database Does Not Exist</h3>
+
+<figure class="code"><pre><code>** (Postgrex.Error) FATAL 3D000 (invalid_catalog_name) database "snippetbox_dev" does not exist
+</code></pre></figure>
+
+<p>Fix: Run <code>mix ecto.create</code>.</p>
+
+<h3>Permission Denied</h3>
+
+<figure class="code"><pre><code>** (Postgrex.Error) FATAL 42501 (insufficient_privilege)
+</code></pre></figure>
+
+<p>Fix: Grant privileges to user:</p>
+<figure class="code"><pre><code>GRANT ALL PRIVILEGES ON DATABASE snippetbox_dev TO postgres;
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Repo as a Boundary</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The Repo module represents a system boundary - where your pure functional code meets the outside world (database):</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Pure function - transforms data
+<p>def changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content])</p>
+<p>  |> validate_required([:title])</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Impure - interacts with database through Repo</p>
+<p>def create_snippet(attrs) do</p>
+<p>  %Snippet{}</p>
+<p>  |> changeset(attrs)</p>
+<p>  |> Repo.insert()</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This separation keeps most of your code pure and testable, with database interactions isolated to specific points.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Repo.html">Ecto.Repo</a></li>
+<li><a href="https://www.destroyallsoftware.com/screencasts/catalog/functional-core-imperative-shell">Functional Core, Imperative Shell</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Installing PostgreSQL on different platforms</li>
+<li>Configuring Phoenix database connection</li>
+<li>Creating and managing databases with mix tasks</li>
+<li>Understanding the Repo module</li>
+<li>Troubleshooting common connection issues</li>
+</ul>
+
+<p>In the next chapter, we'll create our first database migration.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Connection Pool Sizing</h3>
+
+<p>For development: 10 connections is fine.</p>
+<p>For production, use this formula:</p>
+
+<figure class="code"><pre><code>pool_size = (cores * 2) + effective_spindle_count
+</code></pre></figure>
+
+<p>For most web apps: 10-20 connections per node.</p>
+
+<h3>PostgreSQL Extensions</h3>
+
+<p>Enable useful extensions:</p>
+
+<figure class="code"><pre><code># In a migration
+<p>def change do</p>
+<p>  execute "CREATE EXTENSION IF NOT EXISTS citext"</p>
+<p>  execute "CREATE EXTENSION IF NOT EXISTS pgcrypto"</p>
+<p>  execute "CREATE EXTENSION IF NOT EXISTS pg_trgm"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Multiple Databases</h3>
+
+<p>Phoenix supports multiple repos:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">config :snippetbox,
+<p>  ecto_repos: [Snippetbox.Repo, Snippetbox.AnalyticsRepo]</p>
+
+<h1>File: lib/snippetbox/analytics_repo.ex</h1>
+<p>defmodule Snippetbox.AnalyticsRepo do</p>
+<p>  use Ecto.Repo,</p>
+<p>    otp_app: :snippetbox,</p>
+<p>    adapter: Ecto.Adapters.Postgres</p>
+<p>end</p>
+</code></pre></figure>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.00-database-driven-responses.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.02-creating-database-migrations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

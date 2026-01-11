@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>SQL Injection &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; SQL Injection</span>
+            </div>
+            <div>
+                &lsaquo; <a href="10.02-csrf-protection.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="10.04-xss-prevention.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 10.3</div>
+        <h1>Chapter 10.3: SQL Injection Prevention</h1>
+
+<p>SQL injection is one of the most dangerous vulnerabilities. In this chapter, we'll explore how Ecto protects against SQL injection and best practices for safe database queries.</p>
+
+<h2>Understanding SQL Injection</h2>
+
+<h3>The Attack</h3>
+
+<figure class="code"><pre><code>-- Expected query
+<p>SELECT * FROM users WHERE username = 'alice' AND password = 'secret'</p>
+
+<p>-- Attacker input: ' OR '1'='1</p>
+<p>SELECT * FROM users WHERE username = '' OR '1'='1' AND password = ''</p>
+<p>-- Returns all users!</p>
+
+<p>-- Attacker input: '; DROP TABLE users; --</p>
+<p>SELECT * FROM users WHERE username = ''; DROP TABLE users; --'</p>
+<p>-- Deletes the table!</p>
+</code></pre></figure>
+
+<h3>Why It Happens</h3>
+
+<figure class="code"><pre><code># DANGEROUS: String interpolation
+<p>username = params["username"]</p>
+<p>query = "SELECT * FROM users WHERE username = '#{username}'"</p>
+<p>Repo.query(query)</p>
+
+<h1>Attacker sends: username = "' OR '1'='1"</h1>
+<h1>Results in: SELECT * FROM users WHERE username = '' OR '1'='1'</h1>
+</code></pre></figure>
+
+<h2>Ecto's Protection</h2>
+
+<h3>Parameterized Queries</h3>
+
+<p>Ecto uses parameterized queries by default:</p>
+
+<figure class="code"><pre><code># Safe - parameters are escaped
+<p>username = params["username"]</p>
+
+<p>from(u in User, where: u.username == ^username)</p>
+<p>|> Repo.all()</p>
+
+<h1>Generated SQL:</h1>
+<h1>SELECT * FROM users WHERE username = $1</h1>
+<h1>Parameters: ["' OR '1'='1"]</h1>
+<h1>The input is treated as DATA, not SQL</h1>
+</code></pre></figure>
+
+<h3>How Parameterization Works</h3>
+
+<figure class="code"><pre><code>Without parameterization:
+<p>  SQL: "SELECT * FROM users WHERE name = '" + input + "'"</p>
+<p>  If input = "'; DROP TABLE users; --"</p>
+<p>  Final: "SELECT * FROM users WHERE name = ''; DROP TABLE users; --'"</p>
+<p>  → SQL INJECTION!</p>
+
+<p>With parameterization:</p>
+<p>  SQL template: "SELECT * FROM users WHERE name = $1"</p>
+<p>  Parameters: ["'; DROP TABLE users; --"]</p>
+<p>  → Input treated as literal string, not SQL</p>
+<p>  → SAFE!</p>
+</code></pre></figure>
+
+<h2>Safe Ecto Patterns</h2>
+
+<h3>Basic Queries</h3>
+
+<figure class="code"><pre><code># All of these are safe:
+
+<h1>Simple equality</h1>
+<p>Repo.get_by(User, username: params["username"])</p>
+
+<h1>Query syntax</h1>
+<p>from(u in User, where: u.email == ^params["email"])</p>
+<p>|> Repo.one()</p>
+
+<h1>Keyword queries</h1>
+<p>User</p>
+<p>|> where([u], u.id == ^params["id"])</p>
+<p>|> Repo.one()</p>
+
+<h1>Multiple conditions</h1>
+<p>from u in User,</p>
+<p>  where: u.username == ^username,</p>
+<p>  where: u.active == true</p>
+</code></pre></figure>
+
+<h3>Dynamic Queries</h3>
+
+<figure class="code"><pre><code># Building queries dynamically - still safe
+
+<p>def list_users(filters) do</p>
+<p>  User</p>
+<p>  |> maybe_filter_by_email(filters[:email])</p>
+<p>  |> maybe_filter_by_role(filters[:role])</p>
+<p>  |> maybe_filter_by_active(filters[:active])</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+
+<p>defp maybe_filter_by_email(query, nil), do: query</p>
+<p>defp maybe_filter_by_email(query, email) do</p>
+<p>  where(query, [u], u.email == ^email)</p>
+<p>end</p>
+
+<p>defp maybe_filter_by_role(query, nil), do: query</p>
+<p>defp maybe_filter_by_role(query, role) do</p>
+<p>  where(query, [u], u.role == ^role)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>LIKE Queries</h3>
+
+<figure class="code"><pre><code># Safe LIKE query
+<p>def search_users(term) do</p>
+<p>  search_pattern = "%#{term}%"</p>
+
+<p>  from(u in User, where: ilike(u.name, ^search_pattern))</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+
+<h1>Escape special LIKE characters</h1>
+<p>def safe_search(term) do</p>
+<p>  escaped = term</p>
+<p>  |> String.replace("\\", "\\\\")</p>
+<p>  |> String.replace("%", "\\%")</p>
+<p>  |> String.replace("_", "\\_")</p>
+
+<p>  pattern = "%#{escaped}%"</p>
+
+<p>  from(u in User, where: ilike(u.name, ^pattern))</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>IN Queries</h3>
+
+<figure class="code"><pre><code># Safe IN query
+<p>ids = [1, 2, 3]</p>
+<p>from(u in User, where: u.id in ^ids)</p>
+<p>|> Repo.all()</p>
+
+<h1>Dynamic IN from user input</h1>
+<p>def get_users_by_ids(id_strings) do</p>
+<p>  ids = Enum.map(id_strings, &String.to_integer/1)</p>
+
+<p>  from(u in User, where: u.id in ^ids)</p>
+<p>  |> Repo.all()</p>
+<p>rescue</p>
+<p>  ArgumentError -> []  # Invalid input</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Dangerous Patterns</h2>
+
+<h3>String Interpolation</h3>
+
+<figure class="code"><pre><code># NEVER DO THIS
+<p>def unsafe_search(term) do</p>
+<p>  Repo.query("SELECT * FROM users WHERE name = '#{term}'")</p>
+<p>end</p>
+
+<h1>Also dangerous</h1>
+<p>def unsafe_order(column) do</p>
+<p>  from(u in User, order_by: ^String.to_atom(column))  # Atom creation from user input!</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Raw SQL</h3>
+
+<figure class="code"><pre><code># Dangerous
+<p>Repo.query("SELECT * FROM users WHERE name = '#{name}'")</p>
+
+<h1>Safe - use parameters</h1>
+<p>Repo.query("SELECT * FROM users WHERE name = $1", [name])</p>
+</code></pre></figure>
+
+<h3>Fragment Without Parameters</h3>
+
+<figure class="code"><pre><code># Dangerous
+<p>column = params["sort_by"]</p>
+<p>from(u in User, order_by: fragment(column))  # SQL injection!</p>
+
+<h1>Safe - whitelist columns</h1>
+<p>def sort_users(column) when column in ~w(name email inserted_at) do</p>
+<p>  from(u in User, order_by: ^[{:asc, String.to_existing_atom(column)}])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Safe Fragment Usage</h2>
+
+<h3>Parameterized Fragments</h3>
+
+<figure class="code"><pre><code># Safe - parameters escaped
+<p>from u in User,</p>
+<p>  where: fragment("lower(?) = lower(?)", u.email, ^email)</p>
+
+<h1>Safe - complex expressions</h1>
+<p>from s in Snippet,</p>
+<p>  where: fragment(</p>
+<p>    "? @@ plainto_tsquery('english', ?)",</p>
+<p>    s.search_vector,</p>
+<p>    ^search_term</p>
+<p>  )</p>
+</code></pre></figure>
+
+<h3>Dynamic Column Selection</h3>
+
+<figure class="code"><pre><code># Safe approach - whitelist columns
+<p>@allowed_columns ~w(name email role inserted_at)</p>
+
+<p>def order_by_column(query, column, direction) when column in @allowed_columns do</p>
+<p>  col_atom = String.to_existing_atom(column)</p>
+<p>  dir = if direction == "desc", do: :desc, else: :asc</p>
+
+<p>  order_by(query, [q], [{^dir, field(q, ^col_atom)}])</p>
+<p>end</p>
+
+<p>def order_by_column(query, _column, _direction) do</p>
+<p>  query  # Ignore invalid columns</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Table/Column Names in Fragments</h3>
+
+<figure class="code"><pre><code># When you must use dynamic identifiers
+<p>defmodule SafeSQL do</p>
+<p>  @allowed_tables ~w(users snippets comments)</p>
+<p>  @allowed_columns %{</p>
+<p>    "users" => ~w(id name email),</p>
+<p>    "snippets" => ~w(id title content)</p>
+<p>  }</p>
+
+<p>  def safe_query(table, column, value) when table in @allowed_tables do</p>
+<p>    if column in @allowed_columns[table] do</p>
+<p>      # Build query with known-safe identifiers</p>
+<p>      sql = "SELECT * FROM #{table} WHERE #{column} = $1"</p>
+<p>      Repo.query(sql, [value])</p>
+<p>    else</p>
+<p>      {:error, :invalid_column}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def safe_query(_table, _column, _value) do</p>
+<p>    {:error, :invalid_table}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Input Validation</h2>
+
+<h3>Type Casting</h3>
+
+<figure class="code"><pre><code># Ecto casts types, rejecting invalid input
+<p>def get_user(id) do</p>
+<p>  # If id is not a valid integer, returns nil</p>
+<p>  Repo.get(User, id)</p>
+<p>end</p>
+
+<h1>Explicit validation</h1>
+<p>def get_user(id) when is_integer(id) do</p>
+<p>  Repo.get(User, id)</p>
+<p>end</p>
+
+<p>def get_user(id) when is_binary(id) do</p>
+<p>  case Integer.parse(id) do</p>
+<p>    {int_id, ""} -> Repo.get(User, int_id)</p>
+<p>    _ -> nil</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Changeset Validation</h3>
+
+<figure class="code"><pre><code>def changeset(user, attrs) do
+<p>  user</p>
+<p>  |> cast(attrs, [:username, :email])</p>
+<p>  |> validate_required([:username, :email])</p>
+<p>  |> validate_format(:username, ~r/^[a-z0-9_]+$/)  # Only safe characters</p>
+<p>  |> validate_format(:email, ~r/^[^\s]+@[^\s]+$/)</p>
+<p>  |> unique_constraint(:username)</p>
+<p>  |> unique_constraint(:email)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing for SQL Injection</h2>
+
+<h3>Test Cases</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox/accounts_test.exs</figcaption><pre><code class="language-elixir">
+<p>describe "SQL injection prevention" do</p>
+<p>  test "handles malicious username input" do</p>
+<p>    # Should not find any users or cause errors</p>
+<p>    result = Accounts.get_user_by_username("' OR '1'='1")</p>
+<p>    assert result == nil</p>
+<p>  end</p>
+
+<p>  test "handles SQL commands in input" do</p>
+<p>    result = Accounts.get_user_by_username("'; DROP TABLE users; --")</p>
+<p>    assert result == nil</p>
+
+<p>    # Verify table still exists</p>
+<p>    assert Repo.aggregate(User, :count) >= 0</p>
+<p>  end</p>
+
+<p>  test "handles special characters" do</p>
+<p>    # Create user with special chars</p>
+<p>    {:ok, user} = Accounts.create_user(%{</p>
+<p>      username: "test_user",</p>
+<p>      name: "O'Brien",  # Contains quote</p>
+<p>      email: "test@example.com"</p>
+<p>    })</p>
+
+<p>    # Should find user correctly</p>
+<p>    found = Accounts.get_user!(user.id)</p>
+<p>    assert found.name == "O'Brien"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Audit Query Logging</h3>
+
+<figure class="code"><pre><code># config/dev.exs
+<p>config :snippetbox, Snippetbox.Repo,</p>
+<p>  log: :debug</p>
+
+<h1>You'll see parameterized queries in logs:</h1>
+<h1>[debug] QUERY OK source="users" db=0.5ms</h1>
+<h1>SELECT * FROM users WHERE username = $1 ["alice"]</h1>
+</code></pre></figure>
+
+<h2>Security Audit Checklist</h2>
+
+<ul>
+<li>[ ] No string interpolation in SQL</li>
+<li>[ ] All queries use Ecto Query DSL or parameterized raw SQL</li>
+<li>[ ] Dynamic columns/tables are whitelisted</li>
+<li>[ ] User input is type-cast/validated</li>
+<li>[ ] LIKE queries escape special characters</li>
+<li>[ ] Fragment usage is parameterized</li>
+<li>[ ] Atom creation uses <code>String.to_existing_atom/1</code></li>
+<li>[ ] Raw SQL uses <code>Repo.query/2</code> with parameters</li>
+</ul>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Data and Code Separation</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>SQL injection happens when data is mixed with code. Parameterized queries enforce separation:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Code (SQL template) and data (parameters) are separate
+<p>sql_template = "SELECT * FROM users WHERE name = $1"</p>
+<p>data = [user_input]</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># The database keeps them separate</p>
+<p>Repo.query(sql_template, data)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is a functional principle: pure functions (the query) operate on data (parameters) without mixing them together.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How SQL injection attacks work</li>
+<li>Ecto's automatic parameterized queries</li>
+<li>Safe query patterns</li>
+<li>Dangerous patterns to avoid</li>
+<li>Using fragments safely</li>
+<li>Dynamic query building with whitelists</li>
+<li>Input validation</li>
+<li>Testing for SQL injection</li>
+</ul>
+
+<p>In the next chapter, we'll explore XSS prevention.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="10.02-csrf-protection.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="10.04-xss-prevention.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>HTML Templating &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; HTML Templating</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.06-project-structure.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.08-serving-static-files.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.7</div>
+        <h1>Chapter 2.7: HTML Templating with EEx</h1>
+
+<p>Phoenix uses EEx (Embedded Elixir) for templating. In this chapter, we'll learn how to create dynamic HTML pages using Phoenix's powerful templating system.</p>
+
+<h2>Understanding EEx</h2>
+
+<p>EEx is Elixir's templating engine. It allows you to embed Elixir code within HTML:</p>
+
+<figure class="code"><pre><code><h1>Welcome, <%= @user.name %>!</h1>
+</code></pre></figure>
+
+<p>Phoenix extends EEx with HEEx (HTML-aware EEx) which provides:</p>
+<ul>
+<li>Compile-time validation of HTML</li>
+<li>Component support</li>
+<li>Better error messages</li>
+<li>XSS protection by default</li>
+</ul>
+
+<h2>Template File Conventions</h2>
+
+<p>Phoenix templates use the <code>.heex</code> extension and live alongside their view modules:</p>
+
+<figure class="code"><pre><code>lib/snippetbox_web/controllers/
+<p>├── snippet_controller.ex      # Controller</p>
+<p>├── snippet_html.ex            # View module</p>
+<p>└── snippet_html/              # Templates directory</p>
+<p>    ├── index.html.heex        # Index template</p>
+<p>    ├── show.html.heex         # Show template</p>
+<p>    ├── new.html.heex          # New template</p>
+<p>    └── edit.html.heex         # Edit template</p>
+</code></pre></figure>
+
+<h2>Creating Your First Template</h2>
+
+<p>Let's create a template for displaying snippets.</p>
+
+<h3>Step 1: The Controller</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    snippet = %{</p>
+<p>      id: id,</p>
+<p>      title: "Example Snippet",</p>
+<p>      content: "puts 'Hello, World!'",</p>
+<p>      created_at: ~N[2024-01-15 10:30:00]</p>
+<p>    }</p>
+
+<p>    render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Step 2: The View Module</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "snippet_html/*"</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The <code>embed_templates</code> macro automatically loads all <code>.heex</code> files from the specified directory.</p>
+
+<h3>Step 3: The Template</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/show.html.heex %>
+
+<div class="snippet">
+<p>  <h1><%= @snippet.title %></h1></p>
+
+<p>  <div class="metadata"></p>
+<p>    <span>ID: <%= @snippet.id %></span></p>
+<p>    <span>Created: <%= @snippet.created_at %></span></p>
+<p>  </div></p>
+
+<p>  <pre class="content"><code><%= @snippet.content %></code></pre></p>
+</div>
+</code></pre></figure>
+
+<h2>EEx Syntax</h2>
+
+<h3>Output Tags</h3>
+
+<p>Use <code><%= %></code> to output expressions (escaped by default):</p>
+
+<figure class="code"><pre><code><%# Output escaped HTML (safe) %>
+<p><%= @user.bio %></p>
+
+<%# If @user.bio contains "<script>", it becomes "&lt;script&gt;" %>
+</code></pre></figure>
+
+<h3>Raw Output</h3>
+
+<p>Use <code>raw/1</code> when you trust the content (dangerous - use carefully):</p>
+
+<figure class="code"><pre><code><%# Output unescaped HTML (dangerous!) %>
+<div><%= raw(@snippet.html_content) %></div>
+</code></pre></figure>
+
+<h3>Code Tags</h3>
+
+<p>Use <code><% %></code> for code that doesn't output:</p>
+
+<figure class="code"><pre><code><% formatted_date = Calendar.strftime(@snippet.created_at, "%B %d, %Y") %>
+<p>Created on <%= formatted_date %></p>
+</code></pre></figure>
+
+<h3>Comments</h3>
+
+<figure class="code"><pre><code><%# This is a comment - not rendered in output %>
+
+<!-- This is an HTML comment - rendered in output -->
+</code></pre></figure>
+
+<h2>Control Flow in Templates</h2>
+
+<h3>Conditionals</h3>
+
+<figure class="code"><pre><code><%= if @snippet.published do %>
+<p>  <span class="badge">Published</span></p>
+<% else %>
+<p>  <span class="badge draft">Draft</span></p>
+<% end %>
+</code></pre></figure>
+
+<p>Using <code>case</code>:</p>
+
+<figure class="code"><pre><code><%= case @snippet.status do %>
+<p>  <% :published -> %></p>
+<p>    <span class="badge published">Published</span></p>
+<p>  <% :draft -> %></p>
+<p>    <span class="badge draft">Draft</span></p>
+<p>  <% :archived -> %></p>
+<p>    <span class="badge archived">Archived</span></p>
+<% end %>
+</code></pre></figure>
+
+<p>Using <code>cond</code>:</p>
+
+<figure class="code"><pre><code><%= cond do %>
+<p>  <% @snippet.views > 1000 -> %></p>
+<p>    <span class="popular">Popular!</span></p>
+<p>  <% @snippet.views > 100 -> %></p>
+<p>    <span class="trending">Trending</span></p>
+<p>  <% true -> %></p>
+<p>    <span class="new">New</span></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Loops</h3>
+
+<p>Iterate with <code>for</code>:</p>
+
+<figure class="code"><pre><code><ul class="snippets">
+<p>  <%= for snippet <- @snippets do %></p>
+<p>    <li></p>
+<p>      <a href={~p"/snippets/#{snippet.id}"}></p>
+<p>        <%= snippet.title %></p>
+<p>      </a></p>
+<p>    </li></p>
+<p>  <% end %></p>
+</ul>
+</code></pre></figure>
+
+<p>With index:</p>
+
+<figure class="code"><pre><code><ol>
+<p>  <%= for {snippet, index} <- Enum.with_index(@snippets) do %></p>
+<p>    <li></p>
+<p>      <span class="number"><%= index + 1 %>.</span></p>
+<p>      <%= snippet.title %></p>
+<p>    </li></p>
+<p>  <% end %></p>
+</ol>
+</code></pre></figure>
+
+<p>Filtering in loops:</p>
+
+<figure class="code"><pre><code><%= for snippet <- @snippets, snippet.published do %>
+<p>  <div class="snippet"><%= snippet.title %></div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Assigns and the @ Sigil</h2>
+
+<p>Variables passed to templates are called <strong>assigns</strong>. Access them with <code>@</code>:</p>
+
+<figure class="code"><pre><code># Controller
+<p>render(conn, :show,</p>
+<p>  snippet: snippet,</p>
+<p>  user: current_user,</p>
+<p>  can_edit: true</p>
+<p>)</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code><%# Template %>
+<h1><%= @snippet.title %></h1>
+<p>By <%= @user.name %></p>
+
+<%= if @can_edit do %>
+<p>  <a href={~p"/snippets/#{@snippet.id}/edit"}>Edit</a></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Checking if Assign Exists</h3>
+
+<figure class="code"><pre><code><%= if assigns[:flash_message] do %>
+<p>  <div class="flash"><%= @flash_message %></div></p>
+<% end %>
+</code></pre></figure>
+
+<p>Or use <code>Map.get/3</code>:</p>
+
+<figure class="code"><pre><code><%= Map.get(assigns, :page_title, "Default Title") %>
+</code></pre></figure>
+
+<h2>Layouts</h2>
+
+<p>Phoenix uses layouts to wrap your templates with common HTML structure.</p>
+
+<h3>Root Layout</h3>
+
+<p>The root layout contains the HTML skeleton:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/root.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<p>  <head></p>
+<p>    <meta charset="utf-8" /></p>
+<p>    <meta name="viewport" content="width=device-width, initial-scale=1" /></p>
+<p>    <meta name="csrf-token" content={get_csrf_token()} /></p>
+<p>    <title><%= assigns[:page_title] || "Snippetbox" %></title></p>
+<p>    <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} /></p>
+<p>    <script defer phx-track-static src={~p"/assets/app.js"}></script></p>
+<p>  </head></p>
+<p>  <body></p>
+<p>    <%= @inner_content %></p>
+<p>  </body></p>
+</html>
+</code></pre></figure>
+
+<h3>App Layout</h3>
+
+<p>The app layout wraps page content with navigation:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/app.html.heex %>
+
+<header>
+<p>  <nav></p>
+<p>    <a href={~p"/"}>Home</a></p>
+<p>    <a href={~p"/snippets"}>Snippets</a></p>
+<p>    <a href={~p"/about"}>About</a></p>
+<p>  </nav></p>
+</header>
+
+<main class="container">
+<p>  <.flash_group flash={@flash} /></p>
+<p>  <%= @inner_content %></p>
+</main>
+
+<footer>
+<p>  <p>&copy; <%= DateTime.utc_now().year %> Snippetbox</p></p>
+</footer>
+</code></pre></figure>
+
+<h3>Changing Layouts</h3>
+
+<p>Change layout for specific actions:</p>
+
+<figure class="code"><pre><code>def login(conn, _params) do
+<p>  conn</p>
+<p>  |> put_layout(html: :auth)  # Use auth.html.heex layout</p>
+<p>  |> render(:login)</p>
+<p>end</p>
+
+<p>def api_docs(conn, _params) do</p>
+<p>  conn</p>
+<p>  |> put_layout(false)  # No layout</p>
+<p>  |> render(:api_docs)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Setting Page Titles</h3>
+
+<figure class="code"><pre><code># In controller
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = get_snippet(id)</p>
+
+<p>  conn</p>
+<p>  |> assign(:page_title, snippet.title)</p>
+<p>  |> render(:show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Helper Functions in Views</h2>
+
+<p>Add helper functions to your view module:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "snippet_html/*"</p>
+
+<p>  def format_date(datetime) do</p>
+<p>    Calendar.strftime(datetime, "%B %d, %Y at %H:%M")</p>
+<p>  end</p>
+
+<p>  def truncate(text, max_length \\ 100) do</p>
+<p>    if String.length(text) > max_length do</p>
+<p>      String.slice(text, 0, max_length) <> "..."</p>
+<p>    else</p>
+<p>      text</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def snippet_class(snippet) do</p>
+<p>    cond do</p>
+<p>      snippet.expired -> "snippet expired"</p>
+<p>      snippet.featured -> "snippet featured"</p>
+<p>      true -> "snippet"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Use in templates:</p>
+
+<figure class="code"><pre><code><div class={snippet_class(@snippet)}>
+<p>  <h2><%= @snippet.title %></h2></p>
+<p>  <p><%= truncate(@snippet.content, 200) %></p></p>
+<p>  <time><%= format_date(@snippet.created_at) %></time></p>
+</div>
+</code></pre></figure>
+
+<h2>Verified Routes</h2>
+
+<p>Phoenix provides compile-time verified routes with <code>~p</code>:</p>
+
+<figure class="code"><pre><code><%# These are checked at compile time %>
+<a href={~p"/"}>Home</a>
+<a href={~p"/snippets"}>All Snippets</a>
+<a href={~p"/snippets/#{@snippet.id}"}>View Snippet</a>
+<a href={~p"/snippets/#{@snippet}/edit"}>Edit</a>
+
+<%# With query parameters %>
+<a href={~p"/snippets?#{[page: 2, sort: "date"]}"}>Page 2</a>
+</code></pre></figure>
+
+<p>If you reference a route that doesn't exist, you'll get a compile error.</p>
+
+<h2>Partials and Rendering</h2>
+
+<h3>Rendering Other Templates</h3>
+
+<figure class="code"><pre><code><%# Render another template %>
+<%= render("_sidebar.html", assigns) %>
+
+<%# With specific assigns %>
+<%= render("_snippet_card.html", snippet: @snippet, show_author: true) %>
+</code></pre></figure>
+
+<h3>Creating Partials</h3>
+
+<p>By convention, partials start with underscore:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/_snippet_card.html.heex %>
+
+<div class="snippet-card">
+<p>  <h3><%= @snippet.title %></h3></p>
+<p>  <p><%= truncate(@snippet.content) %></p></p>
+<p>  <%= if @show_author do %></p>
+<p>    <span class="author">By <%= @snippet.author.name %></span></p>
+<p>  <% end %></p>
+</div>
+</code></pre></figure>
+
+<h3>Rendering Lists</h3>
+
+<figure class="code"><pre><code><%= for snippet <- @snippets do %>
+<p>  <%= render("_snippet_card.html", snippet: snippet, show_author: true) %></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Common Template Patterns</h2>
+
+<h3>Empty State</h3>
+
+<figure class="code"><pre><code><%= if Enum.empty?(@snippets) do %>
+<p>  <div class="empty-state"></p>
+<p>    <p>No snippets yet.</p></p>
+<p>    <a href={~p"/snippets/new"} class="btn">Create your first snippet</a></p>
+<p>  </div></p>
+<% else %>
+<p>  <div class="snippets-list"></p>
+<p>    <%= for snippet <- @snippets do %></p>
+<p>      <div class="snippet"><%= snippet.title %></div></p>
+<p>    <% end %></p>
+<p>  </div></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Loading States</h3>
+
+<figure class="code"><pre><code><div id="snippets" class={if @loading, do: "loading"}>
+<p>  <%= if @loading do %></p>
+<p>    <div class="spinner">Loading...</div></p>
+<p>  <% else %></p>
+<p>    <%= for snippet <- @snippets do %></p>
+<p>      <div class="snippet"><%= snippet.title %></div></p>
+<p>    <% end %></p>
+<p>  <% end %></p>
+</div>
+</code></pre></figure>
+
+<h3>Conditional Classes</h3>
+
+<figure class="code"><pre><code><div class={[
+<p>  "snippet",</p>
+<p>  @snippet.featured && "featured",</p>
+<p>  @snippet.expired && "expired"</p>
+<p>]}></p>
+<p>  <%= @snippet.title %></p>
+</div>
+</code></pre></figure>
+
+<p>Phoenix automatically filters out <code>false</code> and <code>nil</code> values from class lists.</p>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Expression-Based Templates</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In HEEx, everything is an expression that returns a value:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> <%# This is an expression that returns a string %>
+<%= if @count > 0, do: "#{@count} items", else: "No items" %>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Unlike imperative templates that execute statements, functional templates compose expressions. Each <code><%= %></code> block returns a value that becomes part of the output.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li>No side effects in templates</li>
+<li>Easier to reason about output</li>
+<li>Better testability</li>
+<li>Compile-time optimization</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix_live_view/Phoenix.Component.html#module-heex">HEEx Documentation</a></li>
+<li><a href="https://hexdocs.pm/eex/EEx.html">EEx Documentation</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>EEx syntax for embedding Elixir in HTML</li>
+<li>How templates connect to controllers and views</li>
+<li>Control flow with conditionals and loops</li>
+<li>Working with assigns and layouts</li>
+<li>Creating helper functions and partials</li>
+<li>Verified routes with <code>~p</code> sigil</li>
+</ul>
+
+<p>In the next chapter, we'll learn how to serve static files like CSS, JavaScript, and images.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>HEEx vs EEx</h3>
+
+<p>Phoenix 1.7+ uses HEEx by default:</p>
+
+<p>| Feature | EEx | HEEx |</p>
+<p>|---------|-----|------|</p>
+<p>| Extension | <code>.eex</code> | <code>.heex</code> |</p>
+<p>| HTML validation | No | Yes |</p>
+<p>| Components | No | Yes |</p>
+<p>| Compile-time checks | Basic | Comprehensive |</p>
+<p>| XSS protection | Manual | Automatic |</p>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>ERB (Ruby/Rails)</strong>:
+<figure class="code"><pre><code><% @snippets.each do |snippet| %>
+<p>  <div><%= snippet.title %></div></p>
+<% end %>
+</code></pre></figure>
+
+<strong>Jinja2 (Python/Flask)</strong>:
+<figure class="code"><pre><code>{% for snippet in snippets %}
+<p>  <div>{{ snippet.title }}</div></p>
+<p>{% endfor %}</p>
+</code></pre></figure>
+
+<strong>Blade (PHP/Laravel)</strong>:
+<figure class="code"><pre><code>@foreach ($snippets as $snippet)
+<p>  <div>{{ $snippet->title }}</div></p>
+<p>@endforeach</p>
+</code></pre></figure>
+
+<strong>HEEx (Elixir/Phoenix)</strong>:
+<figure class="code"><pre><code><%= for snippet <- @snippets do %>
+<p>  <div><%= snippet.title %></div></p>
+<% end %>
+</code></pre></figure>
+
+<p>Phoenix's HEEx is closest to ERB but with Elixir's pattern matching and functional approach.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.06-project-structure.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.08-serving-static-files.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

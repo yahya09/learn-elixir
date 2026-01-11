@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Common Plug Patterns &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Common Plug Patterns</span>
+            </div>
+            <div>
+                &lsaquo; <a href="06.03-creating-custom-plugs.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="06.05-testing-plugs.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 6.4</div>
+        <h1>Chapter 6.4: Common Plug Patterns</h1>
+
+<p>This chapter covers common plug patterns you'll encounter in Phoenix applications - authentication, authorization, request transformation, and more.</p>
+
+<h2>Authentication Plugs</h2>
+
+<h3>Session-Based Authentication</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.Auth do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  @doc """</p>
+<p>  Loads the current user from session into assigns.</p>
+<p>  Always runs, assigns nil if not logged in.</p>
+<p>  """</p>
+<p>  def fetch_current_user(conn, _opts) do</p>
+<p>    user_id = get_session(conn, :user_id)</p>
+<p>    user = user_id && Accounts.get_user(user_id)</p>
+<p>    assign(conn, :current_user, user)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Requires a logged-in user.</p>
+<p>  Redirects to login if not authenticated.</p>
+<p>  """</p>
+<p>  def require_authenticated_user(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "You must log in to access this page.")</p>
+<p>      |> maybe_store_return_to()</p>
+<p>      |> redirect(to: "/login")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Redirects authenticated users away from auth pages.</p>
+<p>  """</p>
+<p>  def redirect_if_authenticated(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>      |> redirect(to: "/")</p>
+<p>      |> halt()</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp maybe_store_return_to(conn) do</p>
+<p>    if conn.method == "GET" do</p>
+<p>      put_session(conn, :return_to, conn.request_path)</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Gets stored return path or default.</p>
+<p>  """</p>
+<p>  def get_return_to(conn, default \\ "/") do</p>
+<p>    get_session(conn, :return_to) || default</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Token-Based Authentication (API)</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/api_auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.APIAuth do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  def fetch_api_user(conn, _opts) do</p>
+<p>    with ["Bearer " <> token] <- get_req_header(conn, "authorization"),</p>
+<p>         {:ok, claims} <- verify_token(token),</p>
+<p>         user when not is_nil(user) <- Accounts.get_user(claims["sub"]) do</p>
+<p>      assign(conn, :current_user, user)</p>
+<p>    else</p>
+<p>      _ -></p>
+<p>        conn</p>
+<p>        |> put_status(:unauthorized)</p>
+<p>        |> json(%{error: %{message: "Invalid or missing authentication token"}})</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp verify_token(token) do</p>
+<p>    # Use your JWT library</p>
+<p>    SnippetboxWeb.Token.verify(token)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Authorization Plugs</h2>
+
+<h3>Role-Based Access</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/authorize.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.Authorize do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  @doc """</p>
+<p>  Requires user to have specific role.</p>
+<p>  """</p>
+<p>  def require_role(conn, roles) when is_list(roles) do</p>
+<p>    user = conn.assigns[:current_user]</p>
+
+<p>    if user && user.role in roles do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_status(:forbidden)</p>
+<p>      |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>      |> render("403.html")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def require_role(conn, role), do: require_role(conn, [role])</p>
+
+<p>  @doc """</p>
+<p>  Requires admin role.</p>
+<p>  """</p>
+<p>  def require_admin(conn, _opts) do</p>
+<p>    require_role(conn, [:admin])</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Requires moderator or admin role.</p>
+<p>  """</p>
+<p>  def require_moderator(conn, _opts) do</p>
+<p>    require_role(conn, [:admin, :moderator])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Resource-Based Authorization</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/resource_auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.ResourceAuth do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  @doc """</p>
+<p>  Loads resource and checks ownership.</p>
+<p>  """</p>
+<p>  def authorize_snippet(conn, _opts) do</p>
+<p>    snippet_id = conn.params["id"]</p>
+<p>    user = conn.assigns.current_user</p>
+
+<p>    case Snippetbox.Snippets.get_snippet(snippet_id) do</p>
+<p>      nil -></p>
+<p>        conn</p>
+<p>        |> put_status(:not_found)</p>
+<p>        |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>        |> render("404.html")</p>
+<p>        |> halt()</p>
+
+<p>      snippet -></p>
+<p>        if snippet.user_id == user.id || user.role == :admin do</p>
+<p>          assign(conn, :snippet, snippet)</p>
+<p>        else</p>
+<p>          conn</p>
+<p>          |> put_status(:forbidden)</p>
+<p>          |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>          |> render("403.html")</p>
+<p>          |> halt()</p>
+<p>        end</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Request Transformation Plugs</h2>
+
+<h3>JSON Body Parser</h3>
+
+<figure class="code"><pre><code># Already included in Phoenix, but here's the pattern:
+<p>defmodule SnippetboxWeb.Plugs.JSONParser do</p>
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    case get_req_header(conn, "content-type") do</p>
+<p>      ["application/json" <> _] -></p>
+<p>        {:ok, body, conn} = read_body(conn)</p>
+<p>        params = Jason.decode!(body)</p>
+<p>        %{conn | body_params: params, params: Map.merge(conn.params, params)}</p>
+
+<p>      _ -></p>
+<p>        conn</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Request ID Propagation</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.RequestId do
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: Keyword.get(opts, :header, "x-request-id")</p>
+
+<p>  def call(conn, header) do</p>
+<p>    request_id = get_req_header(conn, header) |> List.first() || generate_id()</p>
+
+<p>    conn</p>
+<p>    |> assign(:request_id, request_id)</p>
+<p>    |> put_resp_header(header, request_id)</p>
+<p>  end</p>
+
+<p>  defp generate_id do</p>
+<p>    :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>IP Allowlist</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.IPAllowlist do
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def init(opts) do</p>
+<p>    %{</p>
+<p>      allowed_ips: Keyword.get(opts, :allowed_ips, []),</p>
+<p>      allowed_ranges: Keyword.get(opts, :allowed_ranges, [])</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def call(conn, opts) do</p>
+<p>    ip = conn.remote_ip</p>
+
+<p>    if allowed?(ip, opts) do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_status(:forbidden)</p>
+<p>      |> json(%{error: "IP address not allowed"})</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp allowed?(ip, opts) do</p>
+<p>    ip_string = :inet.ntoa(ip) |> to_string()</p>
+<p>    ip_string in opts.allowed_ips || in_range?(ip, opts.allowed_ranges)</p>
+<p>  end</p>
+
+<p>  defp in_range?(ip, ranges) do</p>
+<p>    Enum.any?(ranges, fn {network, mask} -></p>
+<p>      match_network?(ip, network, mask)</p>
+<p>    end)</p>
+<p>  end</p>
+
+<p>  defp match_network?(ip, network, mask) do</p>
+<p>    # Simplified - use proper CIDR matching in production</p>
+<p>    false</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Response Transformation Plugs</h2>
+
+<h3>Compression</h3>
+
+<figure class="code"><pre><code># Phoenix already includes Plug.Compress
+<p>plug Plug.Compress</p>
+</code></pre></figure>
+
+<h3>Cache Headers</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.CacheControl do
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts) do</p>
+<p>    %{</p>
+<p>      public: Keyword.get(opts, :public, false),</p>
+<p>      max_age: Keyword.get(opts, :max_age, 0)</p>
+<p>    }</p>
+<p>  end</p>
+
+<p>  def call(conn, %{public: public, max_age: max_age}) do</p>
+<p>    visibility = if public, do: "public", else: "private"</p>
+<p>    value = "#{visibility}, max-age=#{max_age}"</p>
+
+<p>    put_resp_header(conn, "cache-control", value)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>ETag Support</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.ETag do
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    register_before_send(conn, fn conn -></p>
+<p>      if conn.status == 200 && conn.resp_body do</p>
+<p>        etag = generate_etag(conn.resp_body)</p>
+<p>        conn = put_resp_header(conn, "etag", etag)</p>
+
+<p>        case get_req_header(conn, "if-none-match") do</p>
+<p>          [^etag] -></p>
+<p>            conn</p>
+<p>            |> put_status(:not_modified)</p>
+<p>            |> resp(304, "")</p>
+
+<p>          _ -></p>
+<p>            conn</p>
+<p>        end</p>
+<p>      else</p>
+<p>        conn</p>
+<p>      end</p>
+<p>    end)</p>
+<p>  end</p>
+
+<p>  defp generate_etag(body) do</p>
+<p>    hash = :crypto.hash(:md5, body) |> Base.encode16(case: :lower)</p>
+<p>    ~s("#{hash}")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Error Handling Plugs</h2>
+
+<h3>Global Error Handler</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.ErrorHandler do
+<p>  @behaviour Plug</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+<p>  require Logger</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    conn</p>
+<p>  rescue</p>
+<p>    e in Ecto.NoResultsError -></p>
+<p>      Logger.warning("Resource not found: #{inspect(e)}")</p>
+<p>      conn</p>
+<p>      |> put_status(:not_found)</p>
+<p>      |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>      |> render("404.html")</p>
+<p>      |> halt()</p>
+
+<p>    e -></p>
+<p>      Logger.error("Unhandled error: #{Exception.message(e)}")</p>
+<p>      Logger.error(Exception.format(:error, e, __STACKTRACE__))</p>
+<p>      conn</p>
+<p>      |> put_status(:internal_server_error)</p>
+<p>      |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>      |> render("500.html")</p>
+<p>      |> halt()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Metrics and Monitoring Plugs</h2>
+
+<h3>Telemetry Events</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.Telemetry do
+<p>  @behaviour Plug</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    start = System.monotonic_time()</p>
+
+<p>    :telemetry.execute(</p>
+<p>      [:snippetbox, :request, :start],</p>
+<p>      %{time: System.system_time()},</p>
+<p>      %{conn: conn}</p>
+<p>    )</p>
+
+<p>    Plug.Conn.register_before_send(conn, fn conn -></p>
+<p>      stop = System.monotonic_time()</p>
+<p>      duration = stop - start</p>
+
+<p>      :telemetry.execute(</p>
+<p>        [:snippetbox, :request, :stop],</p>
+<p>        %{duration: duration},</p>
+<p>        %{conn: conn}</p>
+<p>      )</p>
+
+<p>      conn</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Composable Middleware</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each plug pattern above is composable:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Combine multiple concerns
+<p>pipeline :protected_api do</p>
+<p>  plug :fetch_api_user</p>
+<p>  plug :require_role, [:admin]</p>
+<p>  plug :rate_limit, max_requests: 100</p>
+<p>  plug :request_logger</p>
+<p>end</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is the power of functional composition - simple, focused functions that combine to create complex behavior.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we covered:</p>
+
+<ul>
+<li>Session and token authentication</li>
+<li>Role and resource-based authorization</li>
+<li>Request transformation (parsing, validation)</li>
+<li>Response transformation (caching, compression)</li>
+<li>Error handling</li>
+<li>Metrics and telemetry</li>
+</ul>
+
+<p>In the next chapter, we'll learn how to test plugs.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="06.03-creating-custom-plugs.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="06.05-testing-plugs.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

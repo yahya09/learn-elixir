@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Docker Deployment &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Docker Deployment</span>
+            </div>
+            <div>
+                &lsaquo; <a href="14.01-releases.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="14.03-fly-io.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 14.2</div>
+        <h1>Chapter 14.2: Docker Deployment</h1>
+
+<p>Docker provides consistent environments across development and production. In this chapter, we'll explore containerizing Phoenix applications.</p>
+
+<h2>Phoenix Dockerfile</h2>
+
+<p>Phoenix generates a production-ready Dockerfile:</p>
+
+<figure class="code"><pre><code>mix phx.gen.release --docker
+</code></pre></figure>
+
+<h3>Generated Dockerfile</h3>
+
+<figure class="code"><figcaption>File: Dockerfile</figcaption><pre><code class="language-dockerfile">
+<h1>Find eligible builder and runner images at:</h1>
+<h1>https://hub.docker.com/r/hexpm/elixir/tags</h1>
+
+<p>ARG ELIXIR_VERSION=1.16.0</p>
+<p>ARG OTP_VERSION=26.2</p>
+<p>ARG DEBIAN_VERSION=bookworm-20231009-slim</p>
+
+<p>ARG BUILDER_IMAGE="hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"</p>
+<p>ARG RUNNER_IMAGE="debian:${DEBIAN_VERSION}"</p>
+
+<p>FROM ${BUILDER_IMAGE} as builder</p>
+
+<h1>Install build dependencies</h1>
+<p>RUN apt-get update -y && apt-get install -y build-essential git \</p>
+<p>    && apt-get clean && rm -f /var/lib/apt/lists/<em>_</em></p>
+
+<h1>Prepare build dir</h1>
+<p>WORKDIR /app</p>
+
+<h1>Install hex + rebar</h1>
+<p>RUN mix local.hex --force && \</p>
+<p>    mix local.rebar --force</p>
+
+<h1>Set build ENV</h1>
+<p>ENV MIX_ENV="prod"</p>
+
+<h1>Install mix dependencies</h1>
+<p>COPY mix.exs mix.lock ./</p>
+<p>RUN mix deps.get --only $MIX_ENV</p>
+<p>RUN mkdir config</p>
+
+<h1>Copy compile-time config files</h1>
+<p>COPY config/config.exs config/${MIX_ENV}.exs config/</p>
+<p>RUN mix deps.compile</p>
+
+<p>COPY priv priv</p>
+<p>COPY lib lib</p>
+<p>COPY assets assets</p>
+
+<h1>Compile assets</h1>
+<p>RUN mix assets.deploy</p>
+
+<h1>Compile the release</h1>
+<p>RUN mix compile</p>
+
+<h1>Changes to config/runtime.exs don't require recompiling the code</h1>
+<p>COPY config/runtime.exs config/</p>
+
+<h1>Build release</h1>
+<p>COPY rel rel</p>
+<p>RUN mix release</p>
+
+<h1>Start a new build stage for the minimal runtime image</h1>
+<p>FROM ${RUNNER_IMAGE}</p>
+
+<p>RUN apt-get update -y && \</p>
+<p>    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates \</p>
+<p>    && apt-get clean && rm -f /var/lib/apt/lists/<em>_</em></p>
+
+<h1>Set the locale</h1>
+<p>RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen</p>
+
+<p>ENV LANG en_US.UTF-8</p>
+<p>ENV LANGUAGE en_US:en</p>
+<p>ENV LC_ALL en_US.UTF-8</p>
+
+<p>WORKDIR "/app"</p>
+<p>RUN chown nobody /app</p>
+
+<h1>Set runner ENV</h1>
+<p>ENV MIX_ENV="prod"</p>
+
+<h1>Only copy the final release from the build stage</h1>
+<p>COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/snippetbox ./</p>
+
+<p>USER nobody</p>
+
+<h1>Set default command</h1>
+<p>CMD ["/app/bin/server"]</p>
+</code></pre></figure>
+
+<h2>Multi-Stage Build Explained</h2>
+
+<figure class="code"><pre><code># Stage 1: Build environment
+<p>FROM hexpm/elixir:1.16-erlang-26-debian-bookworm as builder</p>
+<h1>- Full Elixir/Erlang environment</h1>
+<h1>- Build tools installed</h1>
+<h1>- Dependencies compiled</h1>
+<h1>- Assets built</h1>
+<h1>- Release created</h1>
+
+<h1>Stage 2: Runtime environment</h1>
+<p>FROM debian:bookworm-slim</p>
+<h1>- Minimal base image</h1>
+<h1>- Only runtime dependencies</h1>
+<h1>- Copy release from builder</h1>
+<h1>- ~100MB final image vs ~1GB build image</h1>
+</code></pre></figure>
+
+<h2>Docker Compose</h2>
+
+<h3>Development</h3>
+
+<figure class="code"><figcaption>File: docker-compose.yml</figcaption><pre><code class="language-yaml">
+<p>version: "3.8"</p>
+
+<p>services:</p>
+<p>  app:</p>
+<p>    build:</p>
+<p>      context: .</p>
+<p>      dockerfile: Dockerfile.dev</p>
+<p>    ports:</p>
+<p>      - "4000:4000"</p>
+<p>    volumes:</p>
+<p>      - .:/app</p>
+<p>      - deps:/app/deps</p>
+<p>      - build:/app/_build</p>
+<p>    environment:</p>
+<p>      - MIX_ENV=dev</p>
+<p>      - DATABASE_URL=ecto://postgres:postgres@db/snippetbox_dev</p>
+<p>    depends_on:</p>
+<p>      - db</p>
+
+<p>  db:</p>
+<p>    image: postgres:15-alpine</p>
+<p>    environment:</p>
+<p>      POSTGRES_USER: postgres</p>
+<p>      POSTGRES_PASSWORD: postgres</p>
+<p>      POSTGRES_DB: snippetbox_dev</p>
+<p>    volumes:</p>
+<p>      - pgdata:/var/lib/postgresql/data</p>
+<p>    ports:</p>
+<p>      - "5432:5432"</p>
+
+<p>volumes:</p>
+<p>  deps:</p>
+<p>  build:</p>
+<p>  pgdata:</p>
+</code></pre></figure>
+
+<h3>Development Dockerfile</h3>
+
+<figure class="code"><figcaption>File: Dockerfile.dev</figcaption><pre><code class="language-dockerfile">
+<p>FROM elixir:1.16</p>
+
+<p>RUN apt-get update && \</p>
+<p>    apt-get install -y inotify-tools && \</p>
+<p>    rm -rf /var/lib/apt/lists/*</p>
+
+<p>WORKDIR /app</p>
+
+<p>RUN mix local.hex --force && mix local.rebar --force</p>
+
+<p>COPY mix.exs mix.lock ./</p>
+<p>RUN mix deps.get</p>
+
+<p>COPY . .</p>
+
+<p>CMD ["mix", "phx.server"]</p>
+</code></pre></figure>
+
+<h3>Production</h3>
+
+<figure class="code"><figcaption>File: docker-compose.prod.yml</figcaption><pre><code class="language-yaml">
+<p>version: "3.8"</p>
+
+<p>services:</p>
+<p>  app:</p>
+<p>    image: snippetbox:latest</p>
+<p>    build:</p>
+<p>      context: .</p>
+<p>      dockerfile: Dockerfile</p>
+<p>    ports:</p>
+<p>      - "4000:4000"</p>
+<p>    environment:</p>
+<p>      - DATABASE_URL=${DATABASE_URL}</p>
+<p>      - SECRET_KEY_BASE=${SECRET_KEY_BASE}</p>
+<p>      - PHX_HOST=${PHX_HOST}</p>
+<p>    depends_on:</p>
+<p>      db:</p>
+<p>        condition: service_healthy</p>
+<p>    restart: unless-stopped</p>
+<p>    healthcheck:</p>
+<p>      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]</p>
+<p>      interval: 30s</p>
+<p>      timeout: 10s</p>
+<p>      retries: 3</p>
+
+<p>  db:</p>
+<p>    image: postgres:15-alpine</p>
+<p>    environment:</p>
+<p>      POSTGRES_USER: ${POSTGRES_USER}</p>
+<p>      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}</p>
+<p>      POSTGRES_DB: ${POSTGRES_DB}</p>
+<p>    volumes:</p>
+<p>      - pgdata:/var/lib/postgresql/data</p>
+<p>    healthcheck:</p>
+<p>      test: ["CMD-SHELL", "pg_isready -U postgres"]</p>
+<p>      interval: 5s</p>
+<p>      timeout: 5s</p>
+<p>      retries: 5</p>
+<p>    restart: unless-stopped</p>
+
+<p>  nginx:</p>
+<p>    image: nginx:alpine</p>
+<p>    ports:</p>
+<p>      - "80:80"</p>
+<p>      - "443:443"</p>
+<p>    volumes:</p>
+<p>      - ./nginx.conf:/etc/nginx/nginx.conf:ro</p>
+<p>      - ./certs:/etc/nginx/certs:ro</p>
+<p>    depends_on:</p>
+<p>      - app</p>
+<p>    restart: unless-stopped</p>
+
+<p>volumes:</p>
+<p>  pgdata:</p>
+</code></pre></figure>
+
+<h2>Building and Running</h2>
+
+<figure class="code"><pre><code># Build the image
+<p>docker build -t snippetbox:latest .</p>
+
+<h1>Run with environment variables</h1>
+<p>docker run -d \</p>
+<p>  --name snippetbox \</p>
+<p>  -p 4000:4000 \</p>
+<p>  -e DATABASE_URL="ecto://user:pass@db/snippetbox" \</p>
+<p>  -e SECRET_KEY_BASE="your-secret-key" \</p>
+<p>  -e PHX_HOST="example.com" \</p>
+<p>  snippetbox:latest</p>
+
+<h1>Run migrations</h1>
+<p>docker exec snippetbox bin/snippetbox eval "Snippetbox.Release.migrate()"</p>
+
+<h1>View logs</h1>
+<p>docker logs -f snippetbox</p>
+
+<h1>Interactive shell</h1>
+<p>docker exec -it snippetbox bin/snippetbox remote</p>
+</code></pre></figure>
+
+<h2>Docker Compose Commands</h2>
+
+<figure class="code"><pre><code># Development
+<p>docker-compose up -d</p>
+<p>docker-compose logs -f app</p>
+<p>docker-compose exec app mix ecto.migrate</p>
+<p>docker-compose exec app iex -S mix</p>
+
+<h1>Production</h1>
+<p>docker-compose -f docker-compose.prod.yml up -d</p>
+<p>docker-compose -f docker-compose.prod.yml exec app bin/snippetbox remote</p>
+</code></pre></figure>
+
+<h2>Optimizing Docker Images</h2>
+
+<h3>Layer Caching</h3>
+
+<figure class="code"><pre><code># Good: Dependencies cached separately
+<p>COPY mix.exs mix.lock ./</p>
+<p>RUN mix deps.get --only prod</p>
+<p>RUN mix deps.compile</p>
+
+<h1>Then copy source</h1>
+<p>COPY lib lib</p>
+<p>COPY priv priv</p>
+
+<h1>Changes to source don't invalidate deps cache</h1>
+</code></pre></figure>
+
+<h3>.dockerignore</h3>
+
+<figure class="code"><figcaption>File: .dockerignore</figcaption><pre><code class="language-gitignore">
+<h1>Git</h1>
+<p>.git</p>
+<p>.gitignore</p>
+
+<h1>Elixir/Phoenix build artifacts</h1>
+<p>_build</p>
+<p>deps</p>
+<p>*.ez</p>
+
+<h1>Generated files</h1>
+<p>/assets/node_modules</p>
+<p>/priv/static/assets</p>
+
+<h1>Development</h1>
+<p>.elixir_ls</p>
+<p>.iex.exs</p>
+
+<h1>Test</h1>
+<p>/cover</p>
+<p>/test</p>
+
+<h1>Docker</h1>
+<p>Dockerfile*</p>
+<p>docker-compose*</p>
+
+<h1>Documentation</h1>
+<p>/doc</p>
+<p>README.md</p>
+</code></pre></figure>
+
+<h3>Smaller Base Images</h3>
+
+<figure class="code"><pre><code># Alpine-based (smaller but may have compatibility issues)
+<p>FROM hexpm/elixir:1.16.0-erlang-26.2-alpine-3.18.4 as builder</p>
+<p>FROM alpine:3.18</p>
+
+<h1>Debian slim (good balance)</h1>
+<p>FROM hexpm/elixir:1.16.0-erlang-26.2-debian-bookworm-20231009-slim as builder</p>
+<p>FROM debian:bookworm-slim</p>
+</code></pre></figure>
+
+<h2>Health Checks</h2>
+
+<figure class="code"><pre><code># In Dockerfile
+<p>HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \</p>
+<p>  CMD curl -f http://localhost:4000/health || exit 1</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># Health check endpoint
+<h1>lib/snippetbox_web/controllers/health_controller.ex</h1>
+
+<p>defmodule SnippetboxWeb.HealthController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def check(conn, _params) do</p>
+<p>    with :ok <- check_database() do</p>
+<p>      json(conn, %{status: "ok"})</p>
+<p>    else</p>
+<p>      {:error, reason} -></p>
+<p>        conn</p>
+<p>        |> put_status(:service_unavailable)</p>
+<p>        |> json(%{status: "error", reason: reason})</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp check_database do</p>
+<p>    case Ecto.Adapters.SQL.query(Snippetbox.Repo, "SELECT 1", []) do</p>
+<p>      {:ok, _} -> :ok</p>
+<p>      {:error, _} -> {:error, "database unavailable"}</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Container Registry</h2>
+
+<h3>GitHub Container Registry</h3>
+
+<figure class="code"><pre><code># .github/workflows/docker.yml
+
+<p>name: Build and Push Docker</p>
+
+<p>on:</p>
+<p>  push:</p>
+<p>    branches: [main]</p>
+<p>    tags: ['v*']</p>
+
+<p>jobs:</p>
+<p>  build:</p>
+<p>    runs-on: ubuntu-latest</p>
+
+<p>    steps:</p>
+<p>      - uses: actions/checkout@v3</p>
+
+<p>      - name: Log in to GitHub Container Registry</p>
+<p>        uses: docker/login-action@v2</p>
+<p>        with:</p>
+<p>          registry: ghcr.io</p>
+<p>          username: ${{ github.actor }}</p>
+<p>          password: ${{ secrets.GITHUB_TOKEN }}</p>
+
+<p>      - name: Build and push</p>
+<p>        uses: docker/build-push-action@v4</p>
+<p>        with:</p>
+<p>          context: .</p>
+<p>          push: true</p>
+<p>          tags: |</p>
+<p>            ghcr.io/${{ github.repository }}:latest</p>
+<p>            ghcr.io/${{ github.repository }}:${{ github.sha }}</p>
+</code></pre></figure>
+
+<h2>Clustering in Docker</h2>
+
+<figure class="code"><pre><code># docker-compose.cluster.yml
+
+<p>version: "3.8"</p>
+
+<p>services:</p>
+<p>  app1:</p>
+<p>    image: snippetbox:latest</p>
+<p>    environment:</p>
+<p>      - RELEASE_NODE=snippetbox@app1</p>
+<p>      - RELEASE_COOKIE=secret_cookie</p>
+<p>    networks:</p>
+<p>      - cluster</p>
+
+<p>  app2:</p>
+<p>    image: snippetbox:latest</p>
+<p>    environment:</p>
+<p>      - RELEASE_NODE=snippetbox@app2</p>
+<p>      - RELEASE_COOKIE=secret_cookie</p>
+<p>    networks:</p>
+<p>      - cluster</p>
+
+<p>networks:</p>
+<p>  cluster:</p>
+<p>    driver: bridge</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># config/runtime.exs
+<p>config :libcluster,</p>
+<p>  topologies: [</p>
+<p>    docker: [</p>
+<p>      strategy: Cluster.Strategy.Epmd,</p>
+<p>      config: [hosts: [:"snippetbox@app1", :"snippetbox@app2"]]</p>
+<p>    ]</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Immutable Containers</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Docker containers embody immutability:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Image is immutable snapshot
+<p>docker build -t myapp:v1 .</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Containers are ephemeral instances</p>
+<p>docker run myapp:v1  # Instance 1</p>
+<p>docker run myapp:v1  # Instance 2</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Updates = new image, new containers</p>
+<p>docker build -t myapp:v2 .</p>
+<p>docker stop old && docker run myapp:v2</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>No in-place updates, just replace with new versions.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Phoenix Dockerfile structure</li>
+<li>Multi-stage builds</li>
+<li>Docker Compose for development and production</li>
+<li>Building and running containers</li>
+<li>Optimizing Docker images</li>
+<li>Health checks</li>
+<li>Container registries</li>
+<li>Clustering in Docker</li>
+</ul>
+
+<p>In the next chapter, we'll explore deploying to Fly.io.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="14.01-releases.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="14.03-fly-io.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

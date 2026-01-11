@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>User Registration &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; User Registration</span>
+            </div>
+            <div>
+                &lsaquo; <a href="11.01-password-hashing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="11.03-login-logout.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 11.2</div>
+        <h1>Chapter 11.2: User Registration</h1>
+
+<p>User registration is the entry point to your application. In this chapter, we'll implement a complete registration flow.</p>
+
+<h2>Registration Controller</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/user_registration_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserRegistrationController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+<p>  alias Snippetbox.Accounts.User</p>
+
+<p>  def new(conn, _params) do</p>
+<p>    changeset = Accounts.change_user_registration(%User{})</p>
+<p>    render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"user" => user_params}) do</p>
+<p>    case Accounts.register_user(user_params) do</p>
+<p>      {:ok, user} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Account created successfully!")</p>
+<p>        |> SnippetboxWeb.UserAuth.log_in_user(user)</p>
+
+<p>      {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>        render(conn, :new, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Registration Template</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/user_registration_html/new.html.heex %>
+
+<div class="mx-auto max-w-md">
+<p>  <.header class="text-center"></p>
+<p>    Create Account</p>
+<p>    <:subtitle></p>
+<p>      Already have an account?</p>
+<p>      <.link navigate={~p"/login"} class="font-semibold text-brand hover:underline"></p>
+<p>        Log in</p>
+<p>      </.link></p>
+<p>    </:subtitle></p>
+<p>  </.header></p>
+
+<p>  <.form for={@changeset} action={~p"/register"} class="mt-8"></p>
+<p>    <.error :if={@changeset.action}></p>
+<p>      Oops, something went wrong! Please check the errors below.</p>
+<p>    </.error></p>
+
+<p>    <div class="space-y-4"></p>
+<p>      <.input field={@form[:name]} type="text" label="Name" required /></p>
+<p>      <.input field={@form[:email]} type="email" label="Email" required /></p>
+<p>      <.input field={@form[:password]} type="password" label="Password" required /></p>
+<p>      <.input</p>
+<p>        field={@form[:password_confirmation]}</p>
+<p>        type="password"</p>
+<p>        label="Confirm Password"</p>
+<p>        required</p>
+<p>      /></p>
+<p>    </div></p>
+
+<p>    <div class="mt-6"></p>
+<p>      <.button class="w-full">Create Account</.button></p>
+<p>    </div></p>
+<p>  </.form></p>
+</div>
+</code></pre></figure>
+
+<h2>Context Functions</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts do</p>
+<p>  alias Snippetbox.Repo</p>
+<p>  alias Snippetbox.Accounts.User</p>
+
+<p>  @doc """</p>
+<p>  Returns an <code>%Ecto.Changeset{}</code> for tracking user changes.</p>
+<p>  """</p>
+<p>  def change_user_registration(%User{} = user, attrs \\ %{}) do</p>
+<p>    User.registration_changeset(user, attrs, hash_password: false)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Registers a new user.</p>
+
+<p>  ## Examples</p>
+
+<p>      iex> register_user(%{email: "user@example.com", password: "password123"})</p>
+<p>      {:ok, %User{}}</p>
+
+<p>      iex> register_user(%{email: "bad"})</p>
+<p>      {:error, %Ecto.Changeset{}}</p>
+<p>  """</p>
+<p>  def register_user(attrs) do</p>
+<p>    %User{}</p>
+<p>    |> User.registration_changeset(attrs)</p>
+<p>    |> Repo.insert()</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Gets a user by email.</p>
+<p>  """</p>
+<p>  def get_user_by_email(email) when is_binary(email) do</p>
+<p>    Repo.get_by(User, email: email)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Gets a user by ID.</p>
+<p>  """</p>
+<p>  def get_user!(id) do</p>
+<p>    Repo.get!(User, id)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Enhanced User Schema</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/user.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts.User do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "users" do</p>
+<p>    field :email, :string</p>
+<p>    field :name, :string</p>
+<p>    field :password, :string, virtual: true, redact: true</p>
+<p>    field :password_confirmation, :string, virtual: true, redact: true</p>
+<p>    field :hashed_password, :string, redact: true</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  def registration_changeset(user, attrs, opts \\ []) do</p>
+<p>    user</p>
+<p>    |> cast(attrs, [:email, :name, :password, :password_confirmation])</p>
+<p>    |> validate_required([:email, :name, :password])</p>
+<p>    |> validate_email()</p>
+<p>    |> validate_name()</p>
+<p>    |> validate_password(opts)</p>
+<p>    |> validate_password_confirmation()</p>
+<p>  end</p>
+
+<p>  defp validate_email(changeset) do</p>
+<p>    changeset</p>
+<p>    |> validate_format(:email, ~r/^[^\s]+@[^\s]+\.[^\s]+$/,</p>
+<p>         message: "must be a valid email address")</p>
+<p>    |> validate_length(:email, max: 160)</p>
+<p>    |> unsafe_validate_unique(:email, Snippetbox.Repo)</p>
+<p>    |> unique_constraint(:email)</p>
+<p>    |> update_change(:email, &String.downcase/1)</p>
+<p>  end</p>
+
+<p>  defp validate_name(changeset) do</p>
+<p>    changeset</p>
+<p>    |> validate_length(:name, min: 2, max: 100)</p>
+<p>    |> validate_format(:name, ~r/^[a-zA-Z\s]+$/,</p>
+<p>         message: "can only contain letters and spaces")</p>
+<p>  end</p>
+
+<p>  defp validate_password(changeset, opts) do</p>
+<p>    changeset</p>
+<p>    |> validate_required([:password])</p>
+<p>    |> validate_length(:password, min: 12, max: 72)</p>
+<p>    |> validate_password_strength()</p>
+<p>    |> maybe_hash_password(opts)</p>
+<p>  end</p>
+
+<p>  defp validate_password_strength(changeset) do</p>
+<p>    validate_change(changeset, :password, fn :password, password -></p>
+<p>      errors = []</p>
+
+<p>      errors =</p>
+<p>        if String.match?(password, ~r/[a-z]/),</p>
+<p>          do: errors,</p>
+<p>          else: [{:password, "must contain a lowercase letter"} | errors]</p>
+
+<p>      errors =</p>
+<p>        if String.match?(password, ~r/[A-Z]/),</p>
+<p>          do: errors,</p>
+<p>          else: [{:password, "must contain an uppercase letter"} | errors]</p>
+
+<p>      errors =</p>
+<p>        if String.match?(password, ~r/[0-9]/),</p>
+<p>          do: errors,</p>
+<p>          else: [{:password, "must contain a number"} | errors]</p>
+
+<p>      errors</p>
+<p>    end)</p>
+<p>  end</p>
+
+<p>  defp validate_password_confirmation(changeset) do</p>
+<p>    password = get_change(changeset, :password)</p>
+<p>    confirmation = get_change(changeset, :password_confirmation)</p>
+
+<p>    if password && confirmation && password != confirmation do</p>
+<p>      add_error(changeset, :password_confirmation, "does not match password")</p>
+<p>    else</p>
+<p>      changeset</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp maybe_hash_password(changeset, opts) do</p>
+<p>    hash_password? = Keyword.get(opts, :hash_password, true)</p>
+<p>    password = get_change(changeset, :password)</p>
+
+<p>    if hash_password? && password && changeset.valid? do</p>
+<p>      changeset</p>
+<p>      |> put_change(:hashed_password, Argon2.hash_pwd_salt(password))</p>
+<p>      |> delete_change(:password)</p>
+<p>      |> delete_change(:password_confirmation)</p>
+<p>    else</p>
+<p>      changeset</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Router Setup</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :redirect_if_user_is_authenticated]</p>
+
+<p>  get "/register", UserRegistrationController, :new</p>
+<p>  post "/register", UserRegistrationController, :create</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Redirect If Authenticated</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/user_auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserAuth do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  @doc """</p>
+<p>  Redirects authenticated users away from registration/login pages.</p>
+<p>  """</p>
+<p>  def redirect_if_user_is_authenticated(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>      |> redirect(to: signed_in_path(conn))</p>
+<p>      |> halt()</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp signed_in_path(_conn), do: ~p"/"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Registration With Email Confirmation</h2>
+
+<p>For applications requiring email verification:</p>
+
+<figure class="code"><pre><code>def create(conn, %{"user" => user_params}) do
+<p>  case Accounts.register_user(user_params) do</p>
+<p>    {:ok, user} -></p>
+<p>      {:ok, _} =</p>
+<p>        Accounts.deliver_user_confirmation_instructions(</p>
+<p>          user,</p>
+<p>          &url(~p"/confirm/#{&1}")</p>
+<p>        )</p>
+
+<p>      conn</p>
+<p>      |> put_flash(:info, "Account created! Please check your email to confirm.")</p>
+<p>      |> redirect(to: ~p"/login")</p>
+
+<p>    {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>      render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Terms of Service</h2>
+
+<figure class="code"><pre><code><div class="mt-4">
+<p>  <label class="flex items-start gap-2"></p>
+<p>    <input</p>
+<p>      type="checkbox"</p>
+<p>      name={@form[:terms_accepted].name}</p>
+<p>      value="true"</p>
+<p>      required</p>
+<p>      class="mt-1"</p>
+<p>    /></p>
+<p>    <span class="text-sm text-gray-600"></p>
+<p>      I agree to the</p>
+<p>      <.link href={~p"/terms"} target="_blank" class="text-brand hover:underline"></p>
+<p>        Terms of Service</p>
+<p>      </.link></p>
+<p>      and</p>
+<p>      <.link href={~p"/privacy"} target="_blank" class="text-brand hover:underline"></p>
+<p>        Privacy Policy</p>
+<p>      </.link></p>
+<p>    </span></p>
+<p>  </label></p>
+</div>
+</code></pre></figure>
+
+<figure class="code"><pre><code># In changeset
+<p>def registration_changeset(user, attrs, opts \\ []) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :name, :password, :terms_accepted])</p>
+<p>  |> validate_acceptance(:terms_accepted, message: "you must accept the terms")</p>
+<p>  # ... other validations</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Rate Limiting Registration</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/rate_limit.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RateLimit do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def rate_limit_registration(conn, _opts) do</p>
+<p>    ip = to_string(:inet.ntoa(conn.remote_ip))</p>
+<p>    key = "registration:#{ip}"</p>
+
+<p>    case Hammer.check_rate(key, 3600_000, 5) do  # 5 per hour</p>
+<p>      {:allow, _count} -></p>
+<p>        conn</p>
+
+<p>      {:deny, _limit} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:error, "Too many registration attempts. Please try again later.")</p>
+<p>        |> redirect(to: ~p"/register")</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Registration</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/user_registration_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserRegistrationControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  describe "GET /register" do</p>
+<p>    test "renders registration page", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/register")</p>
+<p>      html = html_response(conn, 200)</p>
+
+<p>      assert html =~ "Create Account"</p>
+<p>      assert html =~ "Email"</p>
+<p>      assert html =~ "Password"</p>
+<p>    end</p>
+
+<p>    test "redirects if already logged in", %{conn: conn} do</p>
+<p>      conn = conn |> log_in_user(user_fixture()) |> get(~p"/register")</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "POST /register" do</p>
+<p>    test "creates account and logs in", %{conn: conn} do</p>
+<p>      email = unique_user_email()</p>
+
+<p>      conn =</p>
+<p>        post(conn, ~p"/register", %{</p>
+<p>          "user" => %{</p>
+<p>            "name" => "Test User",</p>
+<p>            "email" => email,</p>
+<p>            "password" => "ValidPass123!",</p>
+<p>            "password_confirmation" => "ValidPass123!"</p>
+<p>          }</p>
+<p>        })</p>
+
+<p>      assert get_session(conn, :user_token)</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+
+<p>      # Verify user created</p>
+<p>      assert Snippetbox.Accounts.get_user_by_email(email)</p>
+<p>    end</p>
+
+<p>    test "renders errors for invalid data", %{conn: conn} do</p>
+<p>      conn =</p>
+<p>        post(conn, ~p"/register", %{</p>
+<p>          "user" => %{</p>
+<p>            "email" => "invalid",</p>
+<p>            "password" => "short"</p>
+<p>          }</p>
+<p>        })</p>
+
+<p>      html = html_response(conn, 200)</p>
+<p>      assert html =~ "must be a valid email"</p>
+<p>      assert html =~ "should be at least 12 character"</p>
+<p>    end</p>
+
+<p>    test "renders errors for duplicate email", %{conn: conn} do</p>
+<p>      user = user_fixture()</p>
+
+<p>      conn =</p>
+<p>        post(conn, ~p"/register", %{</p>
+<p>          "user" => valid_user_attributes(email: user.email)</p>
+<p>        })</p>
+
+<p>      html = html_response(conn, 200)</p>
+<p>      assert html =~ "has already been taken"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Validation Pipeline</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Registration follows a validation pipeline:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> attrs
+<p>|> cast_fields()</p>
+<p>|> validate_email()</p>
+<p>|> validate_password()</p>
+<p>|> hash_password()</p>
+<p>|> insert_user()</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each step transforms the changeset, accumulating errors. The pipeline either succeeds completely or returns all validation errors.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating registration controller and templates</li>
+<li>User schema with password confirmation</li>
+<li>Email validation and normalization</li>
+<li>Terms of service acceptance</li>
+<li>Rate limiting registration</li>
+<li>Redirecting authenticated users</li>
+<li>Testing registration flow</li>
+</ul>
+
+<p>In the next chapter, we'll implement login and logout.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="11.01-password-hashing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="11.03-login-logout.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

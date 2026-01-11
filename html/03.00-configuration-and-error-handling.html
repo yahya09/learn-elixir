@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Configuration and Error Handling &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Configuration and Error Handling</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.09-the-controller-pattern.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="03.01-managing-configuration.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 3</div>
+        <h1>Chapter 3: Configuration and Error Handling</h1>
+
+<p>In this chapter, we'll explore how Phoenix applications manage configuration across different environments and how to handle errors gracefully.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Phoenix's configuration system and file structure</li>
+<li>Environment-specific settings (development, test, production)</li>
+<li>Runtime configuration with environment variables</li>
+<li>Custom configuration for your application</li>
+<li>Error handling strategies</li>
+<li>Custom error pages</li>
+<li>Logging and debugging</li>
+</ul>
+
+<h2>Why Configuration Matters</h2>
+
+<p>A well-configured application:</p>
+
+<ol>
+<li><strong>Runs correctly</strong> in all environments (dev, test, staging, production)</li>
+<li><strong>Keeps secrets safe</strong> by not hardcoding sensitive values</li>
+<li><strong>Is flexible</strong> enough to adapt to different deployment scenarios</li>
+<li><strong>Fails fast</strong> with clear errors when misconfigured</li>
+</ol>
+
+<h2>Phoenix Configuration Philosophy</h2>
+
+<p>Phoenix follows Elixir's configuration conventions with some additions:</p>
+
+<figure class="code"><pre><code>config/
+<p>├── config.exs      # Shared/base configuration</p>
+<p>├── dev.exs         # Development environment</p>
+<p>├── test.exs        # Test environment</p>
+<p>├── prod.exs        # Production defaults</p>
+<p>└── runtime.exs     # Runtime configuration (env vars)</p>
+</code></pre></figure>
+
+<strong>Key Principles</strong>:
+
+<ol>
+<li><strong>Compile-time vs Runtime</strong>: Most config is set at compile time; <code>runtime.exs</code> handles environment variables</li>
+<li><strong>Environment Separation</strong>: Each environment has its own overrides</li>
+<li><strong>Explicit over Magic</strong>: Configuration is visible, not hidden in conventions</li>
+<li><strong>Secure by Default</strong>: Secrets are loaded from environment variables in production</li>
+</ol>
+
+<h2>Configuration Loading Order</h2>
+
+<figure class="code"><pre><code>1. config/config.exs       (always loaded first)
+<p>         ↓</p>
+<ol>
+<li>config/{env}.exs        (dev.exs, test.exs, or prod.exs)</li>
+</ol>
+<p>         ↓</p>
+<ol>
+<li>config/runtime.exs      (at application start, can use System.get_env)</li>
+</ol>
+</code></pre></figure>
+
+<p>Later configurations override earlier ones.</p>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>3.1 Managing Configuration</strong> - Configuration files and patterns</li>
+<li><strong>3.2 Environment Variables</strong> - Runtime configuration and secrets</li>
+<li><strong>3.3 Custom Error Responses</strong> - Handling errors gracefully</li>
+<li><strong>3.4 Error Pages</strong> - Custom 404 and 500 pages</li>
+<li><strong>3.5 Logging</strong> - Application logging and debugging</li>
+</ul>
+
+<p>Let's start by understanding how to manage configuration in Phoenix applications.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.09-the-controller-pattern.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="03.01-managing-configuration.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

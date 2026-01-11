@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Fly.io Deployment &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Fly.io Deployment</span>
+            </div>
+            <div>
+                &lsaquo; <a href="14.02-docker.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="14.04-production-config.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 14.3</div>
+        <h1>Chapter 14.3: Fly.io Deployment</h1>
+
+<p>Fly.io is a platform optimized for Elixir applications with built-in support for clustering and edge deployment. In this chapter, we'll deploy our Phoenix app to Fly.io.</p>
+
+<h2>Getting Started</h2>
+
+<h3>Install Fly CLI</h3>
+
+<figure class="code"><pre><code># macOS
+<p>brew install flyctl</p>
+
+<h1>Linux</h1>
+<p>curl -L https://fly.io/install.sh | sh</p>
+
+<h1>Windows</h1>
+<p>pwsh -Command "iwr https://fly.io/install.ps1 -useb | iex"</p>
+</code></pre></figure>
+
+<h3>Authentication</h3>
+
+<figure class="code"><pre><code># Sign up or log in
+<p>fly auth signup</p>
+<h1>or</h1>
+<p>fly auth login</p>
+</code></pre></figure>
+
+<h2>Launching Your App</h2>
+
+<h3>Initialize</h3>
+
+<figure class="code"><pre><code># In your Phoenix project directory
+<p>fly launch</p>
+
+<h1>This will:</h1>
+<h1>1. Detect Phoenix application</h1>
+<h1>2. Generate fly.toml configuration</h1>
+<h1>3. Create Dockerfile if needed</h1>
+<h1>4. Set up PostgreSQL database</h1>
+<h1>5. Configure secrets</h1>
+</code></pre></figure>
+
+<h3>Generated fly.toml</h3>
+
+<figure class="code"><figcaption>File: fly.toml</figcaption><pre><code class="language-toml">
+<p>app = "snippetbox"</p>
+<p>primary_region = "iad"</p>
+
+<p>[build]</p>
+
+<p>[env]</p>
+<p>  PHX_HOST = "snippetbox.fly.dev"</p>
+<p>  PORT = "8080"</p>
+
+<p>[http_service]</p>
+<p>  internal_port = 8080</p>
+<p>  force_https = true</p>
+<p>  auto_stop_machines = true</p>
+<p>  auto_start_machines = true</p>
+<p>  min_machines_running = 0</p>
+<p>  processes = ["app"]</p>
+
+<p>[[vm]]</p>
+<p>  cpu_kind = "shared"</p>
+<p>  cpus = 1</p>
+<p>  memory_mb = 256</p>
+</code></pre></figure>
+
+<h3>Deploy</h3>
+
+<figure class="code"><pre><code># Deploy the application
+<p>fly deploy</p>
+
+<h1>Watch deployment logs</h1>
+<p>fly logs</p>
+
+<h1>Open in browser</h1>
+<p>fly open</p>
+</code></pre></figure>
+
+<h2>Database Setup</h2>
+
+<h3>PostgreSQL</h3>
+
+<figure class="code"><pre><code># Create Postgres cluster
+<p>fly postgres create</p>
+
+<h1>Attach to your app (sets DATABASE_URL secret)</h1>
+<p>fly postgres attach --app snippetbox snippetbox-db</p>
+
+<h1>Connect to database</h1>
+<p>fly postgres connect -a snippetbox-db</p>
+</code></pre></figure>
+
+<h3>Running Migrations</h3>
+
+<figure class="code"><pre><code># Run migrations on deploy
+<p>fly deploy</p>
+
+<h1>Or manually</h1>
+<p>fly ssh console -C "/app/bin/snippetbox eval 'Snippetbox.Release.migrate()'"</p>
+
+<h1>Or using flyctl</h1>
+<p>fly ssh console</p>
+<p>/app/bin/snippetbox eval "Snippetbox.Release.migrate()"</p>
+</code></pre></figure>
+
+<h2>Secrets Management</h2>
+
+<figure class="code"><pre><code># Set secrets
+<p>fly secrets set SECRET_KEY_BASE=$(mix phx.gen.secret)</p>
+<p>fly secrets set POSTMARK_API_KEY=your-api-key</p>
+
+<h1>List secrets</h1>
+<p>fly secrets list</p>
+
+<h1>Unset secrets</h1>
+<p>fly secrets unset OLD_SECRET</p>
+</code></pre></figure>
+
+<h2>Configuration</h2>
+
+<h3>fly.toml Deep Dive</h3>
+
+<figure class="code"><figcaption>File: fly.toml</figcaption><pre><code class="language-toml">
+<p>app = "snippetbox"</p>
+<p>primary_region = "iad"</p>
+<p>kill_signal = "SIGTERM"</p>
+<p>kill_timeout = "5s"</p>
+
+<p>[build]</p>
+<p>  [build.args]</p>
+<p>    ELIXIR_VERSION = "1.16.0"</p>
+<p>    OTP_VERSION = "26.2"</p>
+
+<p>[deploy]</p>
+<p>  release_command = "/app/bin/snippetbox eval 'Snippetbox.Release.migrate()'"</p>
+
+<p>[env]</p>
+<p>  PHX_HOST = "snippetbox.fly.dev"</p>
+<p>  PORT = "8080"</p>
+<p>  ECTO_IPV6 = "true"</p>
+<p>  ERL_AFLAGS = "-proto_dist inet6_tcp"</p>
+
+<p>[http_service]</p>
+<p>  internal_port = 8080</p>
+<p>  force_https = true</p>
+<p>  auto_stop_machines = true</p>
+<p>  auto_start_machines = true</p>
+<p>  min_machines_running = 1</p>
+<p>  processes = ["app"]</p>
+
+<p>  [http_service.concurrency]</p>
+<p>    type = "connections"</p>
+<p>    hard_limit = 1000</p>
+<p>    soft_limit = 1000</p>
+
+<p>[[services]]</p>
+<p>  protocol = "tcp"</p>
+<p>  internal_port = 8080</p>
+
+<p>  [[services.ports]]</p>
+<p>    port = 80</p>
+<p>    handlers = ["http"]</p>
+
+<p>  [[services.ports]]</p>
+<p>    port = 443</p>
+<p>    handlers = ["tls", "http"]</p>
+
+<p>  [[services.tcp_checks]]</p>
+<p>    interval = "15s"</p>
+<p>    timeout = "2s"</p>
+<p>    grace_period = "5s"</p>
+
+<p>  [[services.http_checks]]</p>
+<p>    interval = "10s"</p>
+<p>    timeout = "2s"</p>
+<p>    grace_period = "5s"</p>
+<p>    method = "get"</p>
+<p>    path = "/health"</p>
+
+<p>[[vm]]</p>
+<p>  cpu_kind = "shared"</p>
+<p>  cpus = 1</p>
+<p>  memory_mb = 512</p>
+</code></pre></figure>
+
+<h2>Scaling</h2>
+
+<h3>Vertical Scaling</h3>
+
+<figure class="code"><pre><code># Scale up VM size
+<p>fly scale vm shared-cpu-2x</p>
+
+<h1>Available sizes:</h1>
+<h1>shared-cpu-1x (256MB)</h1>
+<h1>shared-cpu-2x (512MB)</h1>
+<h1>shared-cpu-4x (1GB)</h1>
+<h1>dedicated-cpu-1x (2GB)</h1>
+<h1>dedicated-cpu-2x (4GB)</h1>
+</code></pre></figure>
+
+<h3>Horizontal Scaling</h3>
+
+<figure class="code"><pre><code># Scale to multiple instances
+<p>fly scale count 3</p>
+
+<h1>Scale in specific region</h1>
+<p>fly scale count 2 --region iad</p>
+
+<h1>Auto-scaling in fly.toml</h1>
+<p>[http_service]</p>
+<p>  min_machines_running = 1</p>
+<p>  auto_stop_machines = true</p>
+<p>  auto_start_machines = true</p>
+</code></pre></figure>
+
+<h3>Multi-Region</h3>
+
+<figure class="code"><pre><code># Add regions
+<p>fly regions add fra lhr sin</p>
+
+<h1>List regions</h1>
+<p>fly regions list</p>
+
+<h1>Deploy to multiple regions</h1>
+<p>fly deploy</p>
+</code></pre></figure>
+
+<h2>Clustering</h2>
+
+<h3>Configure Clustering</h3>
+
+<figure class="code"><figcaption>File: config/runtime.exs</figcaption><pre><code class="language-elixir">
+<p>if config_env() == :prod do</p>
+<p>  app_name =</p>
+<p>    System.get_env("FLY_APP_NAME") ||</p>
+<p>      raise "FLY_APP_NAME not available"</p>
+
+<p>  config :libcluster,</p>
+<p>    topologies: [</p>
+<p>      fly6pn: [</p>
+<p>        strategy: Cluster.Strategy.DNSPoll,</p>
+<p>        config: [</p>
+<p>          polling_interval: 5_000,</p>
+<p>          query: "#{app_name}.internal",</p>
+<p>          node_basename: app_name</p>
+<p>        ]</p>
+<p>      ]</p>
+<p>    ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>def start(_type, _args) do</p>
+<p>  topologies = Application.get_env(:libcluster, :topologies) || []</p>
+
+<p>  children = [</p>
+<p>    {Cluster.Supervisor, [topologies, [name: Snippetbox.ClusterSupervisor]]},</p>
+<p>    # ... other children</p>
+<p>  ]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Verify Clustering</h3>
+
+<figure class="code"><pre><code># SSH into app
+<p>fly ssh console</p>
+
+<h1>Check connected nodes</h1>
+<p>/app/bin/snippetbox remote</p>
+<p>iex> Node.list()</p>
+<p>[:"snippetbox@fdaa:0:1234:a7b:..."]</p>
+</code></pre></figure>
+
+<h2>Custom Domains</h2>
+
+<figure class="code"><pre><code># Add custom domain
+<p>fly certs create snippetbox.com</p>
+
+<h1>Add www subdomain</h1>
+<p>fly certs create www.snippetbox.com</p>
+
+<h1>Check certificate status</h1>
+<p>fly certs show snippetbox.com</p>
+</code></pre></figure>
+
+<h3>DNS Configuration</h3>
+
+<figure class="code"><pre><code># Add these DNS records:
+
+<h1>A record for root domain</h1>
+<p>snippetbox.com    A    [Fly IP]</p>
+
+<h1>AAAA record for IPv6</h1>
+<p>snippetbox.com    AAAA [Fly IPv6]</p>
+
+<h1>CNAME for www</h1>
+<p>www.snippetbox.com CNAME snippetbox.fly.dev</p>
+</code></pre></figure>
+
+<h2>Continuous Deployment</h2>
+
+<h3>GitHub Actions</h3>
+
+<figure class="code"><figcaption>File: .github/workflows/fly.yml</figcaption><pre><code class="language-yaml">
+<p>name: Fly Deploy</p>
+
+<p>on:</p>
+<p>  push:</p>
+<p>    branches: [main]</p>
+
+<p>jobs:</p>
+<p>  deploy:</p>
+<p>    name: Deploy app</p>
+<p>    runs-on: ubuntu-latest</p>
+
+<p>    steps:</p>
+<p>      - uses: actions/checkout@v3</p>
+
+<p>      - uses: superfly/flyctl-actions/setup-flyctl@master</p>
+
+<p>      - run: flyctl deploy --remote-only</p>
+<p>        env:</p>
+<p>          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}</p>
+</code></pre></figure>
+
+<h3>Get Deploy Token</h3>
+
+<figure class="code"><pre><code># Create deploy token
+<p>fly tokens create deploy -x 999999h</p>
+
+<h1>Add to GitHub secrets as FLY_API_TOKEN</h1>
+</code></pre></figure>
+
+<h2>Monitoring</h2>
+
+<figure class="code"><pre><code># View logs
+<p>fly logs</p>
+
+<h1>Follow logs</h1>
+<p>fly logs -f</p>
+
+<h1>Dashboard</h1>
+<p>fly dashboard</p>
+
+<h1>Status</h1>
+<p>fly status</p>
+
+<h1>SSH for debugging</h1>
+<p>fly ssh console</p>
+</code></pre></figure>
+
+<h2>Volumes (Persistent Storage)</h2>
+
+<figure class="code"><pre><code># Create volume
+<p>fly volumes create data --size 10 --region iad</p>
+
+<h1>Mount in fly.toml</h1>
+<p>[mounts]</p>
+<p>  source = "data"</p>
+<p>  destination = "/app/data"</p>
+</code></pre></figure>
+
+<h2>Rollbacks</h2>
+
+<figure class="code"><pre><code># List releases
+<p>fly releases</p>
+
+<h1>Rollback to previous version</h1>
+<p>fly deploy --image registry.fly.io/snippetbox:deployment-xxxx</p>
+</code></pre></figure>
+
+<h2>Cost Optimization</h2>
+
+<figure class="code"><pre><code># Auto-stop idle machines
+<p>[http_service]</p>
+<p>  auto_stop_machines = true</p>
+<p>  auto_start_machines = true</p>
+<p>  min_machines_running = 0</p>
+
+<h1>Use shared CPUs</h1>
+<p>[[vm]]</p>
+<p>  cpu_kind = "shared"</p>
+<p>  cpus = 1</p>
+<p>  memory_mb = 256</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Stateless by Default</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Fly.io encourages stateless application design:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # State lives in database, not in memory
+<p># Machines can stop/start freely</p>
+<p># Horizontal scaling is trivial</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Good: Query database</p>
+<p>Snippets.list_snippets()</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Bad: Store in process state (lost on restart)</p>
+<p>Agent.update(:cache, &Map.put(&1, key, value))</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Better: Use distributed cache</p>
+<p>Cachex.put(:cache, key, value)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This aligns with functional programming's preference for explicit state management.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Setting up Fly.io</li>
+<li>Deploying Phoenix applications</li>
+<li>Database configuration</li>
+<li>Secrets management</li>
+<li>Scaling (vertical, horizontal, multi-region)</li>
+<li>Clustering configuration</li>
+<li>Custom domains and SSL</li>
+<li>Continuous deployment</li>
+<li>Monitoring and debugging</li>
+</ul>
+
+<p>In the next chapter, we'll explore production configuration.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="14.02-docker.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="14.04-production-config.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

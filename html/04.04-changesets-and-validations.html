@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Changesets and Validations &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Changesets and Validations</span>
+            </div>
+            <div>
+                &lsaquo; <a href="04.03-ecto-schemas.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.05-crud-operations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 4.4</div>
+        <h1>Chapter 4.4: Changesets and Validations</h1>
+
+<p>Changesets are Ecto's mechanism for tracking and validating changes to data. In this chapter, we'll learn how to use changesets to ensure data integrity before it reaches the database.</p>
+
+<h2>What is a Changeset?</h2>
+
+<p>A changeset:</p>
+
+<ol>
+<li><strong>Tracks</strong> changes to a schema struct</li>
+<li><strong>Casts</strong> external data to proper types</li>
+<li><strong>Validates</strong> data against rules</li>
+<li><strong>Accumulates</strong> errors for display</li>
+<li><strong>Prepares</strong> data for database operations</li>
+</ol>
+
+<figure class="code"><pre><code>changeset = Snippet.changeset(%Snippet{}, %{title: "Hello", content: "World"})
+<h1>=> %Ecto.Changeset{</h1>
+<h1>     valid?: true,</h1>
+<h1>     changes: %{title: "Hello", content: "World"},</h1>
+<h1>     errors: []</h1>
+<h1>   }</h1>
+</code></pre></figure>
+
+<h2>Creating Changesets</h2>
+
+<h3>Basic Changeset</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets.Snippet do
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Using Changesets</h3>
+
+<figure class="code"><pre><code>alias Snippetbox.Snippets.Snippet
+
+<h1>Create changeset from empty struct</h1>
+<p>changeset = Snippet.changeset(%Snippet{}, %{title: "Hello", content: "World"})</p>
+<p>changeset.valid?  # => true</p>
+
+<h1>Create changeset from existing struct</h1>
+<p>snippet = %Snippet{id: 1, title: "Old", content: "Content"}</p>
+<p>changeset = Snippet.changeset(snippet, %{title: "New Title"})</p>
+<p>changeset.changes  # => %{title: "New Title"}</p>
+
+<h1>Invalid changeset</h1>
+<p>changeset = Snippet.changeset(%Snippet{}, %{title: ""})</p>
+<p>changeset.valid?  # => false</p>
+<p>changeset.errors  # => [title: {"can't be blank", [validation: :required]}]</p>
+</code></pre></figure>
+
+<h2>Cast and Validate</h2>
+
+<h3>cast/4</h3>
+
+<p>Cast converts external parameters to schema types:</p>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :views_count])</p>
+<p>  # Converts %{"views_count" => "42"} to %{views_count: 42}</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Cast behavior:</p>
+<ul>
+<li>String keys converted to atoms</li>
+<li>Values coerced to field types</li>
+<li>Unknown fields ignored (whitelist approach)</li>
+<li>Invalid types marked as errors</li>
+</ul>
+
+<h3>validate_required/3</h3>
+
+<p>Ensures fields are present:</p>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :language])</p>
+<p>  |> validate_required([:title, :content])</p>
+<p>  # language is optional</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Built-in Validations</h2>
+
+<h3>Length Validations</h3>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content])</p>
+<p>  |> validate_length(:title, min: 1, max: 100)</p>
+<p>  |> validate_length(:content, min: 1, max: 100_000)</p>
+<p>  |> validate_length(:tags, min: 1, max: 5)  # For arrays</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Options: <code>:min</code>, <code>:max</code>, <code>:is</code> (exact), <code>:count</code> (<code>:codepoints</code> or <code>:graphemes</code>)</p>
+
+<h3>Format Validations</h3>
+
+<figure class="code"><pre><code>def changeset(user, attrs) do
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :username, :website])</p>
+<p>  |> validate_format(:email, ~r/@/)</p>
+<p>  |> validate_format(:username, ~r/^[a-z0-9_]+$/i,</p>
+<p>       message: "only letters, numbers, and underscores")</p>
+<p>  |> validate_format(:website, ~r/^https?:\/\//,</p>
+<p>       message: "must start with http:// or https://")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Inclusion/Exclusion</h3>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:language, :status])</p>
+<p>  |> validate_inclusion(:language, ~w(elixir ruby python javascript))</p>
+<p>  |> validate_exclusion(:status, ["banned", "spam"])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Number Validations</h3>
+
+<figure class="code"><pre><code>def changeset(product, attrs) do
+<p>  product</p>
+<p>  |> cast(attrs, [:price, :quantity, :rating])</p>
+<p>  |> validate_number(:price, greater_than: 0)</p>
+<p>  |> validate_number(:quantity, greater_than_or_equal_to: 0)</p>
+<p>  |> validate_number(:rating, greater_than_or_equal_to: 1, less_than_or_equal_to: 5)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Acceptance Validation</h3>
+
+<p>For checkboxes like "I agree to terms":</p>
+
+<figure class="code"><pre><code>schema "users" do
+<p>  field :terms_accepted, :boolean, virtual: true</p>
+<p>end</p>
+
+<p>def registration_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :terms_accepted])</p>
+<p>  |> validate_acceptance(:terms_accepted)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Confirmation Validation</h3>
+
+<p>For password confirmation:</p>
+
+<figure class="code"><pre><code>schema "users" do
+<p>  field :password, :string, virtual: true</p>
+<p>  field :password_confirmation, :string, virtual: true</p>
+<p>  field :password_hash, :string</p>
+<p>end</p>
+
+<p>def changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:password, :password_confirmation])</p>
+<p>  |> validate_required([:password])</p>
+<p>  |> validate_confirmation(:password, required: true)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Uniqueness Validation</h2>
+
+<figure class="code"><pre><code>def changeset(user, attrs) do
+<p>  user</p>
+<p>  |> cast(attrs, [:email, :username])</p>
+<p>  |> validate_required([:email, :username])</p>
+<p>  |> unique_constraint(:email)</p>
+<p>  |> unique_constraint(:username)</p>
+<p>end</p>
+</code></pre></figure>
+
+<strong>Important</strong>: <code>unique_constraint</code> requires a database unique index:
+
+<figure class="code"><pre><code># In migration
+<p>create unique_index(:users, [:email])</p>
+<p>create unique_index(:users, [:username])</p>
+</code></pre></figure>
+
+<p>The validation only triggers when inserting/updating in the database.</p>
+
+<h3>Composite Uniqueness</h3>
+
+<figure class="code"><pre><code># Unique title per user
+<p>def changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :user_id])</p>
+<p>  |> unique_constraint([:user_id, :title],</p>
+<p>       name: :snippets_user_id_title_index,</p>
+<p>       message: "you already have a snippet with this title")</p>
+<p>end</p>
+
+<h1>In migration</h1>
+<p>create unique_index(:snippets, [:user_id, :title])</p>
+</code></pre></figure>
+
+<h2>Custom Validations</h2>
+
+<h3>Simple Custom Validation</h3>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :expires_at])</p>
+<p>  |> validate_future_date(:expires_at)</p>
+<p>end</p>
+
+<p>defp validate_future_date(changeset, field) do</p>
+<p>  validate_change(changeset, field, fn _, value -></p>
+<p>    if DateTime.compare(value, DateTime.utc_now()) == :gt do</p>
+<p>      []  # No errors</p>
+<p>    else</p>
+<p>      [{field, "must be in the future"}]</p>
+<p>    end</p>
+<p>  end)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Validation with Multiple Fields</h3>
+
+<figure class="code"><pre><code>def changeset(event, attrs) do
+<p>  event</p>
+<p>  |> cast(attrs, [:starts_at, :ends_at])</p>
+<p>  |> validate_required([:starts_at, :ends_at])</p>
+<p>  |> validate_end_after_start()</p>
+<p>end</p>
+
+<p>defp validate_end_after_start(changeset) do</p>
+<p>  starts_at = get_field(changeset, :starts_at)</p>
+<p>  ends_at = get_field(changeset, :ends_at)</p>
+
+<p>  if starts_at && ends_at && DateTime.compare(ends_at, starts_at) != :gt do</p>
+<p>    add_error(changeset, :ends_at, "must be after start time")</p>
+<p>  else</p>
+<p>    changeset</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Complex Business Rules</h3>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:content, :language])</p>
+<p>  |> validate_required([:content])</p>
+<p>  |> validate_syntax()</p>
+<p>end</p>
+
+<p>defp validate_syntax(changeset) do</p>
+<p>  language = get_field(changeset, :language)</p>
+<p>  content = get_field(changeset, :content)</p>
+
+<p>  case validate_code_syntax(language, content) do</p>
+<p>    :ok -> changeset</p>
+<p>    {:error, line, message} -></p>
+<p>      add_error(changeset, :content, "syntax error on line #{line}: #{message}")</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp validate_code_syntax("elixir", content) do</p>
+<p>  case Code.string_to_quoted(content) do</p>
+<p>    {:ok, _} -> :ok</p>
+<p>    {:error, {line, message, _}} -> {:error, line, message}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp validate_code_syntax(_, _), do: :ok</p>
+</code></pre></figure>
+
+<h2>Multiple Changesets</h2>
+
+<h3>Different Changesets for Different Operations</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets.Snippet do
+<p>  # For creating new snippets</p>
+<p>  def create_changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :language])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>    |> validate_length(:title, max: 100)</p>
+<p>  end</p>
+
+<p>  # For updating existing snippets</p>
+<p>  def update_changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :language])</p>
+<p>    |> validate_length(:title, max: 100)</p>
+<p>    # title and content not required - can update just one field</p>
+<p>  end</p>
+
+<p>  # For admin operations</p>
+<p>  def admin_changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :language, :is_featured, :is_public])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Context-Specific Changesets</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Accounts.User do
+<p>  def registration_changeset(user, attrs) do</p>
+<p>    user</p>
+<p>    |> cast(attrs, [:email, :password])</p>
+<p>    |> validate_required([:email, :password])</p>
+<p>    |> validate_format(:email, ~r/@/)</p>
+<p>    |> validate_length(:password, min: 8)</p>
+<p>    |> unique_constraint(:email)</p>
+<p>    |> hash_password()</p>
+<p>  end</p>
+
+<p>  def profile_changeset(user, attrs) do</p>
+<p>    user</p>
+<p>    |> cast(attrs, [:name, :bio, :website])</p>
+<p>    |> validate_length(:bio, max: 500)</p>
+<p>    |> validate_format(:website, ~r/^https?:\/\//)</p>
+<p>  end</p>
+
+<p>  def password_changeset(user, attrs) do</p>
+<p>    user</p>
+<p>    |> cast(attrs, [:password])</p>
+<p>    |> validate_required([:password])</p>
+<p>    |> validate_length(:password, min: 8)</p>
+<p>    |> hash_password()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Working with Changeset Data</h2>
+
+<h3>Getting Values</h3>
+
+<figure class="code"><pre><code>changeset = Snippet.changeset(%Snippet{title: "Old"}, %{title: "New"})
+
+<h1>Get changed value (or original if not changed)</h1>
+<p>get_field(changeset, :title)  # => "New"</p>
+
+<h1>Get only the change (nil if not changed)</h1>
+<p>get_change(changeset, :title)  # => "New"</p>
+<p>get_change(changeset, :content)  # => nil</p>
+
+<h1>Fetch with default</h1>
+<p>fetch_field(changeset, :title)  # => {:changes, "New"}</p>
+<p>fetch_field(changeset, :content)  # => {:data, nil}</p>
+</code></pre></figure>
+
+<h3>Setting Values</h3>
+
+<figure class="code"><pre><code>changeset
+<p>|> put_change(:updated_by, user.id)</p>
+<p>|> put_change(:slug, generate_slug(title))</p>
+<p>|> force_change(:version, snippet.version + 1)</p>
+</code></pre></figure>
+
+<h3>Deleting Changes</h3>
+
+<figure class="code"><pre><code>changeset
+<p>|> delete_change(:password)  # Remove sensitive data</p>
+</code></pre></figure>
+
+<h2>Error Messages</h2>
+
+<h3>Accessing Errors</h3>
+
+<figure class="code"><pre><code>changeset = Snippet.changeset(%Snippet{}, %{title: "", content: ""})
+
+<p>changeset.errors</p>
+<h1>=> [</h1>
+<h1>  title: {"can't be blank", [validation: :required]},</h1>
+<h1>  content: {"can't be blank", [validation: :required]}</h1>
+<h1>]</h1>
+
+<h1>Traverse errors for display</h1>
+<p>Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} -></p>
+<p>  Regex.replace(~r"%{(\w+)}", msg, fn _, key -></p>
+<p>    opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()</p>
+<p>  end)</p>
+<p>end)</p>
+<h1>=> %{title: ["can't be blank"], content: ["can't be blank"]}</h1>
+</code></pre></figure>
+
+<h3>Custom Error Messages</h3>
+
+<figure class="code"><pre><code>|> validate_required([:title], message: "please enter a title")
+<p>|> validate_length(:title, min: 3, message: "must be at least 3 characters")</p>
+<p>|> validate_format(:email, ~r/@/, message: "must be a valid email address")</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Changeset as Data Pipeline</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Changesets are built using the pipe operator as a transformation pipeline:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> snippet
+<p>|> cast(attrs, [:title, :content])      # Transform 1</p>
+<p>|> validate_required([:title])           # Transform 2</p>
+<p>|> validate_length(:title, max: 100)     # Transform 3</p>
+<p>|> unique_constraint(:slug)              # Transform 4</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each function takes a changeset and returns a changeset, allowing composition:</p>
+<ul>
+<li>Functions are pure (same input → same output)</li>
+<li>Order matters (validations run in sequence)</li>
+<li>Errors accumulate (all validations run, not just until first failure)</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is the "railway-oriented programming" pattern - data flows through transformations, accumulating results.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Changeset.html">Ecto.Changeset</a></li>
+<li><a href="https://fsharpforfunandprofit.com/rop/">Railway Oriented Programming</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating changesets with <code>cast</code> and <code>validate_required</code></li>
+<li>Built-in validations (length, format, inclusion, number)</li>
+<li>Unique constraints with database indexes</li>
+<li>Custom validation functions</li>
+<li>Multiple changesets for different operations</li>
+<li>Accessing and displaying errors</li>
+</ul>
+
+<p>In the next chapter, we'll use changesets with the Repo to insert, update, and delete data.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Changeset Inspection</h3>
+
+<figure class="code"><pre><code># In IEx
+<p>changeset = Snippet.changeset(%Snippet{}, %{title: "Hi"})</p>
+
+<p>changeset.valid?     # => false</p>
+<p>changeset.changes    # => %{title: "Hi"}</p>
+<p>changeset.errors     # => [content: {...}]</p>
+<p>changeset.data       # => %Snippet{...}</p>
+<p>changeset.params     # => %{"title" => "Hi"}</p>
+</code></pre></figure>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Rails Validations</strong>:
+<figure class="code"><pre><code>class Snippet < ApplicationRecord
+<p>  validates :title, presence: true, length: { maximum: 100 }</p>
+<p>  validates :email, uniqueness: true</p>
+<p>end</p>
+</code></pre></figure>
+
+<strong>Django</strong>:
+<figure class="code"><pre><code>class Snippet(models.Model):
+<p>    title = models.CharField(max_length=100)</p>
+
+<p>    def clean(self):</p>
+<p>        if not self.title:</p>
+<p>            raise ValidationError("Title required")</p>
+</code></pre></figure>
+
+<strong>Ecto</strong>:
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title])</p>
+<p>  |> validate_required([:title])</p>
+<p>  |> validate_length(:title, max: 100)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Ecto's approach is more explicit and functional - validations are data transformations, not class methods.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="04.03-ecto-schemas.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.05-crud-operations.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

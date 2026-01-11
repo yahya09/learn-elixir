@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Controller Testing &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Controller Testing</span>
+            </div>
+            <div>
+                &lsaquo; <a href="13.01-unit-testing.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="13.03-integration-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 13.2</div>
+        <h1>Chapter 13.2: Controller Testing</h1>
+
+<p>Controller tests verify HTTP endpoints, request handling, and response generation. In this chapter, we'll explore Phoenix controller testing patterns.</p>
+
+<h2>ConnCase Setup</h2>
+
+<figure class="code"><figcaption>File: test/support/conn_case.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ConnCase do</p>
+<p>  use ExUnit.CaseTemplate</p>
+
+<p>  using do</p>
+<p>    quote do</p>
+<p>      @endpoint SnippetboxWeb.Endpoint</p>
+
+<p>      use SnippetboxWeb, :verified_routes</p>
+
+<p>      import Plug.Conn</p>
+<p>      import Phoenix.ConnTest</p>
+<p>      import SnippetboxWeb.ConnCase</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  setup tags do</p>
+<p>    Snippetbox.DataCase.setup_sandbox(tags)</p>
+<p>    {:ok, conn: Phoenix.ConnTest.build_conn()}</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Setup helper that registers and logs in users.</p>
+<p>  """</p>
+<p>  def register_and_log_in_user(%{conn: conn}) do</p>
+<p>    user = Snippetbox.AccountsFixtures.user_fixture()</p>
+<p>    %{conn: log_in_user(conn, user), user: user}</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Logs the given <code>user</code> into the <code>conn</code>.</p>
+<p>  """</p>
+<p>  def log_in_user(conn, user) do</p>
+<p>    token = Snippetbox.Accounts.generate_user_session_token(user)</p>
+
+<p>    conn</p>
+<p>    |> Phoenix.ConnTest.init_test_session(%{})</p>
+<p>    |> Plug.Conn.put_session(:user_token, token)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Basic Controller Tests</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/page_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.PageControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  test "GET /", %{conn: conn} do</p>
+<p>    conn = get(conn, ~p"/")</p>
+
+<p>    assert html_response(conn, 200) =~ "Welcome to Snippetbox"</p>
+<p>  end</p>
+
+<p>  test "GET /about", %{conn: conn} do</p>
+<p>    conn = get(conn, ~p"/about")</p>
+
+<p>    assert html_response(conn, 200) =~ "About"</p>
+<p>  end</p>
+
+<p>  test "returns 404 for unknown routes", %{conn: conn} do</p>
+<p>    assert_raise Phoenix.Router.NoRouteError, fn -></p>
+<p>      get(conn, "/nonexistent")</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Resource Controller Tests</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/snippet_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Snippetbox.SnippetsFixtures</p>
+<p>  import Snippetbox.AccountsFixtures</p>
+
+<p>  @create_attrs %{title: "Test Snippet", content: "code", language: "elixir"}</p>
+<p>  @update_attrs %{title: "Updated Snippet"}</p>
+<p>  @invalid_attrs %{title: nil, content: nil}</p>
+
+<p>  describe "index" do</p>
+<p>    test "lists all snippets", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/snippets")</p>
+<p>      assert html_response(conn, 200) =~ "Snippets"</p>
+<p>    end</p>
+
+<p>    test "displays snippets", %{conn: conn} do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      conn = get(conn, ~p"/snippets")</p>
+
+<p>      assert html_response(conn, 200) =~ snippet.title</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "show" do</p>
+<p>    test "shows snippet", %{conn: conn} do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      conn = get(conn, ~p"/snippets/#{snippet}")</p>
+
+<p>      assert html_response(conn, 200) =~ snippet.title</p>
+<p>    end</p>
+
+<p>    test "returns 404 for invalid id", %{conn: conn} do</p>
+<p>      assert_raise Ecto.NoResultsError, fn -></p>
+<p>        get(conn, ~p"/snippets/999999")</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "new" do</p>
+<p>    setup [:register_and_log_in_user]</p>
+
+<p>    test "renders form", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/snippets/new")</p>
+<p>      assert html_response(conn, 200) =~ "New Snippet"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "new (unauthenticated)" do</p>
+<p>    test "redirects to login", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/snippets/new")</p>
+
+<p>      assert redirected_to(conn) == ~p"/login"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create" do</p>
+<p>    setup [:register_and_log_in_user]</p>
+
+<p>    test "redirects to show when data is valid", %{conn: conn} do</p>
+<p>      conn = post(conn, ~p"/snippets", snippet: @create_attrs)</p>
+
+<p>      assert %{id: id} = redirected_params(conn)</p>
+<p>      assert redirected_to(conn) == ~p"/snippets/#{id}"</p>
+
+<p>      conn = get(conn, ~p"/snippets/#{id}")</p>
+<p>      assert html_response(conn, 200) =~ @create_attrs.title</p>
+<p>    end</p>
+
+<p>    test "renders errors when data is invalid", %{conn: conn} do</p>
+<p>      conn = post(conn, ~p"/snippets", snippet: @invalid_attrs)</p>
+
+<p>      assert html_response(conn, 200) =~ "can&#39;t be blank"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "edit" do</p>
+<p>    setup [:register_and_log_in_user]</p>
+
+<p>    test "renders form for editing chosen snippet", %{conn: conn, user: user} do</p>
+<p>      snippet = snippet_fixture(%{user_id: user.id})</p>
+<p>      conn = get(conn, ~p"/snippets/#{snippet}/edit")</p>
+
+<p>      assert html_response(conn, 200) =~ "Edit Snippet"</p>
+<p>    end</p>
+
+<p>    test "returns 403 for other user's snippet", %{conn: conn} do</p>
+<p>      other_user = user_fixture()</p>
+<p>      snippet = snippet_fixture(%{user_id: other_user.id})</p>
+
+<p>      conn = get(conn, ~p"/snippets/#{snippet}/edit")</p>
+
+<p>      assert response(conn, 403) =~ "Forbidden"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "update" do</p>
+<p>    setup [:register_and_log_in_user]</p>
+
+<p>    test "redirects when data is valid", %{conn: conn, user: user} do</p>
+<p>      snippet = snippet_fixture(%{user_id: user.id})</p>
+<p>      conn = put(conn, ~p"/snippets/#{snippet}", snippet: @update_attrs)</p>
+
+<p>      assert redirected_to(conn) == ~p"/snippets/#{snippet}"</p>
+
+<p>      conn = get(conn, ~p"/snippets/#{snippet}")</p>
+<p>      assert html_response(conn, 200) =~ "Updated Snippet"</p>
+<p>    end</p>
+
+<p>    test "renders errors when data is invalid", %{conn: conn, user: user} do</p>
+<p>      snippet = snippet_fixture(%{user_id: user.id})</p>
+<p>      conn = put(conn, ~p"/snippets/#{snippet}", snippet: @invalid_attrs)</p>
+
+<p>      assert html_response(conn, 200) =~ "can&#39;t be blank"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "delete" do</p>
+<p>    setup [:register_and_log_in_user]</p>
+
+<p>    test "deletes chosen snippet", %{conn: conn, user: user} do</p>
+<p>      snippet = snippet_fixture(%{user_id: user.id})</p>
+<p>      conn = delete(conn, ~p"/snippets/#{snippet}")</p>
+
+<p>      assert redirected_to(conn) == ~p"/snippets"</p>
+
+<p>      assert_raise Ecto.NoResultsError, fn -></p>
+<p>        get(conn, ~p"/snippets/#{snippet}")</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing JSON APIs</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/api/snippet_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Api.SnippetControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Snippetbox.SnippetsFixtures</p>
+
+<p>  @create_attrs %{title: "API Snippet", content: "code", language: "elixir"}</p>
+<p>  @invalid_attrs %{title: nil}</p>
+
+<p>  setup %{conn: conn} do</p>
+<p>    {:ok, conn: put_req_header(conn, "accept", "application/json")}</p>
+<p>  end</p>
+
+<p>  describe "index" do</p>
+<p>    test "lists all snippets", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/api/snippets")</p>
+<p>      assert json_response(conn, 200)["data"] == []</p>
+<p>    end</p>
+
+<p>    test "returns snippets", %{conn: conn} do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      conn = get(conn, ~p"/api/snippets")</p>
+
+<p>      assert [%{"id" => id, "title" => title}] = json_response(conn, 200)["data"]</p>
+<p>      assert id == snippet.id</p>
+<p>      assert title == snippet.title</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "show" do</p>
+<p>    test "returns snippet", %{conn: conn} do</p>
+<p>      snippet = snippet_fixture()</p>
+<p>      conn = get(conn, ~p"/api/snippets/#{snippet}")</p>
+
+<p>      assert %{</p>
+<p>               "id" => id,</p>
+<p>               "title" => title,</p>
+<p>               "content" => content,</p>
+<p>               "language" => language</p>
+<p>             } = json_response(conn, 200)["data"]</p>
+
+<p>      assert id == snippet.id</p>
+<p>      assert title == snippet.title</p>
+<p>      assert content == snippet.content</p>
+<p>      assert language == snippet.language</p>
+<p>    end</p>
+
+<p>    test "returns 404 for invalid id", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/api/snippets/999999")</p>
+<p>      assert json_response(conn, 404)["errors"] != %{}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create" do</p>
+<p>    setup [:authenticate_api]</p>
+
+<p>    test "creates snippet when data is valid", %{conn: conn} do</p>
+<p>      conn = post(conn, ~p"/api/snippets", snippet: @create_attrs)</p>
+
+<p>      assert %{"id" => id} = json_response(conn, 201)["data"]</p>
+
+<p>      conn = get(conn, ~p"/api/snippets/#{id}")</p>
+<p>      assert json_response(conn, 200)["data"]["title"] == "API Snippet"</p>
+<p>    end</p>
+
+<p>    test "returns errors when data is invalid", %{conn: conn} do</p>
+<p>      conn = post(conn, ~p"/api/snippets", snippet: @invalid_attrs)</p>
+<p>      assert json_response(conn, 422)["errors"] != %{}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create (unauthenticated)" do</p>
+<p>    test "returns 401", %{conn: conn} do</p>
+<p>      conn = post(conn, ~p"/api/snippets", snippet: @create_attrs)</p>
+<p>      assert json_response(conn, 401)["errors"]["detail"] =~ "unauthenticated"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp authenticate_api(%{conn: conn}) do</p>
+<p>    user = Snippetbox.AccountsFixtures.user_fixture()</p>
+<p>    token = Snippetbox.Accounts.generate_api_token(user)</p>
+
+<p>    conn =</p>
+<p>      conn</p>
+<p>      |> put_req_header("authorization", "Bearer #{token}")</p>
+
+<p>    %{conn: conn, user: user}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Authentication</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/user_session_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserSessionControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  import Snippetbox.AccountsFixtures</p>
+
+<p>  setup do</p>
+<p>    %{user: user_fixture()}</p>
+<p>  end</p>
+
+<p>  describe "new" do</p>
+<p>    test "renders login page", %{conn: conn} do</p>
+<p>      conn = get(conn, ~p"/login")</p>
+<p>      assert html_response(conn, 200) =~ "Log In"</p>
+<p>    end</p>
+
+<p>    test "redirects if already logged in", %{conn: conn, user: user} do</p>
+<p>      conn = conn |> log_in_user(user) |> get(~p"/login")</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "create" do</p>
+<p>    test "logs in the user with valid credentials", %{conn: conn, user: user} do</p>
+<p>      conn =</p>
+<p>        post(conn, ~p"/login", %{</p>
+<p>          "user" => %{"email" => user.email, "password" => valid_user_password()}</p>
+<p>        })</p>
+
+<p>      assert get_session(conn, :user_token)</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+
+<p>      # Now do a request with the session</p>
+<p>      conn = get(conn, ~p"/")</p>
+<p>      response = html_response(conn, 200)</p>
+<p>      assert response =~ user.email</p>
+<p>    end</p>
+
+<p>    test "logs in with remember me", %{conn: conn, user: user} do</p>
+<p>      conn =</p>
+<p>        post(conn, ~p"/login", %{</p>
+<p>          "user" => %{</p>
+<p>            "email" => user.email,</p>
+<p>            "password" => valid_user_password(),</p>
+<p>            "remember_me" => "true"</p>
+<p>          }</p>
+<p>        })</p>
+
+<p>      assert conn.resp_cookies["_snippetbox_web_user_remember_me"]</p>
+<p>    end</p>
+
+<p>    test "renders errors with invalid credentials", %{conn: conn} do</p>
+<p>      conn =</p>
+<p>        post(conn, ~p"/login", %{</p>
+<p>          "user" => %{"email" => "invalid@example.com", "password" => "invalid"}</p>
+<p>        })</p>
+
+<p>      response = html_response(conn, 200)</p>
+<p>      assert response =~ "Log In"</p>
+<p>      assert response =~ "Invalid email or password"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "delete" do</p>
+<p>    test "logs out the user", %{conn: conn, user: user} do</p>
+<p>      conn = conn |> log_in_user(user) |> delete(~p"/logout")</p>
+
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>      refute get_session(conn, :user_token)</p>
+<p>    end</p>
+
+<p>    test "succeeds even if user not logged in", %{conn: conn} do</p>
+<p>      conn = delete(conn, ~p"/logout")</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Flash Messages</h2>
+
+<figure class="code"><pre><code>test "shows success flash after create", %{conn: conn} do
+<p>  conn = post(conn, ~p"/snippets", snippet: @create_attrs)</p>
+
+<p>  assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Snippet created"</p>
+<p>end</p>
+
+<p>test "shows error flash for failed login", %{conn: conn} do</p>
+<p>  conn = post(conn, ~p"/login", %{"user" => %{"email" => "bad", "password" => "bad"}})</p>
+
+<p>  assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "Invalid"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Redirects</h2>
+
+<figure class="code"><pre><code>test "redirects to snippet after create", %{conn: conn} do
+<p>  conn = post(conn, ~p"/snippets", snippet: @create_attrs)</p>
+
+<p>  assert %{id: id} = redirected_params(conn)</p>
+<p>  assert redirected_to(conn) == ~p"/snippets/#{id}"</p>
+<p>end</p>
+
+<p>test "preserves return_to param", %{conn: conn} do</p>
+<p>  conn =</p>
+<p>    conn</p>
+<p>    |> put_session(:user_return_to, "/snippets/42")</p>
+<p>    |> post(~p"/login", %{"user" => %{"email" => email, "password" => password}})</p>
+
+<p>  assert redirected_to(conn) == "/snippets/42"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Response Headers</h2>
+
+<figure class="code"><pre><code>test "sets cache control header", %{conn: conn} do
+<p>  conn = get(conn, ~p"/api/snippets")</p>
+
+<p>  assert get_resp_header(conn, "cache-control") == ["max-age=3600, public"]</p>
+<p>end</p>
+
+<p>test "sets content type for JSON", %{conn: conn} do</p>
+<p>  conn = get(conn, ~p"/api/snippets")</p>
+
+<p>  assert get_resp_header(conn, "content-type") == ["application/json; charset=utf-8"]</p>
+<p>end</p>
+
+<p>test "sets CORS headers", %{conn: conn} do</p>
+<p>  conn = get(conn, ~p"/api/snippets")</p>
+
+<p>  assert get_resp_header(conn, "access-control-allow-origin") == ["*"]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing File Uploads</h2>
+
+<figure class="code"><pre><code>describe "file upload" do
+<p>  setup [:register_and_log_in_user]</p>
+
+<p>  test "uploads file successfully", %{conn: conn} do</p>
+<p>    upload = %Plug.Upload{</p>
+<p>      path: "test/fixtures/example.ex",</p>
+<p>      filename: "example.ex",</p>
+<p>      content_type: "text/plain"</p>
+<p>    }</p>
+
+<p>    conn = post(conn, ~p"/snippets/import", %{"file" => upload})</p>
+
+<p>    assert redirected_to(conn) =~ "/snippets/"</p>
+<p>    assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Imported"</p>
+<p>  end</p>
+
+<p>  test "rejects invalid file type", %{conn: conn} do</p>
+<p>    upload = %Plug.Upload{</p>
+<p>      path: "test/fixtures/image.png",</p>
+<p>      filename: "image.png",</p>
+<p>      content_type: "image/png"</p>
+<p>    }</p>
+
+<p>    conn = post(conn, ~p"/snippets/import", %{"file" => upload})</p>
+
+<p>    assert html_response(conn, 200) =~ "Invalid file type"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Plugs</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/plugs/require_auth_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RequireAuthTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  alias SnippetboxWeb.Plugs.RequireAuth</p>
+
+<p>  describe "call/2" do</p>
+<p>    test "passes through authenticated user", %{conn: conn} do</p>
+<p>      user = Snippetbox.AccountsFixtures.user_fixture()</p>
+<p>      conn = conn |> log_in_user(user) |> RequireAuth.call([])</p>
+
+<p>      assert conn.assigns.current_user == user</p>
+<p>      refute conn.halted</p>
+<p>    end</p>
+
+<p>    test "redirects unauthenticated user", %{conn: conn} do</p>
+<p>      conn =</p>
+<p>        conn</p>
+<p>        |> fetch_flash()</p>
+<p>        |> RequireAuth.call([])</p>
+
+<p>      assert conn.halted</p>
+<p>      assert redirected_to(conn) == ~p"/login"</p>
+<p>    end</p>
+
+<p>    test "returns 401 for API requests", %{conn: conn} do</p>
+<p>      conn =</p>
+<p>        conn</p>
+<p>        |> put_req_header("accept", "application/json")</p>
+<p>        |> RequireAuth.call([])</p>
+
+<p>      assert conn.halted</p>
+<p>      assert json_response(conn, 401)["errors"]["detail"] =~ "unauthenticated"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Immutable Request/Response</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix tests follow the functional pattern of transforming connections:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Each function returns a new conn
+<p>conn</p>
+<p>|> put_req_header("accept", "application/json")</p>
+<p>|> post("/api/snippets", snippet: attrs)</p>
+<p>|> json_response(201)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># The original conn is never modified</p>
+<p># Each step produces a new connection struct</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes tests predictable and easy to compose.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>ConnCase setup and helpers</li>
+<li>Testing CRUD controllers</li>
+<li>Testing JSON APIs</li>
+<li>Testing authentication</li>
+<li>Testing flash messages and redirects</li>
+<li>Testing response headers</li>
+<li>Testing file uploads</li>
+<li>Testing plugs</li>
+</ul>
+
+<p>In the next chapter, we'll explore integration testing.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="13.01-unit-testing.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="13.03-integration-testing.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

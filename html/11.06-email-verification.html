@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Email Verification &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Email Verification</span>
+            </div>
+            <div>
+                &lsaquo; <a href="11.05-password-reset.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="11.07-oauth.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 11.6</div>
+        <h1>Chapter 11.6: Email Verification</h1>
+
+<p>Email verification confirms users own their email addresses. In this chapter, we'll implement a complete email confirmation flow.</p>
+
+<h2>Why Verify Emails?</h2>
+
+<ul>
+<li><strong>Prevent typos</strong> in email addresses</li>
+<li><strong>Reduce spam accounts</strong></li>
+<li><strong>Enable password recovery</strong></li>
+<li><strong>Validate user identity</strong></li>
+<li><strong>Compliance requirements</strong></li>
+</ul>
+
+<h2>Confirmation Flow</h2>
+
+<figure class="code"><pre><code>1. User registers
+<ol>
+<li>Account created (unconfirmed)</li>
+<li>Confirmation email sent</li>
+<li>User clicks confirmation link</li>
+<li>Account marked as confirmed</li>
+<li>Full access granted</li>
+</ol>
+</code></pre></figure>
+
+<h2>Schema Updates</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/user.ex</figcaption><pre><code class="language-elixir">
+<p>schema "users" do</p>
+<p>  field :email, :string</p>
+<p>  field :name, :string</p>
+<p>  field :password, :string, virtual: true, redact: true</p>
+<p>  field :hashed_password, :string, redact: true</p>
+<p>  field :confirmed_at, :naive_datetime  # New field</p>
+
+<p>  timestamps()</p>
+<p>end</p>
+
+<p>@doc """</p>
+<p>Confirms the account by setting <code>confirmed_at</code>.</p>
+<p>"""</p>
+<p>def confirm_changeset(user) do</p>
+<p>  now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)</p>
+<p>  change(user, confirmed_at: now)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Migration</h2>
+
+<figure class="code"><figcaption>File: priv/repo/migrations/YYYYMMDDHHMMSS_add_confirmed_at_to_users.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Repo.Migrations.AddConfirmedAtToUsers do</p>
+<p>  use Ecto.Migration</p>
+
+<p>  def change do</p>
+<p>    alter table(:users) do</p>
+<p>      add :confirmed_at, :naive_datetime</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Context Functions</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>@doc """</p>
+<p>Delivers the confirmation email instructions to the given user.</p>
+<p>"""</p>
+<p>def deliver_user_confirmation_instructions(%User{} = user, confirmation_url_fun)</p>
+<p>    when is_function(confirmation_url_fun, 1) do</p>
+<p>  if user.confirmed_at do</p>
+<p>    {:error, :already_confirmed}</p>
+<p>  else</p>
+<p>    {encoded_token, user_token} = UserToken.build_email_token(user, "confirm")</p>
+<p>    Repo.insert!(user_token)</p>
+<p>    UserNotifier.deliver_confirmation_instructions(user, confirmation_url_fun.(encoded_token))</p>
+<p>  end</p>
+<p>end</p>
+
+<p>@doc """</p>
+<p>Confirms a user by the given token.</p>
+<p>"""</p>
+<p>def confirm_user(token) do</p>
+<p>  with {:ok, query} <- UserToken.verify_email_token_query(token, "confirm"),</p>
+<p>       %User{} = user <- Repo.one(query),</p>
+<p>       {:ok, %{user: user}} <- Repo.transaction(confirm_user_multi(user)) do</p>
+<p>    {:ok, user}</p>
+<p>  else</p>
+<p>    _ -> :error</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp confirm_user_multi(user) do</p>
+<p>  Ecto.Multi.new()</p>
+<p>  |> Ecto.Multi.update(:user, User.confirm_changeset(user))</p>
+<p>  |> Ecto.Multi.delete_all(:tokens, UserToken.by_user_and_contexts_query(user, ["confirm"]))</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Email Notifier</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/user_notifier.ex</figcaption><pre><code class="language-elixir">
+<p>@doc """</p>
+<p>Deliver instructions to confirm account.</p>
+<p>"""</p>
+<p>def deliver_confirmation_instructions(user, url) do</p>
+<p>  deliver(user.email, "Confirm your account", """</p>
+<p>  Hi #{user.name},</p>
+
+<p>  Welcome to Snippetbox! Please confirm your account by visiting the URL below:</p>
+
+<p>  #{url}</p>
+
+<p>  If you didn't create an account with us, please ignore this email.</p>
+
+<p>  This link will expire in 7 days.</p>
+<p>  """)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Controller</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/user_confirmation_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserConfirmationController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  def new(conn, _params) do</p>
+<p>    render(conn, :new)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"user" => %{"email" => email}}) do</p>
+<p>    if user = Accounts.get_user_by_email(email) do</p>
+<p>      Accounts.deliver_user_confirmation_instructions(</p>
+<p>        user,</p>
+<p>        &url(~p"/confirm/#{&1}")</p>
+<p>      )</p>
+<p>    end</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "If your email is in our system and it has not been confirmed yet, you will receive an email with instructions shortly.")</p>
+<p>    |> redirect(to: ~p"/")</p>
+<p>  end</p>
+
+<p>  def edit(conn, %{"token" => token}) do</p>
+<p>    render(conn, :edit, token: token)</p>
+<p>  end</p>
+
+<p>  def update(conn, %{"token" => token}) do</p>
+<p>    case Accounts.confirm_user(token) do</p>
+<p>      {:ok, _} -></p>
+<p>        conn</p>
+<p>        |> put_flash(:info, "Your account has been confirmed successfully.")</p>
+<p>        |> redirect(to: ~p"/login")</p>
+
+<p>      :error -></p>
+<p>        case conn.assigns do</p>
+<p>          %{current_user: %{confirmed_at: confirmed_at}} when not is_nil(confirmed_at) -></p>
+<p>            redirect(conn, to: ~p"/")</p>
+
+<p>          %{} -></p>
+<p>            conn</p>
+<p>            |> put_flash(:error, "Confirmation link is invalid or has expired.")</p>
+<p>            |> redirect(to: ~p"/")</p>
+<p>        end</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Templates</h2>
+
+<h3>Request Confirmation</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/user_confirmation_html/new.html.heex %>
+
+<div class="mx-auto max-w-md">
+<p>  <.header class="text-center"></p>
+<p>    Resend confirmation instructions</p>
+<p>    <:subtitle>We'll send a new confirmation link to your email</:subtitle></p>
+<p>  </.header></p>
+
+<p>  <.form for={%{}} action={~p"/confirm"} as={:user} class="mt-8"></p>
+<p>    <.input name="email" type="email" label="Email" required /></p>
+<p>    <.button class="mt-6 w-full">Resend confirmation instructions</.button></p>
+<p>  </.form></p>
+
+<p>  <p class="mt-4 text-center text-sm"></p>
+<p>    <.link href={~p"/register"}>Register</.link> |</p>
+<p>    <.link href={~p"/login"}>Log in</.link></p>
+</p>
+</div>
+</code></pre></figure>
+
+<h3>Confirm Account</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/user_confirmation_html/edit.html.heex %>
+
+<div class="mx-auto max-w-md text-center">
+<p>  <.header></p>
+<p>    Confirm Account</p>
+<p>    <:subtitle>Click the button below to confirm your account</:subtitle></p>
+<p>  </.header></p>
+
+<p>  <.form for={%{}} action={~p"/confirm/#{@token}"} method="put" class="mt-8"></p>
+<p>    <.button class="w-full">Confirm my account</.button></p>
+<p>  </.form></p>
+
+<p>  <p class="mt-4 text-sm text-gray-600"></p>
+<p>    <.link href={~p"/confirm"}></p>
+<p>      Didn't receive confirmation instructions?</p>
+<p>    </.link></p>
+</p>
+</div>
+</code></pre></figure>
+
+<h2>Router</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :redirect_if_user_is_authenticated]</p>
+
+<p>  get "/confirm", UserConfirmationController, :new</p>
+<p>  post "/confirm", UserConfirmationController, :create</p>
+<p>  get "/confirm/:token", UserConfirmationController, :edit</p>
+<p>  put "/confirm/:token", UserConfirmationController, :update</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Registration Integration</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/user_registration_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def create(conn, %{"user" => user_params}) do</p>
+<p>  case Accounts.register_user(user_params) do</p>
+<p>    {:ok, user} -></p>
+<p>      {:ok, _} =</p>
+<p>        Accounts.deliver_user_confirmation_instructions(</p>
+<p>          user,</p>
+<p>          &url(~p"/confirm/#{&1}")</p>
+<p>        )</p>
+
+<p>      conn</p>
+<p>      |> put_flash(:info, "Account created! Please check your email to confirm your account.")</p>
+<p>      |> redirect(to: ~p"/login")</p>
+
+<p>    {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>      render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Requiring Confirmation</h2>
+
+<h3>Plug for Confirmed Users</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/user_auth.ex</figcaption><pre><code class="language-elixir">
+<p>@doc """</p>
+<p>Requires the user to have confirmed their email.</p>
+<p>"""</p>
+<p>def require_confirmed_user(conn, _opts) do</p>
+<p>  user = conn.assigns[:current_user]</p>
+
+<p>  if user && user.confirmed_at do</p>
+<p>    conn</p>
+<p>  else</p>
+<p>    conn</p>
+<p>    |> put_flash(:error, "Please confirm your email to continue.")</p>
+<p>    |> redirect(to: ~p"/confirm")</p>
+<p>    |> halt()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Router Usage</h3>
+
+<figure class="code"><pre><code># Routes requiring confirmation
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :require_authenticated_user, :require_confirmed_user]</p>
+
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+
+<h1>Routes for unconfirmed users (limited access)</h1>
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>  get "/confirm", UserConfirmationController, :new</p>
+<p>  post "/confirm", UserConfirmationController, :create</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Resend Confirmation</h2>
+
+<p>Add button in user interface:</p>
+
+<figure class="code"><pre><code><%= if @current_user && !@current_user.confirmed_at do %>
+<p>  <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-4"></p>
+<p>    <p class="text-yellow-800"></p>
+<p>      Your email hasn't been confirmed yet.</p>
+<p>      <.link href={~p"/confirm"} class="font-medium underline"></p>
+<p>        Resend confirmation email</p>
+<p>      </.link></p>
+</p>
+<p>  </div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Email Change Confirmation</h2>
+
+<p>When users change their email:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>@doc """</p>
+<p>Delivers the update email instructions to the given user.</p>
+<p>"""</p>
+<p>def deliver_user_update_email_instructions(%User{} = user, current_email, update_email_url_fun) do</p>
+<p>  {encoded_token, user_token} = UserToken.build_email_token(user, "change:#{current_email}")</p>
+<p>  Repo.insert!(user_token)</p>
+<p>  UserNotifier.deliver_update_email_instructions(user, update_email_url_fun.(encoded_token))</p>
+<p>end</p>
+
+<p>@doc """</p>
+<p>Updates the user email using the given token.</p>
+<p>"""</p>
+<p>def update_user_email(user, token) do</p>
+<p>  context = "change:#{user.email}"</p>
+
+<p>  with {:ok, query} <- UserToken.verify_change_email_token_query(token, context),</p>
+<p>       %UserToken{sent_to: email} <- Repo.one(query),</p>
+<p>       {:ok, _} <- Repo.transaction(user_email_multi(user, email, context)) do</p>
+<p>    :ok</p>
+<p>  else</p>
+<p>    _ -> :error</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp user_email_multi(user, email, context) do</p>
+<p>  changeset = user |> User.email_changeset(%{email: email}) |> User.confirm_changeset()</p>
+
+<p>  Ecto.Multi.new()</p>
+<p>  |> Ecto.Multi.update(:user, changeset)</p>
+<p>  |> Ecto.Multi.delete_all(:tokens, UserToken.by_user_and_contexts_query(user, [context]))</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Email Verification</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/user_confirmation_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserConfirmationControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  alias Snippetbox.Accounts</p>
+<p>  import Snippetbox.AccountsFixtures</p>
+
+<p>  setup do</p>
+<p>    %{user: user_fixture()}</p>
+<p>  end</p>
+
+<p>  describe "GET /confirm/:token" do</p>
+<p>    test "renders confirmation page", %{conn: conn, user: user} do</p>
+<p>      token = extract_user_token(fn url -></p>
+<p>        Accounts.deliver_user_confirmation_instructions(user, fn t -> url <> t end)</p>
+<p>      end)</p>
+
+<p>      conn = get(conn, ~p"/confirm/#{token}")</p>
+<p>      assert html_response(conn, 200) =~ "Confirm Account"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "PUT /confirm/:token" do</p>
+<p>    test "confirms the user", %{conn: conn, user: user} do</p>
+<p>      token = extract_user_token(fn url -></p>
+<p>        Accounts.deliver_user_confirmation_instructions(user, fn t -> url <> t end)</p>
+<p>      end)</p>
+
+<p>      conn = put(conn, ~p"/confirm/#{token}")</p>
+
+<p>      assert redirected_to(conn) == ~p"/login"</p>
+<p>      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "confirmed"</p>
+<p>      assert Accounts.get_user!(user.id).confirmed_at</p>
+<p>    end</p>
+
+<p>    test "does not confirm with invalid token", %{conn: conn} do</p>
+<p>      conn = put(conn, ~p"/confirm/invalid")</p>
+
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "invalid"</p>
+<p>    end</p>
+
+<p>    test "does not confirm already confirmed user", %{conn: conn, user: user} do</p>
+<p>      Accounts.confirm_user(extract_token(user))</p>
+
+<p>      token = extract_user_token(fn url -></p>
+<p>        Accounts.deliver_user_confirmation_instructions(user, fn t -> url <> t end)</p>
+<p>      end)</p>
+
+<p>      # Second confirmation should fail gracefully</p>
+<p>      conn = put(conn, ~p"/confirm/#{token}")</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: State Transitions</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Email confirmation is a state transition:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # User states
+<p>:unconfirmed → :confirmed</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Transition is atomic</p>
+<p>Ecto.Multi.new()</p>
+<p>|> Ecto.Multi.update(:user, confirm_changeset)</p>
+<p>|> Ecto.Multi.delete_all(:tokens, token_query)</p>
+<p>|> Repo.transaction()</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Either both updates succeed or neither does—no partial states.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Email verification flow</li>
+<li>Token generation for confirmation</li>
+<li>Sending confirmation emails</li>
+<li>Confirming user accounts</li>
+<li>Requiring confirmation for features</li>
+<li>Resending confirmation emails</li>
+<li>Email change confirmation</li>
+<li>Testing email verification</li>
+</ul>
+
+<p>In the next chapter, we'll explore OAuth integration.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="11.05-password-reset.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="11.07-oauth.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

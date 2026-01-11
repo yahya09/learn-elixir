@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Displaying Data &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Displaying Data</span>
+            </div>
+            <div>
+                &lsaquo; <a href="05.00-dynamic-templates.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="05.02-template-actions.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 5.1</div>
+        <h1>Chapter 5.1: Displaying Data</h1>
+
+<p>In this chapter, we'll connect our database to our templates, displaying snippets dynamically on our pages.</p>
+
+<h2>The Complete Flow</h2>
+
+<figure class="code"><pre><code>1. Request arrives at router
+<ol>
+<li>Router dispatches to controller</li>
+<li>Controller queries database via context</li>
+<li>Controller passes data to template</li>
+<li>Template renders HTML with data</li>
+<li>Response sent to browser</li>
+</ol>
+</code></pre></figure>
+
+<h2>Setting Up the Controller</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    snippets = Snippets.list_public_snippets()</p>
+<p>    render(conn, :index, snippets: snippets)</p>
+<p>  end</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The Context Layer</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  import Ecto.Query</p>
+<p>  alias Snippetbox.Repo</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  def list_public_snippets do</p>
+<p>    Snippet</p>
+<p>    |> where([s], s.is_public == true)</p>
+<p>    |> where([s], is_nil(s.expires_at) or s.expires_at > ^DateTime.utc_now())</p>
+<p>    |> order_by([s], desc: s.inserted_at)</p>
+<p>    |> Repo.all()</p>
+<p>  end</p>
+
+<p>  def get_snippet!(id) do</p>
+<p>    Repo.get!(Snippet, id)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The View Module</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "snippet_html/*"</p>
+
+<p>  def format_date(datetime) do</p>
+<p>    Calendar.strftime(datetime, "%B %d, %Y at %H:%M")</p>
+<p>  end</p>
+
+<p>  def time_ago(datetime) do</p>
+<p>    diff = DateTime.diff(DateTime.utc_now(), datetime, :second)</p>
+
+<p>    cond do</p>
+<p>      diff < 60 -> "just now"</p>
+<p>      diff < 3600 -> "#{div(diff, 60)} minutes ago"</p>
+<p>      diff < 86400 -> "#{div(diff, 3600)} hours ago"</p>
+<p>      diff < 604800 -> "#{div(diff, 86400)} days ago"</p>
+<p>      true -> format_date(datetime)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Displaying a Single Record</h2>
+
+<h3>Show Template</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/show.html.heex %>
+
+<article class="snippet">
+<p>  <header class="snippet-header"></p>
+<p>    <h1><%= @snippet.title %></h1></p>
+<p>    <div class="snippet-meta"></p>
+<p>      <span class="language"><%= @snippet.language %></span></p>
+<p>      <span class="date">Created <%= time_ago(@snippet.inserted_at) %></span></p>
+<p>      <%= if @snippet.expires_at do %></p>
+<p>        <span class="expires">Expires <%= format_date(@snippet.expires_at) %></span></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>  </header></p>
+
+<p>  <div class="snippet-content"></p>
+<p>    <pre><code class={@snippet.language}><%= @snippet.content %></code></pre></p>
+<p>  </div></p>
+
+<p>  <footer class="snippet-footer"></p>
+<p>    <span class="views"><%= @snippet.views_count %> views</span></p>
+<p>    <div class="actions"></p>
+<p>      <a href={~p"/snippets/#{@snippet}/edit"} class="btn btn-secondary">Edit</a></p>
+<p>      <button class="btn btn-copy" data-content={@snippet.content}>Copy</button></p>
+<p>    </div></p>
+<p>  </footer></p>
+</article>
+</code></pre></figure>
+
+<h2>Understanding Assigns</h2>
+
+<p>Data passed from controller to template becomes <strong>assigns</strong>:</p>
+
+<figure class="code"><pre><code># Controller
+<p>render(conn, :show, snippet: snippet, user: current_user, can_edit: true)</p>
+
+<h1>Template - access with @</h1>
+<%= @snippet.title %>
+<%= @user.name %>
+<%= if @can_edit, do: "Edit button" %>
+</code></pre></figure>
+
+<h3>Checking for Assigns</h3>
+
+<figure class="code"><pre><code><%# Safe access - returns nil if not set %>
+<%= assigns[:optional_value] %>
+
+<%# With default %>
+<%= assigns[:page_title] || "Snippetbox" %>
+
+<%# Check if set %>
+<%= if assigns[:flash_message] do %>
+<p>  <div class="flash"><%= @flash_message %></div></p>
+<% end %>
+</code></pre></figure>
+
+<h2>Displaying Collections</h2>
+
+<h3>Index Template</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/index.html.heex %>
+
+<div class="page-header">
+<p>  <h1>Latest Snippets</h1></p>
+<p>  <a href={~p"/snippets/new"} class="btn btn-primary">New Snippet</a></p>
+</div>
+
+<%= if Enum.empty?(@snippets) do %>
+<p>  <div class="empty-state"></p>
+<p>    <p>No snippets yet.</p></p>
+<p>    <a href={~p"/snippets/new"}>Create your first snippet</a></p>
+<p>  </div></p>
+<% else %>
+<p>  <div class="snippets-list"></p>
+<p>    <%= for snippet <- @snippets do %></p>
+<p>      <article class="snippet-card"></p>
+<p>        <h2></p>
+<p>          <a href={~p"/snippets/#{snippet}"}><%= snippet.title %></a></p>
+<p>        </h2></p>
+<p>        <div class="meta"></p>
+<p>          <span class="language"><%= snippet.language %></span></p>
+<p>          <span class="date"><%= time_ago(snippet.inserted_at) %></span></p>
+<p>        </div></p>
+<p>        <p class="preview"><%= truncate(snippet.content, 100) %></p></p>
+<p>      </article></p>
+<p>    <% end %></p>
+<p>  </div></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Adding the Truncate Helper</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_html.ex</figcaption><pre><code class="language-elixir">
+<p>def truncate(text, max_length \\ 100) do</p>
+<p>  if String.length(text) > max_length do</p>
+<p>    text</p>
+<p>    |> String.slice(0, max_length)</p>
+<p>    |> String.trim_trailing()</p>
+<p>    |> Kernel.<>("...")</p>
+<p>  else</p>
+<p>    text</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Displaying Associated Data</h2>
+
+<p>When you need related data, preload it in the controller:</p>
+
+<figure class="code"><pre><code># Controller
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet_with_user!(id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+
+<h1>Context</h1>
+<p>def get_snippet_with_user!(id) do</p>
+<p>  Snippet</p>
+<p>  |> Repo.get!(id)</p>
+<p>  |> Repo.preload(:user)</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code><%# Template %>
+<article class="snippet">
+<p>  <h1><%= @snippet.title %></h1></p>
+<p>  <p class="author"></p>
+<p>    By <%= @snippet.user.name %></p>
+</p>
+</article>
+</code></pre></figure>
+
+<h2>Handling Missing Data</h2>
+
+<h3>Nil Checks</h3>
+
+<figure class="code"><pre><code><%# Safe navigation %>
+<%= if @snippet.user do %>
+<p>  <span>By <%= @snippet.user.name %></span></p>
+<% else %>
+<p>  <span>Anonymous</span></p>
+<% end %>
+
+<%# Or with case %>
+<%= case @snippet.user do %>
+<p>  <% nil -> %></p>
+<p>    <span>Anonymous</span></p>
+<p>  <% user -> %></p>
+<p>    <span>By <%= user.name %></span></p>
+<% end %>
+</code></pre></figure>
+
+<h3>Default Values</h3>
+
+<figure class="code"><pre><code><%= @snippet.language || "plain text" %>
+<%= @snippet.views_count || 0 %>
+</code></pre></figure>
+
+<h2>Displaying Different Data Types</h2>
+
+<h3>Dates and Times</h3>
+
+<figure class="code"><pre><code><%# Full datetime %>
+<time datetime={DateTime.to_iso8601(@snippet.inserted_at)}>
+<p>  <%= Calendar.strftime(@snippet.inserted_at, "%B %d, %Y at %I:%M %p") %></p>
+</time>
+
+<%# Just date %>
+<%= Calendar.strftime(@snippet.inserted_at, "%Y-%m-%d") %>
+
+<%# Relative time %>
+<span title={DateTime.to_iso8601(@snippet.inserted_at)}>
+<p>  <%= time_ago(@snippet.inserted_at) %></p>
+</span>
+</code></pre></figure>
+
+<h3>Numbers</h3>
+
+<figure class="code"><pre><code><%# With formatting %>
+<%= Number.Delimited.number_to_delimited(@snippet.views_count) %>
+<%# Output: 1,234,567 %>
+
+<%# Or simple helper %>
+<%= format_number(@snippet.views_count) %>
+</code></pre></figure>
+
+<figure class="code"><pre><code># Helper
+<p>def format_number(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"</p>
+<p>def format_number(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"</p>
+<p>def format_number(n), do: to_string(n)</p>
+</code></pre></figure>
+
+<h3>Booleans</h3>
+
+<figure class="code"><pre><code><%= if @snippet.is_public do %>
+<p>  <span class="badge public">Public</span></p>
+<% else %>
+<p>  <span class="badge private">Private</span></p>
+<% end %>
+
+<%# Or inline %>
+<span class="badge"><%= if @snippet.is_public, do: "Public", else: "Private" %></span>
+</code></pre></figure>
+
+<h3>Text with Line Breaks</h3>
+
+<figure class="code"><pre><code><%# Preserve line breaks %>
+<pre><%= @snippet.content %></pre>
+
+<%# Convert newlines to <br> tags %>
+<%= raw(String.replace(html_escape(@snippet.description), "\n", "<br>")) %>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: View as Pure Function</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Templates are conceptually pure functions:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> template(assigns) → HTML string
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Given the same assigns, you always get the same HTML. This makes templates:</p>
+<ul>
+<li><strong>Predictable</strong>: Output depends only on input</li>
+<li><strong>Testable</strong>: Pass assigns, check output</li>
+<li><strong>Cacheable</strong>: Same input = same output</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/templates.html">Phoenix Templates</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Passing data from controller to template</li>
+<li>Displaying single records and collections</li>
+<li>Working with assigns</li>
+<li>Handling nil values and defaults</li>
+<li>Formatting different data types</li>
+</ul>
+
+<p>In the next chapter, we'll build templates for all CRUD actions.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Debugging Templates</h3>
+
+<figure class="code"><pre><code><%# Print variable for debugging %>
+<pre><%= inspect(@snippet, pretty: true) %></pre>
+
+<%# Check all assigns %>
+<pre><%= inspect(assigns, pretty: true) %></pre>
+</code></pre></figure>
+
+<h3>Common Pitfalls</h3>
+
+<ol>
+<li><strong>Unloaded associations</strong>:</li>
+</ol>
+<figure class="code"><pre><code><%# This fails if user not preloaded %>
+<%= @snippet.user.name %>
+</code></pre></figure>
+
+<ol>
+<li><strong>Nil in template</strong>:</li>
+</ol>
+<figure class="code"><pre><code><%# This outputs nothing for nil %>
+<%= @nil_value %>
+
+<%# This crashes on method call %>
+<%= @nil_value.something %>
+</code></pre></figure>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="05.00-dynamic-templates.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="05.02-template-actions.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

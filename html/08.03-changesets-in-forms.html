@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Changesets in Forms &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Changesets in Forms</span>
+            </div>
+            <div>
+                &lsaquo; <a href="08.02-phoenix-forms.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="08.04-file-uploads.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 8.3</div>
+        <h1>Chapter 8.3: Changesets in Forms</h1>
+
+<p>Ecto changesets provide powerful validation and error handling for forms. In this chapter, we'll explore how changesets integrate with Phoenix forms.</p>
+
+<h2>Changeset Basics</h2>
+
+<h3>Creating a Changeset for Forms</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets.Snippet do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+<p>    field :language, :string</p>
+<p>    field :public, :boolean, default: true</p>
+<p>    field :expires_at, :utc_datetime</p>
+
+<p>    belongs_to :user, Snippetbox.Accounts.User</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Changeset for creating/updating snippets.</p>
+<p>  """</p>
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content, :language, :public, :expires_at])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>    |> validate_length(:title, min: 3, max: 100)</p>
+<p>    |> validate_length(:content, min: 1, max: 50_000)</p>
+<p>    |> validate_inclusion(:language, supported_languages())</p>
+<p>  end</p>
+
+<p>  defp supported_languages do</p>
+<p>    ~w(elixir javascript python ruby go rust typescript)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Context Functions</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  alias Snippetbox.Repo</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  @doc """</p>
+<p>  Returns a changeset for tracking snippet changes.</p>
+<p>  Used in forms to build the initial form state.</p>
+<p>  """</p>
+<p>  def change_snippet(%Snippet{} = snippet, attrs \\ %{}) do</p>
+<p>    Snippet.changeset(snippet, attrs)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Creates a snippet.</p>
+<p>  """</p>
+<p>  def create_snippet(attrs) do</p>
+<p>    %Snippet{}</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.insert()</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Updates a snippet.</p>
+<p>  """</p>
+<p>  def update_snippet(%Snippet{} = snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.update()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Controller Integration</h2>
+
+<h3>New Action (Empty Form)</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def new(conn, _params) do</p>
+<p>  changeset = Snippets.change_snippet(%Snippet{})</p>
+<p>  render(conn, :new, changeset: changeset)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Create Action (Process Form)</h3>
+
+<figure class="code"><pre><code>def create(conn, %{"snippet" => snippet_params}) do
+<p>  case Snippets.create_snippet(snippet_params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Snippet created successfully.")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>      # Re-render form with errors</p>
+<p>      render(conn, :new, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Edit Action (Populated Form)</h3>
+
+<figure class="code"><pre><code>def edit(conn, %{"id" => id}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+<p>  changeset = Snippets.change_snippet(snippet)</p>
+<p>  render(conn, :edit, snippet: snippet, changeset: changeset)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Update Action</h3>
+
+<figure class="code"><pre><code>def update(conn, %{"id" => id, "snippet" => snippet_params}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+
+<p>  case Snippets.update_snippet(snippet, snippet_params) do</p>
+<p>    {:ok, snippet} -></p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Snippet updated successfully.")</p>
+<p>      |> redirect(to: ~p"/snippets/#{snippet}")</p>
+
+<p>    {:error, %Ecto.Changeset{} = changeset} -></p>
+<p>      render(conn, :edit, snippet: snippet, changeset: changeset)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Form Template with Changeset</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/snippet_html/new.html.heex %>
+
+<.header>
+<p>  New Snippet</p>
+</.header>
+
+<.form for={@changeset} action={~p"/snippets"}>
+<p>  <.input field={@form[:title]} label="Title" /></p>
+<p>  <.input field={@form[:content]} type="textarea" label="Content" /></p>
+<p>  <.input</p>
+<p>    field={@form[:language]}</p>
+<p>    type="select"</p>
+<p>    label="Language"</p>
+<p>    prompt="Select..."</p>
+<p>    options={~w(elixir javascript python ruby go rust typescript)}</p>
+<p>  /></p>
+<p>  <.input field={@form[:public]} type="checkbox" label="Public" /></p>
+
+<p>  <.button>Create Snippet</.button></p>
+</.form>
+</code></pre></figure>
+
+<h2>How Errors Are Displayed</h2>
+
+<h3>Default Error Component</h3>
+
+<figure class="code"><pre><code># In core_components.ex
+
+<p>slot :inner_block, required: true</p>
+
+<p>def error(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <p class="mt-3 flex gap-3 text-sm leading-6 text-rose-600 phx-no-feedback:hidden"></p>
+<p>    <.icon name="hero-exclamation-circle-mini" class="mt-0.5 h-5 w-5 flex-none" /></p>
+<p>    <%= render_slot(@inner_block) %></p>
+</p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Error Translation</h3>
+
+<figure class="code"><pre><code># In core_components.ex
+
+<p>def translate_error({msg, opts}) do</p>
+<p>  # Handles interpolation like "should be at least %{count} characters"</p>
+<p>  Enum.reduce(opts, msg, fn {key, value}, acc -></p>
+<p>    String.replace(acc, "%{#{key}}", fn _ -> to_string(value) end)</p>
+<p>  end)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Changeset Errors Structure</h3>
+
+<figure class="code"><pre><code># When validation fails, changeset contains errors:
+<p>%Ecto.Changeset{</p>
+<p>  valid?: false,</p>
+<p>  errors: [</p>
+<p>    title: {"can't be blank", [validation: :required]},</p>
+<p>    content: {"should be at least %{count} character(s)", [count: 1, validation: :length, kind: :min]}</p>
+<p>  ]</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>Validation Types</h2>
+
+<h3>Required Fields</h3>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :language])</p>
+<p>  |> validate_required([:title, :content], message: "is required")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Length Validation</h3>
+
+<figure class="code"><pre><code>|> validate_length(:title, min: 3, message: "must be at least 3 characters")
+<p>|> validate_length(:title, max: 100, message: "must be at most 100 characters")</p>
+<p>|> validate_length(:content, min: 1, max: 50_000)</p>
+</code></pre></figure>
+
+<h3>Format Validation</h3>
+
+<figure class="code"><pre><code>|> validate_format(:email, ~r/^[^\s]+@[^\s]+$/, message: "must be a valid email")
+<p>|> validate_format(:username, ~r/^[a-z0-9_]+$/, message: "only lowercase letters, numbers, and underscores")</p>
+</code></pre></figure>
+
+<h3>Inclusion/Exclusion</h3>
+
+<figure class="code"><pre><code>|> validate_inclusion(:language, ~w(elixir javascript python))
+<p>|> validate_exclusion(:username, ~w(admin root system))</p>
+</code></pre></figure>
+
+<h3>Number Validation</h3>
+
+<figure class="code"><pre><code>|> validate_number(:expires_in, greater_than: 0, less_than_or_equal_to: 365)
+</code></pre></figure>
+
+<h3>Custom Validation</h3>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content])</p>
+<p>  |> validate_required([:title, :content])</p>
+<p>  |> validate_no_profanity(:title)</p>
+<p>  |> validate_no_profanity(:content)</p>
+<p>end</p>
+
+<p>defp validate_no_profanity(changeset, field) do</p>
+<p>  validate_change(changeset, field, fn _, value -></p>
+<p>    if contains_profanity?(value) do</p>
+<p>      [{field, "contains inappropriate content"}]</p>
+<p>    else</p>
+<p>      []</p>
+<p>    end</p>
+<p>  end)</p>
+<p>end</p>
+
+<p>defp contains_profanity?(text) do</p>
+<p>  # Your profanity detection logic</p>
+<p>  false</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Conditional Validation</h2>
+
+<figure class="code"><pre><code>def changeset(snippet, attrs) do
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :public, :password])</p>
+<p>  |> validate_required([:title, :content])</p>
+<p>  |> maybe_require_password()</p>
+<p>end</p>
+
+<p>defp maybe_require_password(changeset) do</p>
+<p>  if get_field(changeset, :public) == false do</p>
+<p>    validate_required(changeset, [:password], message: "required for private snippets")</p>
+<p>  else</p>
+<p>    changeset</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Multiple Changesets</h2>
+
+<h3>Different Changesets for Different Actions</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets/snippet.ex</figcaption><pre><code class="language-elixir">
+<p>def create_changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :language])</p>
+<p>  |> validate_required([:title, :content])</p>
+<p>  |> validate_length(:title, min: 3, max: 100)</p>
+<p>end</p>
+
+<p>def update_changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:title, :content, :language, :public])</p>
+<p>  |> validate_required([:title, :content])</p>
+<p>  |> validate_length(:title, min: 3, max: 100)</p>
+<p>end</p>
+
+<p>def publish_changeset(snippet, attrs) do</p>
+<p>  snippet</p>
+<p>  |> cast(attrs, [:published_at])</p>
+<p>  |> put_change(:published_at, DateTime.utc_now())</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Nested Forms with Associations</h2>
+
+<h3>Schema with Association</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Snippets.Snippet do
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Changeset</p>
+
+<p>  schema "snippets" do</p>
+<p>    field :title, :string</p>
+<p>    field :content, :string</p>
+
+<p>    has_many :tags, Snippetbox.Snippets.Tag, on_replace: :delete</p>
+
+<p>    timestamps()</p>
+<p>  end</p>
+
+<p>  def changeset(snippet, attrs) do</p>
+<p>    snippet</p>
+<p>    |> cast(attrs, [:title, :content])</p>
+<p>    |> validate_required([:title, :content])</p>
+<p>    |> cast_assoc(:tags, with: &Snippetbox.Snippets.Tag.changeset/2)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Nested Form Template</h3>
+
+<figure class="code"><pre><code><.form for={@changeset} action={~p"/snippets"}>
+<p>  <.input field={@form[:title]} label="Title" /></p>
+<p>  <.input field={@form[:content]} type="textarea" label="Content" /></p>
+
+<p>  <fieldset class="mt-4"></p>
+<p>    <legend>Tags</legend></p>
+<p>    <.inputs_for :let={tag_form} field={@form[:tags]}></p>
+<p>      <.input field={tag_form[:name]} label="Tag Name" /></p>
+<p>    </.inputs_for></p>
+<p>  </fieldset></p>
+
+<p>  <.button>Save</.button></p>
+</.form>
+</code></pre></figure>
+
+<h2>Displaying All Errors</h2>
+
+<h3>Error Summary Component</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/core_components.ex</figcaption><pre><code class="language-elixir">
+<p>attr :changeset, Ecto.Changeset, required: true</p>
+<p>attr :title, :string, default: "Please fix the following errors:"</p>
+
+<p>def error_summary(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div :if={@changeset.action} class="bg-red-50 border border-red-200 rounded p-4 mb-6"></p>
+<p>    <h3 class="text-red-800 font-medium"><%= @title %></h3></p>
+<p>    <ul class="mt-2 list-disc list-inside text-red-700"></p>
+<p>      <li :for={{field, errors} <- @changeset.errors}></p>
+<p>        <strong><%= humanize(field) %>:</strong></p>
+<p>        <%= Enum.map_join(errors, ", ", &translate_error/1) %></p>
+<p>      </li></p>
+<p>    </ul></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+
+<p>defp humanize(atom) when is_atom(atom) do</p>
+<p>  atom</p>
+<p>  |> Atom.to_string()</p>
+<p>  |> String.replace("_", " ")</p>
+<p>  |> String.capitalize()</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code><.error_summary changeset={@changeset} />
+
+<.form for={@changeset} action={~p"/snippets"}>
+<p>  <%# ... %></p>
+</.form>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Validation as Data</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Ecto represents validation state as data:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Changeset is just data describing the transformation
+<p>%Ecto.Changeset{</p>
+<p>  data: %Snippet{},           # Original data</p>
+<p>  params: %{"title" => "..."},# Input parameters</p>
+<p>  changes: %{title: "..."},   # Applied changes</p>
+<p>  errors: [],                 # Validation errors</p>
+<p>  valid?: true                # Overall validity</p>
+<p>}</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes validation:</p>
+<ul>
+<li>Inspectable (you can examine the state)</li>
+<li>Composable (chain validations together)</li>
+<li>Testable (just check the changeset data)</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/ecto/Ecto.Changeset.html">Ecto Changeset Documentation</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating changesets for forms</li>
+<li>Controller patterns for create/edit</li>
+<li>How form errors are displayed</li>
+<li>Various validation types</li>
+<li>Conditional validation</li>
+<li>Multiple changesets for different actions</li>
+<li>Nested forms with associations</li>
+<li>Displaying error summaries</li>
+</ul>
+
+<p>In the next chapter, we'll explore file uploads.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="08.02-phoenix-forms.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="08.04-file-uploads.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

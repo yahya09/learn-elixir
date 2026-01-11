@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Phoenix Pipelines &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Phoenix Pipelines</span>
+            </div>
+            <div>
+                &lsaquo; <a href="06.01-understanding-plugs.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="06.03-creating-custom-plugs.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 6.2</div>
+        <h1>Chapter 6.2: Phoenix Pipelines</h1>
+
+<p>Phoenix organizes plugs into pipelines for different request types. In this chapter, we'll explore how to use and configure pipelines in the router.</p>
+
+<h2>What Are Pipelines?</h2>
+
+<p>Pipelines are named groups of plugs that run for specific routes:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :browser do</p>
+<p>  plug :accepts, ["html"]</p>
+<p>  plug :fetch_session</p>
+<p>  plug :fetch_live_flash</p>
+<p>  plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>  plug :protect_from_forgery</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+
+<p>pipeline :api do</p>
+<p>  plug :accepts, ["json"]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>The Default Browser Pipeline</h2>
+
+<p>Let's understand each plug:</p>
+
+<figure class="code"><pre><code>pipeline :browser do
+<p>  # Accept only HTML format</p>
+<p>  plug :accepts, ["html"]</p>
+
+<p>  # Load session data</p>
+<p>  plug :fetch_session</p>
+
+<p>  # Load flash messages for LiveView</p>
+<p>  plug :fetch_live_flash</p>
+
+<p>  # Set the root layout</p>
+<p>  plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+
+<p>  # CSRF protection</p>
+<p>  plug :protect_from_forgery</p>
+
+<p>  # Security headers</p>
+<p>  plug :put_secure_browser_headers</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>accepts</h3>
+
+<p>Checks the Accept header and sets the format:</p>
+
+<figure class="code"><pre><code>plug :accepts, ["html"]  # Only HTML
+<p>plug :accepts, ["html", "json"]  # HTML or JSON</p>
+</code></pre></figure>
+
+<h3>fetch_session</h3>
+
+<p>Loads session data into conn:</p>
+
+<figure class="code"><pre><code># After fetch_session:
+<p>get_session(conn, :user_id)  # Works</p>
+</code></pre></figure>
+
+<h3>protect_from_forgery</h3>
+
+<p>Adds CSRF protection:</p>
+<ul>
+<li>Requires valid CSRF token on POST/PUT/PATCH/DELETE</li>
+<li>Token provided by <code>get_csrf_token()</code> in forms</li>
+</ul>
+
+<h3>put_secure_browser_headers</h3>
+
+<p>Adds security headers:</p>
+
+<figure class="code"><pre><code>x-frame-options: SAMEORIGIN
+<p>x-content-type-options: nosniff</p>
+<p>x-xss-protection: 1; mode=block</p>
+<p>x-download-options: noopen</p>
+<p>x-permitted-cross-domain-policies: none</p>
+</code></pre></figure>
+
+<h2>The API Pipeline</h2>
+
+<figure class="code"><pre><code>pipeline :api do
+<p>  plug :accepts, ["json"]</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Simpler because APIs don't need:</p>
+<ul>
+<li>Sessions (use tokens instead)</li>
+<li>CSRF (not applicable to APIs)</li>
+<li>Browser headers</li>
+</ul>
+
+<h2>Using Pipelines</h2>
+
+<h3>Basic Usage</h3>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through :browser</p>
+
+<p>  get "/", PageController, :home</p>
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+
+<p>scope "/api", SnippetboxWeb.API do</p>
+<p>  pipe_through :api</p>
+
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Stacking Pipelines</h3>
+
+<figure class="code"><pre><code>scope "/admin", SnippetboxWeb.Admin do
+<p>  pipe_through [:browser, :require_admin]</p>
+
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Order matters - plugs run in order defined.</p>
+
+<h2>Creating Custom Pipelines</h2>
+
+<h3>Authentication Pipeline</h3>
+
+<figure class="code"><pre><code>pipeline :auth do
+<p>  plug :fetch_current_user</p>
+<p>end</p>
+
+<p>pipeline :require_auth do</p>
+<p>  plug :require_authenticated_user</p>
+<p>end</p>
+
+<p>pipeline :require_admin do</p>
+<p>  plug :require_admin_user</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>API Authentication</h3>
+
+<figure class="code"><pre><code>pipeline :api_auth do
+<p>  plug :fetch_api_user</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Using Custom Pipelines</h3>
+
+<figure class="code"><pre><code>scope "/", SnippetboxWeb do
+<p>  pipe_through [:browser, :auth]</p>
+
+<p>  get "/", PageController, :home</p>
+<p>  resources "/snippets", SnippetController, only: [:index, :show]</p>
+<p>end</p>
+
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :auth, :require_auth]</p>
+
+<p>  resources "/snippets", SnippetController, only: [:new, :create, :edit, :update, :delete]</p>
+<p>  get "/account", UserController, :show</p>
+<p>end</p>
+
+<p>scope "/admin", SnippetboxWeb.Admin do</p>
+<p>  pipe_through [:browser, :auth, :require_admin]</p>
+
+<p>  resources "/users", UserController</p>
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Pipeline Plug Implementations</h2>
+
+<h3>fetch_current_user</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.Auth do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  def fetch_current_user(conn, _opts) do</p>
+<p>    user_id = get_session(conn, :user_id)</p>
+<p>    user = user_id && Accounts.get_user(user_id)</p>
+<p>    assign(conn, :current_user, user)</p>
+<p>  end</p>
+
+<p>  def require_authenticated_user(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "You must log in to access this page.")</p>
+<p>      |> redirect(to: "/login")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def require_admin_user(conn, _opts) do</p>
+<p>    user = conn.assigns[:current_user]</p>
+
+<p>    if user && user.role == :admin do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "You must be an admin to access this page.")</p>
+<p>      |> redirect(to: "/")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Import in router:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>import SnippetboxWeb.Plugs.Auth</p>
+
+<p>pipeline :auth do</p>
+<p>  plug :fetch_current_user</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>API Token Authentication</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.APIAuth do
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def fetch_api_user(conn, _opts) do</p>
+<p>    with ["Bearer " <> token] <- get_req_header(conn, "authorization"),</p>
+<p>         {:ok, user} <- Snippetbox.Accounts.verify_api_token(token) do</p>
+<p>      assign(conn, :current_user, user)</p>
+<p>    else</p>
+<p>      _ -></p>
+<p>        conn</p>
+<p>        |> put_status(:unauthorized)</p>
+<p>        |> json(%{error: "Invalid or missing API token"})</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Pipeline for Different Layouts</h2>
+
+<figure class="code"><pre><code>pipeline :auth_layout do
+<p>  plug :put_layout, html: {SnippetboxWeb.Layouts, :auth}</p>
+<p>end</p>
+
+<p>scope "/auth", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :auth_layout]</p>
+
+<p>  get "/login", SessionController, :new</p>
+<p>  post "/login", SessionController, :create</p>
+<p>  get "/register", UserController, :new</p>
+<p>  post "/register", UserController, :create</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Full Router Example</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  import SnippetboxWeb.Plugs.Auth</p>
+
+<p>  pipeline :browser do</p>
+<p>    plug :accepts, ["html"]</p>
+<p>    plug :fetch_session</p>
+<p>    plug :fetch_live_flash</p>
+<p>    plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>    plug :protect_from_forgery</p>
+<p>    plug :put_secure_browser_headers</p>
+<p>  end</p>
+
+<p>  pipeline :api do</p>
+<p>    plug :accepts, ["json"]</p>
+<p>  end</p>
+
+<p>  pipeline :auth do</p>
+<p>    plug :fetch_current_user</p>
+<p>  end</p>
+
+<p>  pipeline :require_auth do</p>
+<p>    plug :require_authenticated_user</p>
+<p>  end</p>
+
+<p>  pipeline :require_admin do</p>
+<p>    plug :require_admin_user</p>
+<p>  end</p>
+
+<p>  # Public browser routes</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through [:browser, :auth]</p>
+
+<p>    get "/", PageController, :home</p>
+<p>    get "/about", PageController, :about</p>
+<p>    resources "/snippets", SnippetController, only: [:index, :show]</p>
+<p>  end</p>
+
+<p>  # Auth routes</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through [:browser]</p>
+
+<p>    get "/login", SessionController, :new</p>
+<p>    post "/login", SessionController, :create</p>
+<p>    delete "/logout", SessionController, :delete</p>
+<p>    get "/register", UserController, :new</p>
+<p>    post "/register", UserController, :create</p>
+<p>  end</p>
+
+<p>  # Authenticated routes</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through [:browser, :auth, :require_auth]</p>
+
+<p>    resources "/snippets", SnippetController, only: [:new, :create, :edit, :update, :delete]</p>
+<p>    get "/account", UserController, :show</p>
+<p>    put "/account", UserController, :update</p>
+<p>  end</p>
+
+<p>  # Admin routes</p>
+<p>  scope "/admin", SnippetboxWeb.Admin, as: :admin do</p>
+<p>    pipe_through [:browser, :auth, :require_admin]</p>
+
+<p>    get "/", DashboardController, :index</p>
+<p>    resources "/users", UserController</p>
+<p>    resources "/snippets", SnippetController</p>
+<p>  end</p>
+
+<p>  # API routes</p>
+<p>  scope "/api/v1", SnippetboxWeb.API.V1, as: :api_v1 do</p>
+<p>    pipe_through :api</p>
+
+<p>    resources "/snippets", SnippetController, only: [:index, :show, :create]</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Function Composition</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Pipelines are function composition:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> pipe_through [:browser, :auth, :require_auth]
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Is like:</p>
+<p>conn</p>
+<p>|> browser_plug1()</p>
+<p>|> browser_plug2()</p>
+<p>|> auth_plug()</p>
+<p>|> require_auth_plug()</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each plug transforms the conn, and the result is passed to the next plug.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/routing.html">Phoenix Router</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Default browser and API pipelines</li>
+<li>Creating custom pipelines</li>
+<li>Stacking multiple pipelines</li>
+<li>Implementing authentication plugs</li>
+<li>Organizing routes with pipelines</li>
+</ul>
+
+<p>In the next chapter, we'll create custom plugs from scratch.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="06.01-understanding-plugs.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="06.03-creating-custom-plugs.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

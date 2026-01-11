@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Error Pages &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Error Pages</span>
+            </div>
+            <div>
+                &lsaquo; <a href="03.03-custom-error-responses.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="03.05-logging.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 3.4</div>
+        <h1>Chapter 3.4: Custom Error Pages</h1>
+
+<p>In the previous chapter, we covered error handling basics. Now we'll create polished, user-friendly error pages that maintain your application's look and feel.</p>
+
+<h2>Error Page Requirements</h2>
+
+<p>Good error pages should:</p>
+
+<ol>
+<li><strong>Match your design</strong> - Same branding as the rest of your app</li>
+<li><strong>Be helpful</strong> - Tell users what happened and what to do</li>
+<li><strong>Be self-contained</strong> - Work even if assets fail to load</li>
+<li><strong>Not leak information</strong> - Hide technical details in production</li>
+</ol>
+
+<h2>Standalone vs Layout-Based Error Pages</h2>
+
+<h3>Standalone (Recommended)</h3>
+
+<p>Error pages with inline CSS don't depend on external assets:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/error_html/404.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title>Not Found - Snippetbox</title></p>
+<p>  <style></p>
+<p>    /<em> Inline styles ensure page works even if CSS fails </em>/</p>
+<p>    :root {</p>
+<p>      --primary: #4f46e5;</p>
+<p>      --gray-50: #f9fafb;</p>
+<p>      --gray-600: #4b5563;</p>
+<p>      --gray-900: #111827;</p>
+<p>    }</p>
+
+<p>    * {</p>
+<p>      margin: 0;</p>
+<p>      padding: 0;</p>
+<p>      box-sizing: border-box;</p>
+<p>    }</p>
+
+<p>    body {</p>
+<p>      font-family: system-ui, -apple-system, sans-serif;</p>
+<p>      background: var(--gray-50);</p>
+<p>      min-height: 100vh;</p>
+<p>      display: flex;</p>
+<p>      flex-direction: column;</p>
+<p>    }</p>
+
+<p>    header {</p>
+<p>      background: white;</p>
+<p>      border-bottom: 1px solid #e5e7eb;</p>
+<p>      padding: 1rem 2rem;</p>
+<p>    }</p>
+
+<p>    .logo {</p>
+<p>      font-weight: 700;</p>
+<p>      font-size: 1.25rem;</p>
+<p>      color: var(--primary);</p>
+<p>      text-decoration: none;</p>
+<p>    }</p>
+
+<p>    main {</p>
+<p>      flex: 1;</p>
+<p>      display: flex;</p>
+<p>      align-items: center;</p>
+<p>      justify-content: center;</p>
+<p>      padding: 2rem;</p>
+<p>    }</p>
+
+<p>    .error-container {</p>
+<p>      text-align: center;</p>
+<p>      max-width: 500px;</p>
+<p>    }</p>
+
+<p>    .error-code {</p>
+<p>      font-size: 8rem;</p>
+<p>      font-weight: 700;</p>
+<p>      color: var(--primary);</p>
+<p>      line-height: 1;</p>
+<p>    }</p>
+
+<p>    .error-title {</p>
+<p>      font-size: 1.5rem;</p>
+<p>      color: var(--gray-900);</p>
+<p>      margin: 1rem 0;</p>
+<p>    }</p>
+
+<p>    .error-message {</p>
+<p>      color: var(--gray-600);</p>
+<p>      margin-bottom: 2rem;</p>
+<p>      line-height: 1.6;</p>
+<p>    }</p>
+
+<p>    .btn {</p>
+<p>      display: inline-block;</p>
+<p>      padding: 0.75rem 1.5rem;</p>
+<p>      background: var(--primary);</p>
+<p>      color: white;</p>
+<p>      text-decoration: none;</p>
+<p>      border-radius: 6px;</p>
+<p>      font-weight: 500;</p>
+<p>      transition: background 0.15s;</p>
+<p>    }</p>
+
+<p>    .btn:hover {</p>
+<p>      background: #4338ca;</p>
+<p>    }</p>
+
+<p>    .links {</p>
+<p>      margin-top: 1.5rem;</p>
+<p>    }</p>
+
+<p>    .links a {</p>
+<p>      color: var(--primary);</p>
+<p>      text-decoration: none;</p>
+<p>      margin: 0 0.5rem;</p>
+<p>    }</p>
+
+<p>    .links a:hover {</p>
+<p>      text-decoration: underline;</p>
+<p>    }</p>
+
+<p>    footer {</p>
+<p>      text-align: center;</p>
+<p>      padding: 1.5rem;</p>
+<p>      color: var(--gray-600);</p>
+<p>      font-size: 0.875rem;</p>
+<p>    }</p>
+<p>  </style></p>
+</head>
+<body>
+<p>  <header></p>
+<p>    <a href="/" class="logo">Snippetbox</a></p>
+<p>  </header></p>
+
+<p>  <main></p>
+<p>    <div class="error-container"></p>
+<p>      <div class="error-code">404</div></p>
+<p>      <h1 class="error-title">Page Not Found</h1></p>
+<p>      <p class="error-message"></p>
+<p>        The page you're looking for doesn't exist or has been moved.</p>
+<p>        Check the URL or navigate using the links below.</p>
+</p>
+<p>      <a href="/" class="btn">Go to Homepage</a></p>
+<p>      <div class="links"></p>
+<p>        <a href="/snippets">Browse Snippets</a></p>
+<p>        <a href="/about">About</a></p>
+<p>        <a href="/contact">Contact</a></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>  </main></p>
+
+<p>  <footer></p>
+<p>    &copy; 2024 Snippetbox. All rights reserved.</p>
+<p>  </footer></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h3>Layout-Based (Optional)</h3>
+
+<p>If you want error pages to use your app layout:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  render_errors: [</p>
+<p>    formats: [html: SnippetboxWeb.ErrorHTML, json: SnippetboxWeb.ErrorJSON],</p>
+<p>    layout: {SnippetboxWeb.Layouts, :error}  # Use error layout</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/error.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title><%= assigns[:page_title] || "Error" %> - Snippetbox</title></p>
+<p>  <%# Include compiled CSS %></p>
+<p>  <link rel="stylesheet" href="/assets/app.css"></p>
+</head>
+<body>
+<p>  <header></p>
+<p>    <nav class="container"></p>
+<p>      <a href="/" class="logo">Snippetbox</a></p>
+<p>    </nav></p>
+<p>  </header></p>
+
+<p>  <main class="container"></p>
+<p>    <%= @inner_content %></p>
+<p>  </main></p>
+
+<p>  <footer class="container"></p>
+<p>    <p>&copy; 2024 Snippetbox</p></p>
+<p>  </footer></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h2>Complete Error Pages</h2>
+
+<h3>404 - Not Found</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/error_html/404.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title>Page Not Found - Snippetbox</title></p>
+<p>  <style></p>
+<p>    :root { --primary: #4f46e5; --bg: #f9fafb; --text: #111827; --muted: #6b7280; }</p>
+<p>    * { margin: 0; padding: 0; box-sizing: border-box; }</p>
+<p>    body { font-family: system-ui, sans-serif; background: var(--bg); min-height: 100vh;</p>
+<p>           display: flex; flex-direction: column; }</p>
+<p>    header { background: white; border-bottom: 1px solid #e5e7eb; padding: 1rem 2rem; }</p>
+<p>    .logo { font-weight: 700; font-size: 1.25rem; color: var(--primary); text-decoration: none; }</p>
+<p>    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; }</p>
+<p>    .error { text-align: center; max-width: 500px; }</p>
+<p>    .code { font-size: 8rem; font-weight: 700; color: var(--primary); line-height: 1; }</p>
+<p>    h1 { font-size: 1.5rem; color: var(--text); margin: 1rem 0; }</p>
+<p>    p { color: var(--muted); margin-bottom: 2rem; line-height: 1.6; }</p>
+<p>    .btn { display: inline-block; padding: 0.75rem 1.5rem; background: var(--primary);</p>
+<p>           color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }</p>
+<p>    .btn:hover { background: #4338ca; }</p>
+<p>    footer { text-align: center; padding: 1.5rem; color: var(--muted); font-size: 0.875rem; }</p>
+<p>  </style></p>
+</head>
+<body>
+<p>  <header><a href="/" class="logo">Snippetbox</a></header></p>
+<p>  <main></p>
+<p>    <div class="error"></p>
+<p>      <div class="code">404</div></p>
+<p>      <h1>Page Not Found</h1></p>
+<p>      <p>Sorry, the page you're looking for doesn't exist or may have been moved.</p></p>
+<p>      <a href="/" class="btn">Back to Home</a></p>
+<p>    </div></p>
+<p>  </main></p>
+<p>  <footer>&copy; 2024 Snippetbox</footer></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h3>500 - Server Error</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/error_html/500.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title>Server Error - Snippetbox</title></p>
+<p>  <style></p>
+<p>    :root { --danger: #ef4444; --bg: #f9fafb; --text: #111827; --muted: #6b7280; --primary: #4f46e5; }</p>
+<p>    * { margin: 0; padding: 0; box-sizing: border-box; }</p>
+<p>    body { font-family: system-ui, sans-serif; background: var(--bg); min-height: 100vh;</p>
+<p>           display: flex; flex-direction: column; }</p>
+<p>    header { background: white; border-bottom: 1px solid #e5e7eb; padding: 1rem 2rem; }</p>
+<p>    .logo { font-weight: 700; font-size: 1.25rem; color: var(--primary); text-decoration: none; }</p>
+<p>    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; }</p>
+<p>    .error { text-align: center; max-width: 500px; }</p>
+<p>    .code { font-size: 8rem; font-weight: 700; color: var(--danger); line-height: 1; }</p>
+<p>    h1 { font-size: 1.5rem; color: var(--text); margin: 1rem 0; }</p>
+<p>    p { color: var(--muted); margin-bottom: 2rem; line-height: 1.6; }</p>
+<p>    .btn { display: inline-block; padding: 0.75rem 1.5rem; background: var(--primary);</p>
+<p>           color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }</p>
+<p>    .btn:hover { background: #4338ca; }</p>
+<p>    .retry { margin-top: 1rem; }</p>
+<p>    .retry a { color: var(--primary); text-decoration: none; }</p>
+<p>    footer { text-align: center; padding: 1.5rem; color: var(--muted); font-size: 0.875rem; }</p>
+<p>  </style></p>
+</head>
+<body>
+<p>  <header><a href="/" class="logo">Snippetbox</a></header></p>
+<p>  <main></p>
+<p>    <div class="error"></p>
+<p>      <div class="code">500</div></p>
+<p>      <h1>Something Went Wrong</h1></p>
+<p>      <p>We're experiencing technical difficulties. Our team has been notified and is working on it.</p></p>
+<p>      <a href="/" class="btn">Back to Home</a></p>
+<p>      <p class="retry">Or <a href="javascript:location.reload()">try refreshing the page</a></p></p>
+<p>    </div></p>
+<p>  </main></p>
+<p>  <footer>&copy; 2024 Snippetbox</footer></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h3>403 - Forbidden</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/error_html/403.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title>Access Denied - Snippetbox</title></p>
+<p>  <style></p>
+<p>    :root { --warning: #f59e0b; --bg: #f9fafb; --text: #111827; --muted: #6b7280; --primary: #4f46e5; }</p>
+<p>    * { margin: 0; padding: 0; box-sizing: border-box; }</p>
+<p>    body { font-family: system-ui, sans-serif; background: var(--bg); min-height: 100vh;</p>
+<p>           display: flex; flex-direction: column; }</p>
+<p>    header { background: white; border-bottom: 1px solid #e5e7eb; padding: 1rem 2rem; }</p>
+<p>    .logo { font-weight: 700; font-size: 1.25rem; color: var(--primary); text-decoration: none; }</p>
+<p>    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; }</p>
+<p>    .error { text-align: center; max-width: 500px; }</p>
+<p>    .code { font-size: 8rem; font-weight: 700; color: var(--warning); line-height: 1; }</p>
+<p>    h1 { font-size: 1.5rem; color: var(--text); margin: 1rem 0; }</p>
+<p>    p { color: var(--muted); margin-bottom: 2rem; line-height: 1.6; }</p>
+<p>    .btn { display: inline-block; padding: 0.75rem 1.5rem; background: var(--primary);</p>
+<p>           color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }</p>
+<p>    .btn:hover { background: #4338ca; }</p>
+<p>    footer { text-align: center; padding: 1.5rem; color: var(--muted); font-size: 0.875rem; }</p>
+<p>  </style></p>
+</head>
+<body>
+<p>  <header><a href="/" class="logo">Snippetbox</a></header></p>
+<p>  <main></p>
+<p>    <div class="error"></p>
+<p>      <div class="code">403</div></p>
+<p>      <h1>Access Denied</h1></p>
+<p>      <p>You don't have permission to access this resource. Please log in or contact support if you believe this is an error.</p></p>
+<p>      <a href="/login" class="btn">Log In</a></p>
+<p>    </div></p>
+<p>  </main></p>
+<p>  <footer>&copy; 2024 Snippetbox</footer></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h3>401 - Unauthorized</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/error_html/401.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<p>  <meta charset="utf-8"></p>
+<p>  <meta name="viewport" content="width=device-width, initial-scale=1"></p>
+<p>  <title>Login Required - Snippetbox</title></p>
+<p>  <style></p>
+<p>    :root { --info: #3b82f6; --bg: #f9fafb; --text: #111827; --muted: #6b7280; --primary: #4f46e5; }</p>
+<p>    * { margin: 0; padding: 0; box-sizing: border-box; }</p>
+<p>    body { font-family: system-ui, sans-serif; background: var(--bg); min-height: 100vh;</p>
+<p>           display: flex; flex-direction: column; }</p>
+<p>    header { background: white; border-bottom: 1px solid #e5e7eb; padding: 1rem 2rem; }</p>
+<p>    .logo { font-weight: 700; font-size: 1.25rem; color: var(--primary); text-decoration: none; }</p>
+<p>    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; }</p>
+<p>    .error { text-align: center; max-width: 500px; }</p>
+<p>    .code { font-size: 8rem; font-weight: 700; color: var(--info); line-height: 1; }</p>
+<p>    h1 { font-size: 1.5rem; color: var(--text); margin: 1rem 0; }</p>
+<p>    p { color: var(--muted); margin-bottom: 2rem; line-height: 1.6; }</p>
+<p>    .btn { display: inline-block; padding: 0.75rem 1.5rem; background: var(--primary);</p>
+<p>           color: white; text-decoration: none; border-radius: 6px; font-weight: 500; }</p>
+<p>    .btn:hover { background: #4338ca; }</p>
+<p>    .signup { margin-top: 1rem; color: var(--muted); }</p>
+<p>    .signup a { color: var(--primary); text-decoration: none; }</p>
+<p>    footer { text-align: center; padding: 1.5rem; color: var(--muted); font-size: 0.875rem; }</p>
+<p>  </style></p>
+</head>
+<body>
+<p>  <header><a href="/" class="logo">Snippetbox</a></header></p>
+<p>  <main></p>
+<p>    <div class="error"></p>
+<p>      <div class="code">401</div></p>
+<p>      <h1>Login Required</h1></p>
+<p>      <p>You need to be logged in to access this page.</p></p>
+<p>      <a href="/login" class="btn">Log In</a></p>
+<p>      <p class="signup">Don't have an account? <a href="/signup">Sign up</a></p></p>
+<p>    </div></p>
+<p>  </main></p>
+<p>  <footer>&copy; 2024 Snippetbox</footer></p>
+</body>
+</html>
+</code></pre></figure>
+
+<h2>Error HTML Module with All Templates</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/error_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorHTML do</p>
+<p>  @moduledoc """</p>
+<p>  Error pages for HTML responses.</p>
+
+<p>  Each template (404.html.heex, 500.html.heex, etc.) is self-contained</p>
+<p>  with inline styles to work even if CSS assets fail to load.</p>
+<p>  """</p>
+
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "error_html/*"</p>
+
+<p>  # Fallback for any status code without a template</p>
+<p>  def render(template, _assigns) do</p>
+<p>    Phoenix.Controller.status_message_from_template(template)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Error Pages</h2>
+
+<h3>View Test</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/error_html_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorHTMLTest do</p>
+<p>  use SnippetboxWeb.ConnCase, async: true</p>
+
+<p>  import Phoenix.Template</p>
+
+<p>  test "renders 404.html" do</p>
+<p>    html = render_to_string(SnippetboxWeb.ErrorHTML, "404", "html", [])</p>
+<p>    assert html =~ "404"</p>
+<p>    assert html =~ "Page Not Found"</p>
+<p>    assert html =~ "Back to Home"</p>
+<p>  end</p>
+
+<p>  test "renders 500.html" do</p>
+<p>    html = render_to_string(SnippetboxWeb.ErrorHTML, "500", "html", [])</p>
+<p>    assert html =~ "500"</p>
+<p>    assert html =~ "Something Went Wrong"</p>
+<p>  end</p>
+
+<p>  test "renders 403.html" do</p>
+<p>    html = render_to_string(SnippetboxWeb.ErrorHTML, "403", "html", [])</p>
+<p>    assert html =~ "403"</p>
+<p>    assert html =~ "Access Denied"</p>
+<p>  end</p>
+
+<p>  test "renders 401.html" do</p>
+<p>    html = render_to_string(SnippetboxWeb.ErrorHTML, "401", "html", [])</p>
+<p>    assert html =~ "401"</p>
+<p>    assert html =~ "Login Required"</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Integration Test</h3>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/error_integration_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorIntegrationTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  test "404 for non-existent route", %{conn: conn} do</p>
+<p>    conn = get(conn, "/this-route-does-not-exist")</p>
+<p>    assert html_response(conn, 404) =~ "Page Not Found"</p>
+<p>  end</p>
+
+<p>  test "404 for non-existent snippet", %{conn: conn} do</p>
+<p>    assert_error_sent 404, fn -></p>
+<p>      get(conn, ~p"/snippets/999999999")</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Adding Error Tracking</h2>
+
+<p>Send errors to a monitoring service:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/error_html.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.ErrorHTML do</p>
+<p>  use SnippetboxWeb, :html</p>
+
+<p>  embed_templates "error_html/*"</p>
+
+<p>  def render("500.html", assigns) do</p>
+<p>    # Report to error tracking service</p>
+<p>    if reason = assigns[:reason] do</p>
+<p>      Sentry.capture_exception(reason)</p>
+<p>      # Or: Honeybadger.notify(reason)</p>
+<p>      # Or: Rollbar.report(reason)</p>
+<p>    end</p>
+
+<p>    # Render the template</p>
+<p>    render("500.html", assigns)</p>
+<p>  end</p>
+
+<p>  def render(template, _assigns) do</p>
+<p>    Phoenix.Controller.status_message_from_template(template)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote>
+<strong>Design Principle: Error Pages as Marketing</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Error pages are often overlooked, but they're an opportunity:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<ul>
+<li><strong>Show personality</strong>: A friendly error page builds trust</li>
+<li><strong>Reduce frustration</strong>: Clear next steps help users</li>
+<li><strong>Maintain brand</strong>: Consistent design feels professional</li>
+<li><strong>Recover users</strong>: Links to popular pages reduce bounce</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Examples of great error pages:</p>
+<ul>
+<li>GitHub's 404 shows a star wars reference</li>
+<li>Pixar's 404 shows Sadness from Inside Out</li>
+<li>Slack's error page is apologetic and helpful</li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating standalone vs layout-based error pages</li>
+<li>Building custom 404, 500, 403, and 401 pages</li>
+<li>Inline CSS for self-contained error pages</li>
+<li>Testing error pages</li>
+<li>Error tracking integration</li>
+</ul>
+
+<p>In the next chapter, we'll explore logging and debugging.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Static Error Pages for Nginx</h3>
+
+<p>For complete resilience, create static HTML error pages:</p>
+
+<figure class="code"><pre><code># nginx.conf
+<p>error_page 502 503 504 /50x.html;</p>
+<p>location = /50x.html {</p>
+<p>    root /var/www/html/errors;</p>
+<p>    internal;</p>
+<p>}</p>
+</code></pre></figure>
+
+<p>This shows a static page even if Phoenix is down.</p>
+
+<h3>Error Page Checklist</h3>
+
+<ul>
+<li>[ ] 404 page with helpful navigation</li>
+<li>[ ] 500 page with reassuring message</li>
+<li>[ ] 403 page with login link</li>
+<li>[ ] 401 page with signup option</li>
+<li>[ ] Consistent branding on all pages</li>
+<li>[ ] Mobile-responsive design</li>
+<li>[ ] Works without external CSS/JS</li>
+<li>[ ] Contact information or support link</li>
+<li>[ ] Error tracking integration</li>
+</ul>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="03.03-custom-error-responses.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="03.05-logging.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

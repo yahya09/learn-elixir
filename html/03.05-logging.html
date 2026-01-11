@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Logging &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Logging</span>
+            </div>
+            <div>
+                &lsaquo; <a href="03.04-error-pages.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="04.00-database-driven-responses.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 3.5</div>
+        <h1>Chapter 3.5: Logging</h1>
+
+<p>Logging is essential for debugging, monitoring, and understanding your application's behavior. In this chapter, we'll explore Elixir's built-in Logger and Phoenix's logging capabilities.</p>
+
+<h2>Elixir's Logger</h2>
+
+<p>Elixir includes a powerful logging system out of the box:</p>
+
+<figure class="code"><pre><code>require Logger
+
+<p>Logger.debug("Debugging information")</p>
+<p>Logger.info("Something happened")</p>
+<p>Logger.warning("Watch out for this")  # Note: warning, not warn</p>
+<p>Logger.error("Something went wrong")</p>
+</code></pre></figure>
+
+<h2>Log Levels</h2>
+
+<p>Logger supports four levels (from least to most severe):</p>
+
+<p>| Level | Use For |</p>
+<p>|-------|---------|</p>
+<p>| <code>:debug</code> | Detailed diagnostic information |</p>
+<p>| <code>:info</code> | General operational messages |</p>
+<p>| <code>:warning</code> | Potential issues that aren't errors |</p>
+<p>| <code>:error</code> | Errors that need attention |</p>
+
+<figure class="code"><pre><code>require Logger
+
+<h1>Debug: Verbose info for development</h1>
+<p>Logger.debug("Processing snippet #{id} with params: #{inspect(params)}")</p>
+
+<h1>Info: Normal operations</h1>
+<p>Logger.info("User #{user.id} created snippet #{snippet.id}")</p>
+
+<h1>Warning: Something unusual</h1>
+<p>Logger.warning("Rate limit approaching for IP #{ip}")</p>
+
+<h1>Error: Something failed</h1>
+<p>Logger.error("Failed to send email: #{inspect(reason)}")</p>
+</code></pre></figure>
+
+<h2>Logger Configuration</h2>
+
+<h3>Development</h3>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<h1>Show all logs including debug</h1>
+<p>config :logger, :console,</p>
+<p>  format: "[$level] $message\n",</p>
+<p>  level: :debug</p>
+</code></pre></figure>
+
+<h3>Production</h3>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<h1>Only info and above (no debug)</h1>
+<p>config :logger,</p>
+<p>  level: :info</p>
+
+<p>config :logger, :console,</p>
+<p>  format: "$time $metadata[$level] $message\n",</p>
+<p>  metadata: [:request_id, :user_id]</p>
+</code></pre></figure>
+
+<h3>Test</h3>
+
+<figure class="code"><figcaption>File: config/test.exs</figcaption><pre><code class="language-elixir">
+<h1>Only warnings and errors (quiet tests)</h1>
+<p>config :logger, level: :warning</p>
+</code></pre></figure>
+
+<h2>Log Formats</h2>
+
+<h3>Custom Format</h3>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>config :logger, :console,</p>
+<p>  format: "$time $metadata[$level] $message\n",</p>
+<p>  metadata: [:request_id, :module, :function, :line]</p>
+</code></pre></figure>
+
+<p>Format variables:</p>
+<ul>
+<li><code>$time</code> - Timestamp</li>
+<li><code>$date</code> - Date</li>
+<li><code>$level</code> - Log level</li>
+<li><code>$message</code> - Log message</li>
+<li><code>$metadata</code> - Metadata key-value pairs</li>
+<li><code>$node</code> - Node name</li>
+</ul>
+
+<h3>JSON Format for Production</h3>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">defp deps do
+<p>  [{:logger_json, "~> 5.1"}]</p>
+<p>end</p>
+
+<h1>File: config/prod.exs</h1>
+<p>config :logger, backends: [LoggerJSON]</p>
+
+<p>config :logger_json, :backend,</p>
+<p>  metadata: [:request_id, :user_id, :module]</p>
+</code></pre></figure>
+
+<p>Output:</p>
+<figure class="code"><pre><code>{"time":"2024-01-15T10:30:00.000Z","level":"info","message":"User logged in","request_id":"abc123","user_id":42}
+</code></pre></figure>
+
+<h2>Logging in Phoenix</h2>
+
+<h3>Request Logging</h3>
+
+<p>Phoenix logs requests automatically:</p>
+
+<figure class="code"><pre><code>[info] GET /snippets
+<p>[info] Sent 200 in 15ms</p>
+</code></pre></figure>
+
+<p>Configure request logging:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]</p>
+
+<h1>Or disable request logging</h1>
+<h1>plug Plug.Logger, log: false</h1>
+</code></pre></figure>
+
+<h3>Controller Logging</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.SnippetController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  require Logger</p>
+
+<p>  def show(conn, %{"id" => id}) do</p>
+<p>    Logger.info("Fetching snippet", snippet_id: id)</p>
+
+<p>    snippet = Snippets.get_snippet!(id)</p>
+
+<p>    Logger.debug("Snippet retrieved",</p>
+<p>      snippet_id: snippet.id,</p>
+<p>      title: snippet.title,</p>
+<p>      size: byte_size(snippet.content)</p>
+<p>    )</p>
+
+<p>    render(conn, :show, snippet: snippet)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"snippet" => params}) do</p>
+<p>    case Snippets.create_snippet(params) do</p>
+<p>      {:ok, snippet} -></p>
+<p>        Logger.info("Snippet created",</p>
+<p>          snippet_id: snippet.id,</p>
+<p>          user_id: conn.assigns[:current_user]&.id</p>
+<p>        )</p>
+<p>        redirect(conn, to: ~p"/snippets/#{snippet}")</p>
+
+<p>      {:error, changeset} -></p>
+<p>        Logger.warning("Snippet creation failed",</p>
+<p>          errors: inspect(changeset.errors)</p>
+<p>        )</p>
+<p>        render(conn, :new, changeset: changeset)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Context Logging</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  require Logger</p>
+
+<p>  def create_snippet(attrs) do</p>
+<p>    Logger.debug("Creating snippet with attrs: #{inspect(attrs)}")</p>
+
+<p>    result =</p>
+<p>      %Snippet{}</p>
+<p>      |> Snippet.changeset(attrs)</p>
+<p>      |> Repo.insert()</p>
+
+<p>    case result do</p>
+<p>      {:ok, snippet} -></p>
+<p>        Logger.info("Snippet created: #{snippet.id}")</p>
+<p>      {:error, changeset} -></p>
+<p>        Logger.warning("Failed to create snippet: #{inspect(changeset.errors)}")</p>
+<p>    end</p>
+
+<p>    result</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Metadata</h2>
+
+<p>Add contextual information to logs:</p>
+
+<h3>Request Metadata</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/logger_metadata.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.LoggerMetadata do</p>
+<p>  @behaviour Plug</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, _opts) do</p>
+<p>    Logger.metadata(</p>
+<p>      request_id: conn.assigns[:request_id],</p>
+<p>      remote_ip: format_ip(conn.remote_ip),</p>
+<p>      user_agent: get_user_agent(conn)</p>
+<p>    )</p>
+
+<p>    conn</p>
+<p>  end</p>
+
+<p>  defp format_ip({a, b, c, d}), do: "#{a}.#{b}.#{c}.#{d}"</p>
+<p>  defp format_ip(ip), do: inspect(ip)</p>
+
+<p>  defp get_user_agent(conn) do</p>
+<p>    case Plug.Conn.get_req_header(conn, "user-agent") do</p>
+<p>      [ua | _] -> ua</p>
+<p>      _ -> "unknown"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Add to your endpoint:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>plug Plug.RequestId</p>
+<p>plug SnippetboxWeb.Plugs.LoggerMetadata</p>
+</code></pre></figure>
+
+<h3>User Metadata</h3>
+
+<figure class="code"><pre><code># In authentication plug
+<p>def call(conn, _opts) do</p>
+<p>  user = get_current_user(conn)</p>
+
+<p>  if user do</p>
+<p>    Logger.metadata(user_id: user.id, user_email: user.email)</p>
+<p>    assign(conn, :current_user, user)</p>
+<p>  else</p>
+<p>    conn</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Structured Logging</h2>
+
+<p>Log with structured data:</p>
+
+<figure class="code"><pre><code>require Logger
+
+<h1>With keyword list metadata</h1>
+<p>Logger.info("User action",</p>
+<p>  action: "login",</p>
+<p>  user_id: 123,</p>
+<p>  ip: "192.168.1.1",</p>
+<p>  duration_ms: 45</p>
+<p>)</p>
+
+<h1>In JSON format, outputs:</h1>
+<h1>{"message":"User action","action":"login","user_id":123,"ip":"192.168.1.1","duration_ms":45}</h1>
+</code></pre></figure>
+
+<h3>Logging Complex Data</h3>
+
+<figure class="code"><pre><code># Safe inspection
+<p>Logger.debug("Params received: #{inspect(params, pretty: true, limit: 1000)}")</p>
+
+<h1>Truncate large data</h1>
+<p>Logger.debug("Large data: #{inspect(data, limit: 100)}")</p>
+
+<h1>Avoid logging sensitive data</h1>
+<p>def log_user(user) do</p>
+<p>  safe_user = Map.take(user, [:id, :email, :name])</p>
+<p>  Logger.info("User: #{inspect(safe_user)}")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Performance Considerations</h2>
+
+<h3>Lazy Evaluation</h3>
+
+<p>Logger evaluates messages lazily:</p>
+
+<figure class="code"><pre><code># Good: Only evaluated if debug level is enabled
+<p>Logger.debug(fn -> "Expensive computation: #{expensive_function()}" end)</p>
+
+<h1>Bad: Always evaluated, even if debug is disabled</h1>
+<p>Logger.debug("Expensive computation: #{expensive_function()}")</p>
+</code></pre></figure>
+
+<h3>Compile-Time Removal</h3>
+
+<figure class="code"><figcaption>File: config/prod.exs</figcaption><pre><code class="language-elixir">
+<h1>Remove debug logs at compile time</h1>
+<p>config :logger,</p>
+<p>  compile_time_purge_matching: [</p>
+<p>    [level_lower_than: :info]</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<p>This removes debug log calls from compiled code entirely.</p>
+
+<h2>Log Backends</h2>
+
+<h3>Console Backend (Default)</h3>
+
+<figure class="code"><pre><code>config :logger, :console,
+<p>  format: "$time [$level] $message\n",</p>
+<p>  colors: [enabled: true]</p>
+</code></pre></figure>
+
+<h3>File Backend</h3>
+
+<figure class="code"><figcaption>File: mix.exs</figcaption><pre><code class="language-elixir">defp deps do
+<p>  [{:logger_file_backend, "~> 0.0.13"}]</p>
+<p>end</p>
+
+<h1>File: config/prod.exs</h1>
+<p>config :logger,</p>
+<p>  backends: [:console, {LoggerFileBackend, :file_log}]</p>
+
+<p>config :logger, :file_log,</p>
+<p>  path: "/var/log/snippetbox/app.log",</p>
+<p>  level: :info,</p>
+<p>  format: "$dateT$time [$level] $message\n"</p>
+</code></pre></figure>
+
+<h3>External Services</h3>
+
+<figure class="code"><pre><code># Papertrail
+<p>{:logger_papertrail_backend, "~> 1.1"}</p>
+
+<h1>Datadog</h1>
+<p>{:logger_datadog, "~> 0.1"}</p>
+
+<h1>AWS CloudWatch</h1>
+<p>{:ex_aws_cloudwatch, "~> 2.0"}</p>
+</code></pre></figure>
+
+<h2>Debugging with Logger</h2>
+
+<h3>Temporary Debug Logging</h3>
+
+<figure class="code"><pre><code>def problematic_function(data) do
+<p>  # Add temporary debug</p>
+<p>  Logger.debug(">>> DEBUG: Entering problematic_function")</p>
+<p>  Logger.debug(">>> DEBUG: data = #{inspect(data)}")</p>
+
+<p>  result = process(data)</p>
+
+<p>  Logger.debug(">>> DEBUG: result = #{inspect(result)}")</p>
+<p>  result</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>IEx Debugging</h3>
+
+<figure class="code"><pre><code># In IEx, change log level at runtime
+<p>Logger.configure(level: :debug)</p>
+
+<h1>Or for a specific backend</h1>
+<p>Logger.configure_backend(:console, level: :debug)</p>
+</code></pre></figure>
+
+<h3>Tracing with Logger</h3>
+
+<figure class="code"><pre><code>defmodule Snippetbox.Tracer do
+<p>  require Logger</p>
+
+<p>  defmacro trace(message, do: block) do</p>
+<p>    quote do</p>
+<p>      start = System.monotonic_time(:microsecond)</p>
+<p>      Logger.debug("START: #{unquote(message)}")</p>
+
+<p>      result = unquote(block)</p>
+
+<p>      duration = System.monotonic_time(:microsecond) - start</p>
+<p>      Logger.debug("END: #{unquote(message)} (#{duration}μs)")</p>
+
+<p>      result</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Usage</h1>
+<p>import Snippetbox.Tracer</p>
+
+<p>trace "database query" do</p>
+<p>  Repo.all(Snippet)</p>
+<p>end</p>
+
+<h1>Output:</h1>
+<h1>[debug] START: database query</h1>
+<h1>[debug] END: database query (1234μs)</h1>
+</code></pre></figure>
+
+<h2>Phoenix Telemetry Events</h2>
+
+<p>Phoenix emits telemetry events you can log:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/telemetry.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Telemetry do</p>
+<p>  require Logger</p>
+
+<p>  def handle_event([:phoenix, :router_dispatch, :stop], measurements, metadata, _config) do</p>
+<p>    Logger.info("Request processed",</p>
+<p>      route: metadata.route,</p>
+<p>      method: metadata.conn.method,</p>
+<p>      status: metadata.conn.status,</p>
+<p>      duration_ms: System.convert_time_unit(measurements.duration, :native, :millisecond)</p>
+<p>    )</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Attach in application startup:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>def start(_type, _args) do</p>
+<p>  :telemetry.attach(</p>
+<p>    "snippetbox-phoenix-logger",</p>
+<p>    [:phoenix, :router_dispatch, :stop],</p>
+<p>    &SnippetboxWeb.Telemetry.handle_event/4,</p>
+<p>    nil</p>
+<p>  )</p>
+
+<p>  # ...</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Pure Logging</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>In functional programming, we try to keep functions pure (no side effects). Logging is a side effect, but Elixir handles it gracefully:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Logger is a separate process
+<p>Logger.info("Message")  # Sends message to Logger process</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Benefits:</p>
+<ul>
+<li><strong>Non-blocking</strong>: Logging doesn't slow down your code</li>
+<li><strong>Buffered</strong>: Messages are batched for efficiency</li>
+<li><strong>Isolated</strong>: Logger failures don't crash your app</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The Logger process handles all the I/O, keeping your functions focused on logic.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/logger/Logger.html">Elixir Logger</a></li>
+<li><a href="https://hexdocs.pm/logger/Logger.html#module-backends">Logger Backends</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Using Elixir's Logger with different levels</li>
+<li>Configuring logging for different environments</li>
+<li>Adding metadata for context</li>
+<li>Structured logging for better analysis</li>
+<li>Performance considerations</li>
+<li>Different log backends</li>
+<li>Debugging techniques</li>
+</ul>
+
+<p>This completes the Configuration and Error Handling chapter. In the next chapter, we'll start working with databases using Ecto.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Log Rotation</h3>
+
+<p>For file-based logging in production:</p>
+
+<figure class="code"><pre><code>config :logger, :file_log,
+<p>  path: "/var/log/snippetbox/app.log",</p>
+<p>  rotate: %{max_bytes: 10_485_760, keep: 5}  # 10MB, keep 5 files</p>
+</code></pre></figure>
+
+<p>Or use logrotate on Linux:</p>
+
+<figure class="code"><pre><code># /etc/logrotate.d/snippetbox
+<p>/var/log/snippetbox/*.log {</p>
+<p>    daily</p>
+<p>    rotate 7</p>
+<p>    compress</p>
+<p>    delaycompress</p>
+<p>    missingok</p>
+<p>    notifempty</p>
+<p>}</p>
+</code></pre></figure>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Rails (Ruby)</strong>:
+<figure class="code"><pre><code>Rails.logger.info "Message"
+<p>Rails.logger.debug { "Lazy: #{expensive}" }</p>
+</code></pre></figure>
+
+<strong>Django (Python)</strong>:
+<figure class="code"><pre><code>import logging
+<p>logger = logging.getLogger(__name__)</p>
+<p>logger.info("Message")</p>
+</code></pre></figure>
+
+<strong>Express (Node)</strong>:
+<figure class="code"><pre><code>const winston = require('winston');
+<p>logger.info('Message');</p>
+</code></pre></figure>
+
+<strong>Phoenix (Elixir)</strong>:
+<figure class="code"><pre><code>require Logger
+<p>Logger.info("Message")</p>
+<p>Logger.debug(fn -> "Lazy: #{expensive()}" end)</p>
+</code></pre></figure>
+
+<p>Elixir's Logger is simpler than most, with lazy evaluation built-in and process-based isolation for reliability.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="03.04-error-pages.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="04.00-database-driven-responses.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

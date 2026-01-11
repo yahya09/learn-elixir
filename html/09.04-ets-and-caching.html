@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>ETS and Caching &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; ETS and Caching</span>
+            </div>
+            <div>
+                &lsaquo; <a href="09.03-cookies.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="10.00-security.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 9.4</div>
+        <h1>Chapter 9.4: ETS and Caching</h1>
+
+<p>ETS (Erlang Term Storage) provides fast in-memory storage. In this chapter, we'll explore how to use ETS for caching and state management.</p>
+
+<h2>Understanding ETS</h2>
+
+<h3>What is ETS?</h3>
+
+<p>ETS is a built-in Erlang/Elixir key-value store:</p>
+
+<ul>
+<li><strong>Fast</strong>: In-memory, constant-time lookups</li>
+<li><strong>Concurrent</strong>: Multiple processes can read/write</li>
+<li><strong>Large</strong>: Can store millions of entries</li>
+<li><strong>Volatile</strong>: Data lost on restart</li>
+</ul>
+
+<h3>When to Use ETS</h3>
+
+<p>| Use Case | ETS | Alternative |</p>
+<p>|----------|-----|-------------|</p>
+<p>| Rate limiting | ✅ | Redis |</p>
+<p>| Cache expensive queries | ✅ | Redis, Cachex |</p>
+<p>| Session storage | ✅ | Database |</p>
+<p>| Configuration cache | ✅ | Application env |</p>
+<p>| Temporary counters | ✅ | Agent |</p>
+<p>| Persistent data | ❌ | Database |</p>
+<p>| Distributed state | ❌ | Redis, Mnesia |</p>
+
+<h2>Creating ETS Tables</h2>
+
+<h3>In Application Start</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox/application.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Application do</p>
+<p>  use Application</p>
+
+<p>  def start(_type, _args) do</p>
+<p>    # Create ETS tables before starting supervision tree</p>
+<p>    create_ets_tables()</p>
+
+<p>    children = [</p>
+<p>      SnippetboxWeb.Telemetry,</p>
+<p>      Snippetbox.Repo,</p>
+<p>      {Phoenix.PubSub, name: Snippetbox.PubSub},</p>
+<p>      SnippetboxWeb.Endpoint</p>
+<p>    ]</p>
+
+<p>    opts = [strategy: :one_for_one, name: Snippetbox.Supervisor]</p>
+<p>    Supervisor.start_link(children, opts)</p>
+<p>  end</p>
+
+<p>  defp create_ets_tables do</p>
+<p>    :ets.new(:cache, [:set, :public, :named_table, read_concurrency: true])</p>
+<p>    :ets.new(:rate_limits, [:set, :public, :named_table, write_concurrency: true])</p>
+<p>    :ets.new(:sessions, [:set, :public, :named_table, read_concurrency: true])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Table Types</h3>
+
+<figure class="code"><pre><code># Set: unique keys (default)
+<p>:ets.new(:cache, [:set, :named_table])</p>
+
+<h1>Ordered set: keys sorted</h1>
+<p>:ets.new(:leaderboard, [:ordered_set, :named_table])</p>
+
+<h1>Bag: multiple values per key</h1>
+<p>:ets.new(:tags, [:bag, :named_table])</p>
+
+<h1>Duplicate bag: allows duplicate key-value pairs</h1>
+<p>:ets.new(:events, [:duplicate_bag, :named_table])</p>
+</code></pre></figure>
+
+<h3>Access Options</h3>
+
+<figure class="code"><pre><code># Public: any process can read/write
+<p>:ets.new(:cache, [:public, :named_table])</p>
+
+<h1>Protected: any process can read, owner writes (default)</h1>
+<p>:ets.new(:config, [:protected, :named_table])</p>
+
+<h1>Private: only owner process</h1>
+<p>:ets.new(:internal, [:private, :named_table])</p>
+</code></pre></figure>
+
+<h3>Concurrency Options</h3>
+
+<figure class="code"><pre><code># Optimized for concurrent reads
+<p>:ets.new(:cache, [:named_table, read_concurrency: true])</p>
+
+<h1>Optimized for concurrent writes</h1>
+<p>:ets.new(:counters, [:named_table, write_concurrency: true])</p>
+
+<h1>Both</h1>
+<p>:ets.new(:sessions, [:named_table, read_concurrency: true, write_concurrency: true])</p>
+</code></pre></figure>
+
+<h2>Basic Operations</h2>
+
+<h3>Insert</h3>
+
+<figure class="code"><pre><code># Single insert
+<p>:ets.insert(:cache, {"key", "value"})</p>
+
+<h1>Multiple insert</h1>
+<p>:ets.insert(:cache, [{"key1", "value1"}, {"key2", "value2"}])</p>
+
+<h1>Insert with timestamp</h1>
+<p>:ets.insert(:cache, {"key", "value", System.system_time(:second)})</p>
+</code></pre></figure>
+
+<h3>Lookup</h3>
+
+<figure class="code"><pre><code># Returns list of tuples
+<p>case :ets.lookup(:cache, "key") do</p>
+<p>  [{_key, value}] -> {:ok, value}</p>
+<p>  [] -> :not_found</p>
+<p>end</p>
+
+<h1>Or with match</h1>
+<p>case :ets.lookup(:cache, "key") do</p>
+<p>  [{_, value, _timestamp}] -> {:ok, value}</p>
+<p>  [] -> :not_found</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Delete</h3>
+
+<figure class="code"><pre><code># Delete single key
+<p>:ets.delete(:cache, "key")</p>
+
+<h1>Delete all entries</h1>
+<p>:ets.delete_all_objects(:cache)</p>
+
+<h1>Delete entire table</h1>
+<p>:ets.delete(:cache)</p>
+</code></pre></figure>
+
+<h3>Update Counter</h3>
+
+<figure class="code"><pre><code># Atomic increment
+<p>:ets.update_counter(:rate_limits, "user:123", {2, 1})</p>
+
+<h1>With default if key doesn't exist</h1>
+<p>:ets.update_counter(:rate_limits, "user:123", {2, 1}, {"user:123", 0})</p>
+</code></pre></figure>
+
+<h2>Caching Module</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/cache.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Cache do</p>
+<p>  @table :cache</p>
+<p>  @default_ttl 60 * 5  # 5 minutes</p>
+
+<p>  def get(key) do</p>
+<p>    case :ets.lookup(@table, key) do</p>
+<p>      [{^key, value, expires_at}] -></p>
+<p>        if System.system_time(:second) < expires_at do</p>
+<p>          {:ok, value}</p>
+<p>        else</p>
+<p>          delete(key)</p>
+<p>          :miss</p>
+<p>        end</p>
+
+<p>      [] -></p>
+<p>        :miss</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def put(key, value, ttl \\ @default_ttl) do</p>
+<p>    expires_at = System.system_time(:second) + ttl</p>
+<p>    :ets.insert(@table, {key, value, expires_at})</p>
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  def delete(key) do</p>
+<p>    :ets.delete(@table, key)</p>
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  def fetch(key, ttl \\ @default_ttl, fun) do</p>
+<p>    case get(key) do</p>
+<p>      {:ok, value} -></p>
+<p>        value</p>
+
+<p>      :miss -></p>
+<p>        value = fun.()</p>
+<p>        put(key, value, ttl)</p>
+<p>        value</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def clear do</p>
+<p>    :ets.delete_all_objects(@table)</p>
+<p>    :ok</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Usage</h3>
+
+<figure class="code"><pre><code># Simple get/put
+<p>Snippetbox.Cache.put("user:123", user)</p>
+<p>{:ok, user} = Snippetbox.Cache.get("user:123")</p>
+
+<h1>Fetch with fallback</h1>
+<p>user = Snippetbox.Cache.fetch("user:123", 300, fn -></p>
+<p>  Accounts.get_user!(123)</p>
+<p>end)</p>
+
+<h1>In context</h1>
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  alias Snippetbox.Cache</p>
+
+<p>  def get_popular_snippets do</p>
+<p>    Cache.fetch("popular_snippets", 60 * 15, fn -></p>
+<p>      Snippet</p>
+<p>      |> order_by([s], desc: s.view_count)</p>
+<p>      |> limit(10)</p>
+<p>      |> Repo.all()</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Rate Limiting with ETS</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/rate_limiter.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.RateLimiter do</p>
+<p>  @table :rate_limits</p>
+
+<p>  def check(key, limit, window_seconds) do</p>
+<p>    now = System.system_time(:second)</p>
+<p>    window_start = now - window_seconds</p>
+
+<p>    # Clean old entries and count current</p>
+<p>    case :ets.lookup(@table, key) do</p>
+<p>      [{^key, count, timestamp}] when timestamp >= window_start -></p>
+<p>        if count >= limit do</p>
+<p>          {:deny, limit - count}</p>
+<p>        else</p>
+<p>          :ets.update_counter(@table, key, {2, 1})</p>
+<p>          {:allow, limit - count - 1}</p>
+<p>        end</p>
+
+<p>      _ -></p>
+<p>        # Start new window</p>
+<p>        :ets.insert(@table, {key, 1, now})</p>
+<p>        {:allow, limit - 1}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def reset(key) do</p>
+<p>    :ets.delete(@table, key)</p>
+<p>    :ok</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Usage in Plug</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/plugs/rate_limit.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Plugs.RateLimit do</p>
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+<p>  alias Snippetbox.RateLimiter</p>
+
+<p>  def init(opts), do: opts</p>
+
+<p>  def call(conn, opts) do</p>
+<p>    limit = Keyword.get(opts, :limit, 100)</p>
+<p>    window = Keyword.get(opts, :window, 60)</p>
+<p>    key = rate_limit_key(conn, opts)</p>
+
+<p>    case RateLimiter.check(key, limit, window) do</p>
+<p>      {:allow, remaining} -></p>
+<p>        conn</p>
+<p>        |> put_resp_header("x-ratelimit-limit", to_string(limit))</p>
+<p>        |> put_resp_header("x-ratelimit-remaining", to_string(remaining))</p>
+
+<p>      {:deny, _} -></p>
+<p>        conn</p>
+<p>        |> put_status(:too_many_requests)</p>
+<p>        |> json(%{error: "Rate limit exceeded"})</p>
+<p>        |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp rate_limit_key(conn, opts) do</p>
+<p>    case Keyword.get(opts, :by, :ip) do</p>
+<p>      :ip -> "rate:#{:inet.ntoa(conn.remote_ip)}"</p>
+<p>      :user -> "rate:user:#{conn.assigns[:current_user]&.id || "anon"}"</p>
+<p>      fun when is_function(fun, 1) -> fun.(conn)</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Query Cache</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/snippets.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Snippets do</p>
+<p>  alias Snippetbox.{Repo, Cache}</p>
+<p>  alias Snippetbox.Snippets.Snippet</p>
+
+<p>  def get_snippet!(id) do</p>
+<p>    Cache.fetch("snippet:#{id}", 60, fn -></p>
+<p>      Repo.get!(Snippet, id)</p>
+<p>    end)</p>
+<p>  end</p>
+
+<p>  def list_snippets(opts \\ []) do</p>
+<p>    page = Keyword.get(opts, :page, 1)</p>
+<p>    per_page = Keyword.get(opts, :per_page, 20)</p>
+
+<p>    cache_key = "snippets:list:#{page}:#{per_page}"</p>
+
+<p>    Cache.fetch(cache_key, 30, fn -></p>
+<p>      Snippet</p>
+<p>      |> order_by([s], desc: s.inserted_at)</p>
+<p>      |> offset(^((page - 1) * per_page))</p>
+<p>      |> limit(^per_page)</p>
+<p>      |> Repo.all()</p>
+<p>    end)</p>
+<p>  end</p>
+
+<p>  def update_snippet(snippet, attrs) do</p>
+<p>    result = snippet</p>
+<p>    |> Snippet.changeset(attrs)</p>
+<p>    |> Repo.update()</p>
+
+<p>    # Invalidate cache on update</p>
+<p>    case result do</p>
+<p>      {:ok, updated} -></p>
+<p>        Cache.delete("snippet:#{snippet.id}")</p>
+<p>        invalidate_list_caches()</p>
+<p>        {:ok, updated}</p>
+
+<p>      error -></p>
+<p>        error</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp invalidate_list_caches do</p>
+<p>    # Clear all list caches (simple approach)</p>
+<p>    # In production, use more targeted invalidation</p>
+<p>    :ets.match_delete(:cache, {:"$1", :_, :_})</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Counter Cache</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/counters.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Counters do</p>
+<p>  @table :counters</p>
+
+<p>  def setup do</p>
+<p>    :ets.new(@table, [:set, :public, :named_table, write_concurrency: true])</p>
+<p>  end</p>
+
+<p>  def increment(key, amount \\ 1) do</p>
+<p>    :ets.update_counter(@table, key, {2, amount}, {key, 0})</p>
+<p>  end</p>
+
+<p>  def get(key) do</p>
+<p>    case :ets.lookup(@table, key) do</p>
+<p>      [{^key, count}] -> count</p>
+<p>      [] -> 0</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def reset(key) do</p>
+<p>    :ets.insert(@table, {key, 0})</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>View Counter Example</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/snippet_controller.ex</figcaption><pre><code class="language-elixir">
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+
+<p>  # Increment view counter (non-blocking)</p>
+<p>  Task.start(fn -></p>
+<p>    Counters.increment("snippet:#{id}:views")</p>
+<p>  end)</p>
+
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+
+<h1>Periodic sync to database</h1>
+<p>defmodule Snippetbox.CounterSync do</p>
+<p>  use GenServer</p>
+
+<p>  def start_link(_opts) do</p>
+<p>    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)</p>
+<p>  end</p>
+
+<p>  def init(state) do</p>
+<p>    schedule_sync()</p>
+<p>    {:ok, state}</p>
+<p>  end</p>
+
+<p>  def handle_info(:sync, state) do</p>
+<p>    sync_counters_to_database()</p>
+<p>    schedule_sync()</p>
+<p>    {:noreply, state}</p>
+<p>  end</p>
+
+<p>  defp schedule_sync do</p>
+<p>    Process.send_after(self(), :sync, 60_000)  # Every minute</p>
+<p>  end</p>
+
+<p>  defp sync_counters_to_database do</p>
+<p>    # Get all counters and update database</p>
+<p>    :ets.tab2list(:counters)</p>
+<p>    |> Enum.each(fn {key, count} -></p>
+<p>      case String.split(key, ":") do</p>
+<p>        ["snippet", id, "views"] -></p>
+<p>          Snippets.increment_views(id, count)</p>
+<p>          Counters.reset(key)</p>
+
+<p>        _ -></p>
+<p>          :ok</p>
+<p>      end</p>
+<p>    end)</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Cache Warming</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/cache_warmer.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.CacheWarmer do</p>
+<p>  use GenServer</p>
+<p>  require Logger</p>
+
+<p>  alias Snippetbox.{Cache, Snippets}</p>
+
+<p>  def start_link(_opts) do</p>
+<p>    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)</p>
+<p>  end</p>
+
+<p>  def init(state) do</p>
+<p>    warm_cache()</p>
+<p>    schedule_refresh()</p>
+<p>    {:ok, state}</p>
+<p>  end</p>
+
+<p>  def handle_info(:refresh, state) do</p>
+<p>    warm_cache()</p>
+<p>    schedule_refresh()</p>
+<p>    {:noreply, state}</p>
+<p>  end</p>
+
+<p>  defp schedule_refresh do</p>
+<p>    Process.send_after(self(), :refresh, 60_000 * 5)  # Every 5 minutes</p>
+<p>  end</p>
+
+<p>  defp warm_cache do</p>
+<p>    Logger.info("Warming cache...")</p>
+
+<p>    # Pre-load popular snippets</p>
+<p>    popular = Snippets.list_popular_snippets()</p>
+<p>    Cache.put("popular_snippets", popular, 60 * 10)</p>
+
+<p>    # Pre-load recent snippets</p>
+<p>    recent = Snippets.list_recent_snippets()</p>
+<p>    Cache.put("recent_snippets", recent, 60 * 5)</p>
+
+<p>    Logger.info("Cache warmed successfully")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>ETS Cleanup</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/cache_cleaner.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.CacheCleaner do</p>
+<p>  use GenServer</p>
+
+<p>  def start_link(_opts) do</p>
+<p>    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)</p>
+<p>  end</p>
+
+<p>  def init(state) do</p>
+<p>    schedule_cleanup()</p>
+<p>    {:ok, state}</p>
+<p>  end</p>
+
+<p>  def handle_info(:cleanup, state) do</p>
+<p>    cleanup_expired()</p>
+<p>    schedule_cleanup()</p>
+<p>    {:noreply, state}</p>
+<p>  end</p>
+
+<p>  defp schedule_cleanup do</p>
+<p>    Process.send_after(self(), :cleanup, 60_000)  # Every minute</p>
+<p>  end</p>
+
+<p>  defp cleanup_expired do</p>
+<p>    now = System.system_time(:second)</p>
+
+<p>    # Delete expired entries</p>
+<p>    :ets.select_delete(:cache, [</p>
+<p>      {{:_, :_, :"$1"}, [{:<, :"$1", now}], [true]}</p>
+<p>    ])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: ETS as External State</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>ETS is one of the few places in Elixir where state lives outside process memory:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # State is external to any process
+<p>:ets.insert(:cache, {key, value})</p>
+<p>:ets.lookup(:cache, key)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># But operations are still explicit</p>
+<p># No hidden state, no surprises</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This makes ETS powerful for sharing state across processes while maintaining the explicit data flow that functional programming encourages.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://www.erlang.org/doc/man/ets.html">ETS Documentation</a></li>
+<li><a href="https://elixir-lang.org/getting-started/mix-otp/ets.html">Elixir ETS Guide</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>What ETS is and when to use it</li>
+<li>Creating and configuring ETS tables</li>
+<li>Basic CRUD operations</li>
+<li>Building a caching module</li>
+<li>Rate limiting with ETS</li>
+<li>Query caching patterns</li>
+<li>Counter caching with database sync</li>
+<li>Cache warming and cleanup</li>
+</ul>
+
+<p>This completes the Sessions and State chapter. In the next chapter, we'll explore security in Phoenix applications.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="09.03-cookies.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="10.00-security.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

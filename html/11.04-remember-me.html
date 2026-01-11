@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Remember Me &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Remember Me</span>
+            </div>
+            <div>
+                &lsaquo; <a href="11.03-login-logout.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="11.05-password-reset.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 11.4</div>
+        <h1>Chapter 11.4: Remember Me</h1>
+
+<p>Remember me functionality allows users to stay logged in across browser sessions. In this chapter, we'll implement secure persistent authentication.</p>
+
+<h2>How Remember Me Works</h2>
+
+<figure class="code"><pre><code>1. User logs in with "Remember me" checked
+<ol>
+<li>Server creates long-lived token</li>
+<li>Token stored in signed cookie</li>
+<li>On next visit, cookie token restores session</li>
+<li>New session token created from remember me token</li>
+</ol>
+</code></pre></figure>
+
+<h2>Security Considerations</h2>
+
+<p>| Approach | Security | User Experience |</p>
+<p>|----------|----------|-----------------|</p>
+<p>| Long session | Lower | Best |</p>
+<p>| Remember me cookie | Better | Good |</p>
+<p>| Token rotation | Best | Good |</p>
+
+<h2>Implementation</h2>
+
+<h3>Cookie Configuration</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/user_auth.ex</figcaption><pre><code class="language-elixir">
+<p>@max_age 60 <em> 60 </em> 24 * 60  # 60 days</p>
+<p>@remember_me_cookie "_snippetbox_remember_me"</p>
+<p>@remember_me_options [</p>
+<p>  sign: true,</p>
+<p>  max_age: @max_age,</p>
+<p>  same_site: "Lax",</p>
+<p>  http_only: true,</p>
+<p>  secure: Mix.env() == :prod</p>
+<p>]</p>
+</code></pre></figure>
+
+<h3>Setting the Cookie</h3>
+
+<figure class="code"><pre><code>def log_in_user(conn, user, params \\ %{}) do
+<p>  token = Accounts.generate_user_session_token(user)</p>
+<p>  user_return_to = get_session(conn, :user_return_to)</p>
+
+<p>  conn</p>
+<p>  |> renew_session()</p>
+<p>  |> put_token_in_session(token)</p>
+<p>  |> maybe_write_remember_me_cookie(token, params)</p>
+<p>  |> redirect(to: user_return_to || signed_in_path(conn))</p>
+<p>end</p>
+
+<p>defp maybe_write_remember_me_cookie(conn, token, %{"remember_me" => "true"}) do</p>
+<p>  put_resp_cookie(conn, @remember_me_cookie, token, @remember_me_options)</p>
+<p>end</p>
+
+<p>defp maybe_write_remember_me_cookie(conn, _token, _params) do</p>
+<p>  conn</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Reading the Cookie</h3>
+
+<figure class="code"><pre><code>def fetch_current_user(conn, _opts) do
+<p>  {user_token, conn} = ensure_user_token(conn)</p>
+<p>  user = user_token && Accounts.get_user_by_session_token(user_token)</p>
+<p>  assign(conn, :current_user, user)</p>
+<p>end</p>
+
+<p>defp ensure_user_token(conn) do</p>
+<p>  if token = get_session(conn, :user_token) do</p>
+<p>    {token, conn}</p>
+<p>  else</p>
+<p>    conn = fetch_cookies(conn, signed: [@remember_me_cookie])</p>
+
+<p>    if token = conn.cookies[@remember_me_cookie] do</p>
+<p>      {token, put_token_in_session(conn, token)}</p>
+<p>    else</p>
+<p>      {nil, conn}</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Clearing on Logout</h3>
+
+<figure class="code"><pre><code>def log_out_user(conn) do
+<p>  user_token = get_session(conn, :user_token)</p>
+<p>  user_token && Accounts.delete_user_session_token(user_token)</p>
+
+<p>  conn</p>
+<p>  |> renew_session()</p>
+<p>  |> delete_resp_cookie(@remember_me_cookie)</p>
+<p>  |> redirect(to: ~p"/")</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Token Rotation</h2>
+
+<p>For enhanced security, rotate tokens on each use:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>def get_user_by_session_token_and_rotate(old_token) do</p>
+<p>  {:ok, query} = UserToken.verify_session_token_query(old_token)</p>
+
+<p>  case Repo.one(query) do</p>
+<p>    nil -></p>
+<p>      nil</p>
+
+<p>    user -></p>
+<p>      # Delete old token</p>
+<p>      delete_user_session_token(old_token)</p>
+<p>      # Create new token</p>
+<p>      new_token = generate_user_session_token(user)</p>
+<p>      {user, new_token}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<figure class="code"><pre><code># In UserAuth
+<p>defp ensure_user_token(conn) do</p>
+<p>  if token = get_session(conn, :user_token) do</p>
+<p>    {token, conn}</p>
+<p>  else</p>
+<p>    conn = fetch_cookies(conn, signed: [@remember_me_cookie])</p>
+
+<p>    if old_token = conn.cookies[@remember_me_cookie] do</p>
+<p>      case Accounts.get_user_by_session_token_and_rotate(old_token) do</p>
+<p>        {_user, new_token} -></p>
+<p>          conn =</p>
+<p>            conn</p>
+<p>            |> put_resp_cookie(@remember_me_cookie, new_token, @remember_me_options)</p>
+<p>            |> put_token_in_session(new_token)</p>
+
+<p>          {new_token, conn}</p>
+
+<p>        nil -></p>
+<p>          conn = delete_resp_cookie(conn, @remember_me_cookie)</p>
+<p>          {nil, conn}</p>
+<p>      end</p>
+<p>    else</p>
+<p>      {nil, conn}</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Login Form with Remember Me</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/user_session_html/new.html.heex %>
+
+<.form for={%{}} action={~p"/login"} as={:user}>
+<p>  <div class="space-y-4"></p>
+<p>    <.input name="email" type="email" label="Email" required /></p>
+<p>    <.input name="password" type="password" label="Password" required /></p>
+<p>  </div></p>
+
+<p>  <div class="mt-4 flex items-center"></p>
+<p>    <input</p>
+<p>      type="checkbox"</p>
+<p>      id="remember_me"</p>
+<p>      name="remember_me"</p>
+<p>      value="true"</p>
+<p>      class="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"</p>
+<p>    /></p>
+<p>    <label for="remember_me" class="ml-2 text-sm text-gray-600"></p>
+<p>      Keep me logged in for 60 days</p>
+<p>    </label></p>
+<p>  </div></p>
+
+<p>  <.button class="mt-6 w-full">Log in</.button></p>
+</.form>
+</code></pre></figure>
+
+<h2>Session Management Page</h2>
+
+<p>Allow users to view and revoke sessions:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>def list_user_sessions(user) do</p>
+<p>  UserToken</p>
+<p>  |> where([t], t.user_id == ^user.id and t.context == "session")</p>
+<p>  |> order_by([t], desc: t.inserted_at)</p>
+<p>  |> Repo.all()</p>
+<p>end</p>
+
+<p>def delete_user_session(user, token_id) do</p>
+<p>  UserToken</p>
+<p>  |> where([t], t.id == ^token_id and t.user_id == ^user.id)</p>
+<p>  |> Repo.delete_all()</p>
+<p>end</p>
+
+<p>def delete_all_user_sessions(user, except_token \\ nil) do</p>
+<p>  query = from t in UserToken,</p>
+<p>    where: t.user_id == ^user.id and t.context == "session"</p>
+
+<p>  query =</p>
+<p>    if except_token do</p>
+<p>      where(query, [t], t.token != ^except_token)</p>
+<p>    else</p>
+<p>      query</p>
+<p>    end</p>
+
+<p>  Repo.delete_all(query)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Sessions Controller</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/user_sessions_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserSessionsController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  def index(conn, _params) do</p>
+<p>    user = conn.assigns.current_user</p>
+<p>    sessions = Accounts.list_user_sessions(user)</p>
+<p>    current_token = get_session(conn, :user_token)</p>
+
+<p>    render(conn, :index, sessions: sessions, current_token: current_token)</p>
+<p>  end</p>
+
+<p>  def delete(conn, %{"id" => id}) do</p>
+<p>    user = conn.assigns.current_user</p>
+<p>    Accounts.delete_user_session(user, id)</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "Session revoked.")</p>
+<p>    |> redirect(to: ~p"/settings/sessions")</p>
+<p>  end</p>
+
+<p>  def delete_all(conn, _params) do</p>
+<p>    user = conn.assigns.current_user</p>
+<p>    current_token = get_session(conn, :user_token)</p>
+
+<p>    Accounts.delete_all_user_sessions(user, current_token)</p>
+
+<p>    conn</p>
+<p>    |> put_flash(:info, "All other sessions have been logged out.")</p>
+<p>    |> redirect(to: ~p"/settings/sessions")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Sessions Template</h3>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/user_sessions_html/index.html.heex %>
+
+<.header>
+<p>  Active Sessions</p>
+<p>  <:subtitle>Manage your logged-in devices</:subtitle></p>
+</.header>
+
+<div class="mt-8 space-y-4">
+<p>  <%= for session <- @sessions do %></p>
+<p>    <div class="flex items-center justify-between p-4 border rounded-lg"></p>
+<p>      <div></p>
+<p>        <p class="font-medium"></p>
+<p>          <%= if session.token == @current_token do %></p>
+<p>            Current Session</p>
+<p>          <% else %></p>
+<p>            Session</p>
+<p>          <% end %></p>
+</p>
+<p>        <p class="text-sm text-gray-500"></p>
+<p>          Created <%= format_datetime(session.inserted_at) %></p>
+</p>
+<p>      </div></p>
+
+<p>      <%= unless session.token == @current_token do %></p>
+<p>        <.link</p>
+<p>          href={~p"/settings/sessions/#{session.id}"}</p>
+<p>          method="delete"</p>
+<p>          data-confirm="Are you sure?"</p>
+<p>          class="text-red-600 hover:text-red-800"</p>
+<p>        ></p>
+<p>          Revoke</p>
+<p>        </.link></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>  <% end %></p>
+</div>
+
+<div class="mt-8">
+<p>  <.link</p>
+<p>    href={~p"/settings/sessions/all"}</p>
+<p>    method="delete"</p>
+<p>    data-confirm="This will log you out from all other devices. Continue?"</p>
+<p>    class="text-red-600 hover:text-red-800"</p>
+<p>  ></p>
+<p>    Log out from all other sessions</p>
+<p>  </.link></p>
+</div>
+</code></pre></figure>
+
+<h2>Device Information</h2>
+
+<p>Optionally track device info:</p>
+
+<figure class="code"><pre><code># Migration addition
+<p>add :user_agent, :string</p>
+<p>add :ip_address, :string</p>
+
+<h1>When creating token</h1>
+<p>def build_session_token(user, conn) do</p>
+<p>  token = :crypto.strong_rand_bytes(@rand_size)</p>
+
+<p>  {token, %__MODULE__{</p>
+<p>    token: token,</p>
+<p>    context: "session",</p>
+<p>    user_id: user.id,</p>
+<p>    user_agent: get_user_agent(conn),</p>
+<p>    ip_address: get_ip_address(conn)</p>
+<p>  }}</p>
+<p>end</p>
+
+<p>defp get_user_agent(conn) do</p>
+<p>  conn</p>
+<p>  |> Plug.Conn.get_req_header("user-agent")</p>
+<p>  |> List.first()</p>
+<p>  |> truncate(255)</p>
+<p>end</p>
+
+<p>defp get_ip_address(conn) do</p>
+<p>  conn.remote_ip |> :inet.ntoa() |> to_string()</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Testing Remember Me</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/user_auth_test.exs</figcaption><pre><code class="language-elixir">
+<p>describe "remember me" do</p>
+<p>  test "stores token in cookie when remember_me is true", %{conn: conn} do</p>
+<p>    user = user_fixture()</p>
+
+<p>    conn =</p>
+<p>      post(conn, ~p"/login", %{</p>
+<p>        "user" => %{</p>
+<p>          "email" => user.email,</p>
+<p>          "password" => valid_user_password(),</p>
+<p>          "remember_me" => "true"</p>
+<p>        }</p>
+<p>      })</p>
+
+<p>    assert conn.resp_cookies["_snippetbox_remember_me"]</p>
+<p>  end</p>
+
+<p>  test "does not store token when remember_me is false", %{conn: conn} do</p>
+<p>    user = user_fixture()</p>
+
+<p>    conn =</p>
+<p>      post(conn, ~p"/login", %{</p>
+<p>        "user" => %{</p>
+<p>          "email" => user.email,</p>
+<p>          "password" => valid_user_password()</p>
+<p>        }</p>
+<p>      })</p>
+
+<p>    refute conn.resp_cookies["_snippetbox_remember_me"]</p>
+<p>  end</p>
+
+<p>  test "restores session from remember me cookie", %{conn: conn} do</p>
+<p>    user = user_fixture()</p>
+<p>    token = Accounts.generate_user_session_token(user)</p>
+
+<p>    conn =</p>
+<p>      conn</p>
+<p>      |> put_req_cookie("_snippetbox_remember_me", token)</p>
+<p>      |> get(~p"/")</p>
+
+<p>    assert conn.assigns.current_user.id == user.id</p>
+<p>  end</p>
+
+<p>  test "clears remember me cookie on logout", %{conn: conn} do</p>
+<p>    user = user_fixture()</p>
+
+<p>    conn =</p>
+<p>      conn</p>
+<p>      |> log_in_user(user, %{"remember_me" => "true"})</p>
+<p>      |> delete(~p"/logout")</p>
+
+<p>    assert conn.resp_cookies["_snippetbox_remember_me"].max_age == 0</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Stateless Token Verification</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Remember me tokens enable stateless authentication:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Token is self-contained proof of identity
+<p>token = signed_cookie_value</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Verification is a pure lookup</p>
+<p>user = Accounts.get_user_by_session_token(token)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># No server-side session state required</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The database stores tokens, but the verification process is stateless—same token always maps to same user.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>How remember me authentication works</li>
+<li>Setting and reading remember me cookies</li>
+<li>Token rotation for security</li>
+<li>Session management interface</li>
+<li>Tracking device information</li>
+<li>Testing remember me functionality</li>
+</ul>
+
+<p>In the next chapter, we'll implement password reset.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="11.03-login-logout.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="11.05-password-reset.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

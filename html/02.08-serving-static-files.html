@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Serving Static Files &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Serving Static Files</span>
+            </div>
+            <div>
+                &lsaquo; <a href="02.07-html-templating.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="02.09-the-controller-pattern.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 2.8</div>
+        <h1>Chapter 2.8: Serving Static Files</h1>
+
+<p>Every web application needs static assets - CSS, JavaScript, images, and fonts. In this chapter, we'll learn how Phoenix handles static files and the asset pipeline.</p>
+
+<h2>Static Files in Phoenix</h2>
+
+<p>Phoenix serves static files from two locations:</p>
+
+<ol>
+<li><strong>priv/static/</strong> - Pre-built static assets</li>
+<li><strong>assets/</strong> - Source files processed by the asset pipeline</li>
+</ol>
+
+<figure class="code"><pre><code>snippetbox/
+<p>├── assets/                    # Source files (processed)</p>
+<p>│   ├── css/</p>
+<p>│   │   └── app.css</p>
+<p>│   ├── js/</p>
+<p>│   │   └── app.js</p>
+<p>│   └── vendor/                # Third-party libraries</p>
+<p>│</p>
+<p>├── priv/static/               # Output directory (served)</p>
+<p>│   ├── assets/                # Compiled CSS/JS</p>
+<p>│   │   ├── app.css</p>
+<p>│   │   └── app.js</p>
+<p>│   ├── images/                # Images</p>
+<p>│   │   ├── logo.png</p>
+<p>│   │   └── favicon.ico</p>
+<p>│   ├── fonts/                 # Web fonts</p>
+<p>│   └── robots.txt             # Robots file</p>
+</code></pre></figure>
+
+<h2>How Static File Serving Works</h2>
+
+<p>Phoenix's endpoint configuration handles static files:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Endpoint do</p>
+<p>  use Phoenix.Endpoint, otp_app: :snippetbox</p>
+
+<p>  # Serve static files from priv/static</p>
+<p>  plug Plug.Static,</p>
+<p>    at: "/",</p>
+<p>    from: :snippetbox,</p>
+<p>    gzip: false,</p>
+<p>    only: SnippetboxWeb.static_paths()</p>
+
+<p>  # ... rest of endpoint</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>The <code>Plug.Static</code> configuration:</p>
+<ul>
+<li><code>at: "/"</code> - URL prefix (serve at root)</li>
+<li><code>from: :snippetbox</code> - App name (finds priv/static)</li>
+<li><code>gzip: false</code> - Disable gzip (usually handled by CDN/proxy)</li>
+<li><code>only:</code> - Whitelist of paths to serve</li>
+</ul>
+
+<h3>Static Paths</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web.ex</figcaption><pre><code class="language-elixir">
+<p>def static_paths do</p>
+<p>  ~w(assets fonts images favicon.ico robots.txt)</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Only files in these directories/paths are served. This prevents accidental exposure of other files in <code>priv/static</code>.</p>
+
+<h2>Adding Static Files</h2>
+
+<h3>Images</h3>
+
+<p>Place images directly in <code>priv/static/images/</code>:</p>
+
+<figure class="code"><pre><code>priv/static/images/
+<p>├── logo.png</p>
+<p>├── hero.jpg</p>
+<p>└── icons/</p>
+<p>    ├── github.svg</p>
+<p>    └── twitter.svg</p>
+</code></pre></figure>
+
+<p>Reference in templates:</p>
+
+<figure class="code"><pre><code><img src={~p"/images/logo.png"} alt="Snippetbox Logo" />
+<img src={~p"/images/icons/github.svg"} alt="GitHub" />
+</code></pre></figure>
+
+<h3>Favicon</h3>
+
+<p>Place in <code>priv/static/</code>:</p>
+
+<figure class="code"><pre><code>priv/static/
+<p>└── favicon.ico</p>
+</code></pre></figure>
+
+<p>Already referenced in root layout:</p>
+
+<figure class="code"><pre><code><link rel="icon" href={~p"/favicon.ico"} />
+</code></pre></figure>
+
+<h3>Fonts</h3>
+
+<p>Create a fonts directory:</p>
+
+<figure class="code"><pre><code>priv/static/fonts/
+<p>├── Inter-Regular.woff2</p>
+<p>├── Inter-Bold.woff2</p>
+<p>└── FiraCode-Regular.woff2</p>
+</code></pre></figure>
+
+<p>Reference in CSS:</p>
+
+<figure class="code"><pre><code>/<em> File: assets/css/app.css </em>/
+
+<p>@font-face {</p>
+<p>  font-family: 'Inter';</p>
+<p>  src: url('/fonts/Inter-Regular.woff2') format('woff2');</p>
+<p>  font-weight: 400;</p>
+<p>}</p>
+
+<p>@font-face {</p>
+<p>  font-family: 'Inter';</p>
+<p>  src: url('/fonts/Inter-Bold.woff2') format('woff2');</p>
+<p>  font-weight: 700;</p>
+<p>}</p>
+
+<p>@font-face {</p>
+<p>  font-family: 'Fira Code';</p>
+<p>  src: url('/fonts/FiraCode-Regular.woff2') format('woff2');</p>
+<p>}</p>
+
+<p>body {</p>
+<p>  font-family: 'Inter', sans-serif;</p>
+<p>}</p>
+
+<p>code, pre {</p>
+<p>  font-family: 'Fira Code', monospace;</p>
+<p>}</p>
+</code></pre></figure>
+
+<p>Don't forget to add "fonts" to static_paths:</p>
+
+<figure class="code"><pre><code>def static_paths do
+<p>  ~w(assets fonts images favicon.ico robots.txt)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>robots.txt</h3>
+
+<figure class="code"><pre><code># File: priv/static/robots.txt
+
+<p>User-agent: *</p>
+<p>Allow: /</p>
+
+<p>Sitemap: https://snippetbox.example.com/sitemap.xml</p>
+</code></pre></figure>
+
+<h2>The Asset Pipeline</h2>
+
+<p>Phoenix uses <strong>esbuild</strong> for JavaScript and <strong>Tailwind CSS</strong> (optional) for CSS processing.</p>
+
+<h3>CSS with esbuild</h3>
+
+<p>By default, Phoenix bundles CSS through esbuild:</p>
+
+<figure class="code"><pre><code>/<em> File: assets/css/app.css </em>/
+
+<p>/<em> Import Tailwind or other frameworks </em>/</p>
+<p>@import "tailwindcss/base";</p>
+<p>@import "tailwindcss/components";</p>
+<p>@import "tailwindcss/utilities";</p>
+
+<p>/<em> Your custom styles </em>/</p>
+<p>.snippet {</p>
+<p>  background: #f8f9fa;</p>
+<p>  border-radius: 4px;</p>
+<p>  padding: 1rem;</p>
+<p>  margin-bottom: 1rem;</p>
+<p>}</p>
+
+<p>.snippet-title {</p>
+<p>  font-size: 1.25rem;</p>
+<p>  font-weight: 600;</p>
+<p>  margin-bottom: 0.5rem;</p>
+<p>}</p>
+
+<p>.snippet-content {</p>
+<p>  font-family: 'Fira Code', monospace;</p>
+<p>  background: #282c34;</p>
+<p>  color: #abb2bf;</p>
+<p>  padding: 1rem;</p>
+<p>  border-radius: 4px;</p>
+<p>  overflow-x: auto;</p>
+<p>}</p>
+</code></pre></figure>
+
+<h3>JavaScript with esbuild</h3>
+
+<figure class="code"><pre><code>// File: assets/js/app.js
+
+<p>// Include Phoenix dependencies</p>
+<p>import "phoenix_html"</p>
+<p>import {Socket} from "phoenix"</p>
+<p>import {LiveSocket} from "phoenix_live_view"</p>
+<p>import topbar from "../vendor/topbar"</p>
+
+<p>// Configure LiveSocket</p>
+<p>let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")</p>
+<p>let liveSocket = new LiveSocket("/live", Socket, {params: {_csrf_token: csrfToken}})</p>
+
+<p>// Show progress bar on live navigation</p>
+<p>topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})</p>
+<p>window.addEventListener("phx:page-loading-start", _info => topbar.show(300))</p>
+<p>window.addEventListener("phx:page-loading-stop", _info => topbar.hide())</p>
+
+<p>// Connect LiveSocket</p>
+<p>liveSocket.connect()</p>
+<p>window.liveSocket = liveSocket</p>
+
+<p>// Your custom JavaScript</p>
+<p>document.addEventListener("DOMContentLoaded", () => {</p>
+<p>  console.log("Snippetbox loaded!")</p>
+
+<p>  // Copy to clipboard functionality</p>
+<p>  document.querySelectorAll(".copy-btn").forEach(btn => {</p>
+<p>    btn.addEventListener("click", async () => {</p>
+<p>      const code = btn.dataset.code</p>
+<p>      await navigator.clipboard.writeText(code)</p>
+<p>      btn.textContent = "Copied!"</p>
+<p>      setTimeout(() => btn.textContent = "Copy", 2000)</p>
+<p>    })</p>
+<p>  })</p>
+<p>})</p>
+</code></pre></figure>
+
+<h3>Asset Build Configuration</h3>
+
+<p>Phoenix configures esbuild in <code>config/config.exs</code>:</p>
+
+<figure class="code"><figcaption>File: config/config.exs</figcaption><pre><code class="language-elixir">
+<p>config :esbuild,</p>
+<p>  version: "0.17.11",</p>
+<p>  default: [</p>
+<p>    args: ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets</p>
+<p>             --external:/fonts/<em> --external:/images/</em>),</p>
+<p>    cd: Path.expand("../assets", __DIR__),</p>
+<p>    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<p>And Tailwind (if using):</p>
+
+<figure class="code"><pre><code>config :tailwind,
+<p>  version: "3.3.2",</p>
+<p>  default: [</p>
+<p>    args: ~w(</p>
+<p>      --config=tailwind.config.js</p>
+<p>      --input=css/app.css</p>
+<p>      --output=../priv/static/assets/app.css</p>
+<p>    ),</p>
+<p>    cd: Path.expand("../assets", __DIR__)</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h3>Development Watchers</h3>
+
+<p>In development, assets are rebuilt automatically:</p>
+
+<figure class="code"><figcaption>File: config/dev.exs</figcaption><pre><code class="language-elixir">
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  watchers: [</p>
+<p>    esbuild: {Esbuild, :install_and_run, [:default, ~w(--sourcemap=inline --watch)]},</p>
+<p>    tailwind: {Tailwind, :install_and_run, [:default, ~w(--watch)]}</p>
+<p>  ]</p>
+</code></pre></figure>
+
+<h2>Referencing Assets in Templates</h2>
+
+<h3>Using Verified Routes</h3>
+
+<p>Always use <code>~p</code> for asset paths:</p>
+
+<figure class="code"><pre><code><%# CSS %>
+<link rel="stylesheet" href={~p"/assets/app.css"} />
+
+<%# JavaScript %>
+<script src={~p"/assets/app.js"}></script>
+
+<%# Images %>
+<img src={~p"/images/logo.png"} alt="Logo" />
+</code></pre></figure>
+
+<h3>Cache Busting</h3>
+
+<p>Phoenix automatically adds cache-busting digests in production. The <code>phx-track-static</code> attribute helps:</p>
+
+<figure class="code"><pre><code><link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
+<script defer phx-track-static src={~p"/assets/app.js"}></script>
+</code></pre></figure>
+
+<p>In production, paths become:</p>
+<figure class="code"><pre><code>/assets/app-a1b2c3d4.css
+<p>/assets/app-e5f6g7h8.js</p>
+</code></pre></figure>
+
+<h2>Vendor Libraries</h2>
+
+<p>Place third-party JavaScript in <code>assets/vendor/</code>:</p>
+
+<figure class="code"><pre><code>assets/vendor/
+<p>├── topbar.js          # Progress bar (included by default)</p>
+<p>├── highlight.min.js   # Syntax highlighting</p>
+<p>└── alpine.min.js      # Alpine.js</p>
+</code></pre></figure>
+
+<p>Import in your app.js:</p>
+
+<figure class="code"><pre><code>// File: assets/js/app.js
+
+<p>import "../vendor/topbar"</p>
+<p>import "../vendor/highlight.min"</p>
+
+<p>// Initialize highlight.js</p>
+<p>document.addEventListener("DOMContentLoaded", () => {</p>
+<p>  hljs.highlightAll()</p>
+<p>})</p>
+</code></pre></figure>
+
+<h2>Creating a Stylesheet</h2>
+
+<p>Let's create a complete stylesheet for Snippetbox:</p>
+
+<figure class="code"><pre><code>/<em> File: assets/css/app.css </em>/
+
+<p>/<em> === Reset === </em>/</p>
+<em>, </em>::before, *::after {
+<p>  box-sizing: border-box;</p>
+<p>  margin: 0;</p>
+<p>  padding: 0;</p>
+<p>}</p>
+
+<p>/<em> === Variables === </em>/</p>
+<p>:root {</p>
+<p>  --color-primary: #4f46e5;</p>
+<p>  --color-primary-dark: #4338ca;</p>
+<p>  --color-bg: #ffffff;</p>
+<p>  --color-bg-secondary: #f9fafb;</p>
+<p>  --color-text: #111827;</p>
+<p>  --color-text-secondary: #6b7280;</p>
+<p>  --color-border: #e5e7eb;</p>
+<p>  --color-success: #10b981;</p>
+<p>  --color-error: #ef4444;</p>
+<p>  --font-sans: 'Inter', system-ui, sans-serif;</p>
+<p>  --font-mono: 'Fira Code', monospace;</p>
+<p>}</p>
+
+<p>/<em> === Base === </em>/</p>
+<p>html {</p>
+<p>  font-size: 16px;</p>
+<p>  line-height: 1.5;</p>
+<p>}</p>
+
+<p>body {</p>
+<p>  font-family: var(--font-sans);</p>
+<p>  color: var(--color-text);</p>
+<p>  background: var(--color-bg);</p>
+<p>}</p>
+
+<p>a {</p>
+<p>  color: var(--color-primary);</p>
+<p>  text-decoration: none;</p>
+<p>}</p>
+
+<p>a:hover {</p>
+<p>  text-decoration: underline;</p>
+<p>}</p>
+
+<p>/<em> === Layout === </em>/</p>
+<p>.container {</p>
+<p>  max-width: 1200px;</p>
+<p>  margin: 0 auto;</p>
+<p>  padding: 0 1rem;</p>
+<p>}</p>
+
+<p>/<em> === Header === </em>/</p>
+<p>header {</p>
+<p>  background: var(--color-bg-secondary);</p>
+<p>  border-bottom: 1px solid var(--color-border);</p>
+<p>  padding: 1rem 0;</p>
+<p>}</p>
+
+<p>header nav {</p>
+<p>  display: flex;</p>
+<p>  gap: 1.5rem;</p>
+<p>  align-items: center;</p>
+<p>}</p>
+
+<p>header nav a {</p>
+<p>  color: var(--color-text-secondary);</p>
+<p>  font-weight: 500;</p>
+<p>}</p>
+
+<p>header nav a:hover {</p>
+<p>  color: var(--color-primary);</p>
+<p>  text-decoration: none;</p>
+<p>}</p>
+
+<p>/<em> === Main === </em>/</p>
+<p>main {</p>
+<p>  padding: 2rem 0;</p>
+<p>  min-height: calc(100vh - 200px);</p>
+<p>}</p>
+
+<p>/<em> === Snippets === </em>/</p>
+<p>.snippet {</p>
+<p>  background: var(--color-bg-secondary);</p>
+<p>  border: 1px solid var(--color-border);</p>
+<p>  border-radius: 8px;</p>
+<p>  padding: 1.5rem;</p>
+<p>  margin-bottom: 1rem;</p>
+<p>}</p>
+
+<p>.snippet-title {</p>
+<p>  font-size: 1.25rem;</p>
+<p>  font-weight: 600;</p>
+<p>  margin-bottom: 0.5rem;</p>
+<p>}</p>
+
+<p>.snippet-meta {</p>
+<p>  color: var(--color-text-secondary);</p>
+<p>  font-size: 0.875rem;</p>
+<p>  margin-bottom: 1rem;</p>
+<p>}</p>
+
+<p>.snippet-content {</p>
+<p>  background: #1e1e1e;</p>
+<p>  color: #d4d4d4;</p>
+<p>  font-family: var(--font-mono);</p>
+<p>  font-size: 0.875rem;</p>
+<p>  padding: 1rem;</p>
+<p>  border-radius: 4px;</p>
+<p>  overflow-x: auto;</p>
+<p>}</p>
+
+<p>/<em> === Buttons === </em>/</p>
+<p>.btn {</p>
+<p>  display: inline-flex;</p>
+<p>  align-items: center;</p>
+<p>  justify-content: center;</p>
+<p>  padding: 0.5rem 1rem;</p>
+<p>  font-size: 0.875rem;</p>
+<p>  font-weight: 500;</p>
+<p>  border-radius: 6px;</p>
+<p>  border: none;</p>
+<p>  cursor: pointer;</p>
+<p>  transition: background-color 0.15s;</p>
+<p>}</p>
+
+<p>.btn-primary {</p>
+<p>  background: var(--color-primary);</p>
+<p>  color: white;</p>
+<p>}</p>
+
+<p>.btn-primary:hover {</p>
+<p>  background: var(--color-primary-dark);</p>
+<p>  text-decoration: none;</p>
+<p>}</p>
+
+<p>/<em> === Forms === </em>/</p>
+<p>.form-group {</p>
+<p>  margin-bottom: 1rem;</p>
+<p>}</p>
+
+<p>.form-label {</p>
+<p>  display: block;</p>
+<p>  font-weight: 500;</p>
+<p>  margin-bottom: 0.5rem;</p>
+<p>}</p>
+
+<p>.form-input {</p>
+<p>  width: 100%;</p>
+<p>  padding: 0.5rem 0.75rem;</p>
+<p>  border: 1px solid var(--color-border);</p>
+<p>  border-radius: 6px;</p>
+<p>  font-size: 1rem;</p>
+<p>}</p>
+
+<p>.form-input:focus {</p>
+<p>  outline: none;</p>
+<p>  border-color: var(--color-primary);</p>
+<p>  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);</p>
+<p>}</p>
+
+<p>/<em> === Flash Messages === </em>/</p>
+<p>.flash {</p>
+<p>  padding: 1rem;</p>
+<p>  border-radius: 6px;</p>
+<p>  margin-bottom: 1rem;</p>
+<p>}</p>
+
+<p>.flash-info {</p>
+<p>  background: #eff6ff;</p>
+<p>  color: #1e40af;</p>
+<p>  border: 1px solid #bfdbfe;</p>
+<p>}</p>
+
+<p>.flash-error {</p>
+<p>  background: #fef2f2;</p>
+<p>  color: #991b1b;</p>
+<p>  border: 1px solid #fecaca;</p>
+<p>}</p>
+
+<p>/<em> === Footer === </em>/</p>
+<p>footer {</p>
+<p>  background: var(--color-bg-secondary);</p>
+<p>  border-top: 1px solid var(--color-border);</p>
+<p>  padding: 1.5rem 0;</p>
+<p>  text-align: center;</p>
+<p>  color: var(--color-text-secondary);</p>
+<p>}</p>
+</code></pre></figure>
+
+<h2>Production Asset Compilation</h2>
+
+<p>Build assets for production:</p>
+
+<figure class="code"><pre><code># Build assets with minification
+<p>$ MIX_ENV=prod mix assets.deploy</p>
+</code></pre></figure>
+
+<p>This runs:</p>
+<ol>
+<li>esbuild with minification</li>
+<li>Tailwind with minification (if configured)</li>
+<li>Generates digest hashes for cache busting</li>
+</ol>
+
+<p>The output goes to <code>priv/static/assets/</code> with fingerprinted filenames.</p>
+
+<h2>Serving Files Programmatically</h2>
+
+<p>Sometimes you need to serve files from code:</p>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/download_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.DownloadController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  def snippet(conn, %{"id" => id}) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+
+<p>    conn</p>
+<p>    |> put_resp_content_type("text/plain")</p>
+<p>    |> put_resp_header("content-disposition",</p>
+<p>         "attachment; filename=\"snippet-#{id}.txt\"")</p>
+<p>    |> send_resp(200, snippet.content)</p>
+<p>  end</p>
+
+<p>  def image(conn, %{"name" => name}) do</p>
+<p>    path = Application.app_dir(:snippetbox, "priv/static/images/#{name}")</p>
+
+<p>    if File.exists?(path) do</p>
+<p>      send_file(conn, 200, path)</p>
+<p>    else</p>
+<p>      send_resp(conn, 404, "Not found")</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Explicit over Implicit</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Phoenix makes asset paths explicit with <code>~p</code>:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> <%# Explicit - compile-time verified %>
+<img src={~p"/images/logo.png"} />
+</blockquote>
+<p>></p>
+<blockquote>
+<%# vs implicit (Rails style) %>
+<%= image_tag "logo.png" %>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>The functional approach:</p>
+<ul>
+<li>Paths are data, not magic</li>
+<li>Compile-time verification catches typos</li>
+<li>No hidden path resolution rules</li>
+<li>Easier to understand and debug</li>
+</ul>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/static_assets.html">Phoenix Static Files Guide</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Phoenix's static file organization (<code>priv/static/</code> and <code>assets/</code>)</li>
+<li>How <code>Plug.Static</code> serves files</li>
+<li>Adding images, fonts, and other assets</li>
+<li>The asset pipeline with esbuild</li>
+<li>CSS and JavaScript organization</li>
+<li>Cache busting for production</li>
+</ul>
+
+<p>In the next chapter, we'll explore the controller pattern in more depth.</p>
+
+<p>---</p>
+
+<h2>Additional Information</h2>
+
+<h3>Common Asset Tasks</h3>
+
+<figure class="code"><pre><code># Watch and rebuild assets in development
+<p>$ mix phx.server  # Automatically watches assets</p>
+
+<h1>Build assets once</h1>
+<p>$ mix assets.build</p>
+
+<h1>Build for production (minified + digested)</h1>
+<p>$ MIX_ENV=prod mix assets.deploy</p>
+
+<h1>Install asset dependencies</h1>
+<p>$ mix assets.setup</p>
+</code></pre></figure>
+
+<h3>Comparing to Other Frameworks</h3>
+
+<strong>Rails Asset Pipeline</strong>:
+<figure class="code"><pre><code># Sprockets/Propshaft handles assets
+<h1>Magic methods in views</h1>
+<%= stylesheet_link_tag "application" %>
+<%= javascript_include_tag "application" %>
+</code></pre></figure>
+
+<strong>Django Static Files</strong>:
+<figure class="code"><pre><code># settings.py
+<p>STATIC_URL = '/static/'</p>
+<p>STATICFILES_DIRS = [BASE_DIR / "static"]</p>
+
+<h1>Template</h1>
+<p>{% load static %}</p>
+<img src="{% static 'images/logo.png' %}">
+</code></pre></figure>
+
+<strong>Laravel Mix</strong>:
+<figure class="code"><pre><code>// webpack.mix.js for compilation
+<link href="{{ mix('css/app.css') }}" rel="stylesheet">
+</code></pre></figure>
+
+<strong>Phoenix</strong>:
+<figure class="code"><pre><code># esbuild for bundling, explicit paths
+<link rel="stylesheet" href={~p"/assets/app.css"} />
+</code></pre></figure>
+
+<p>Phoenix's approach is simpler - esbuild handles bundling, and paths are explicit.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="02.07-html-templating.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="02.09-the-controller-pattern.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

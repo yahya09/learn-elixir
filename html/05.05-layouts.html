@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Layouts &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Layouts</span>
+            </div>
+            <div>
+                &lsaquo; <a href="05.04-components.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="05.06-helpers-and-formatting.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 5.5</div>
+        <h1>Chapter 5.5: Layouts</h1>
+
+<p>Layouts provide the common structure for your pages - navigation, footer, and overall page skeleton. In this chapter, we'll create and customize layouts for Snippetbox.</p>
+
+<h2>Understanding Layouts</h2>
+
+<p>Phoenix uses two-level layouts:</p>
+
+<ol>
+<li><strong>Root Layout</strong> (<code>root.html.heex</code>) - HTML skeleton, head, scripts</li>
+<li><strong>App Layout</strong> (<code>app.html.heex</code>) - Page structure, navigation</li>
+</ol>
+
+<figure class="code"><pre><code>root.html.heex
+<p>├── <html></p>
+<p>├── <head></p>
+<p>├── <body></p>
+<p>│   └── app.html.heex</p>
+<p>│       ├── <header></p>
+<p>│       ├── <main></p>
+<p>│       │   └── @inner_content (your page)</p>
+<p>│       └── <footer></p>
+</code></pre></figure>
+
+<h2>Root Layout</h2>
+
+<p>The outer HTML structure:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/root.html.heex %>
+
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<p>  <head></p>
+<p>    <meta charset="utf-8" /></p>
+<p>    <meta name="viewport" content="width=device-width, initial-scale=1" /></p>
+<p>    <meta name="csrf-token" content={get_csrf_token()} /></p>
+
+<p>    <title><%= assigns[:page_title] || "Snippetbox" %></title></p>
+<p>    <meta name="description" content={assigns[:page_description] || "Share code snippets"} /></p>
+
+<p>    <%# Favicon %></p>
+<p>    <link rel="icon" type="image/x-icon" href={~p"/favicon.ico"} /></p>
+
+<p>    <%# Stylesheets %></p>
+<p>    <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} /></p>
+
+<p>    <%# Open Graph / Social %></p>
+<p>    <meta property="og:title" content={assigns[:page_title] || "Snippetbox"} /></p>
+<p>    <meta property="og:description" content={assigns[:page_description] || "Share code snippets"} /></p>
+<p>    <meta property="og:type" content="website" /></p>
+
+<p>    <%# Scripts - deferred %></p>
+<p>    <script defer phx-track-static src={~p"/assets/app.js"}></script></p>
+<p>  </head></p>
+<p>  <body class="h-full bg-gray-50"></p>
+<p>    <%= @inner_content %></p>
+<p>  </body></p>
+</html>
+</code></pre></figure>
+
+<h2>App Layout</h2>
+
+<p>The page structure with navigation:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/app.html.heex %>
+
+<div class="min-h-full flex flex-col">
+<p>  <header class="bg-white shadow-sm"></p>
+<p>    <nav class="container mx-auto px-4"></p>
+<p>      <div class="flex items-center justify-between h-16"></p>
+<p>        <%# Logo %></p>
+<p>        <.link href={~p"/"} class="text-xl font-bold text-indigo-600"></p>
+<p>          Snippetbox</p>
+<p>        </.link></p>
+
+<p>        <%# Main navigation %></p>
+<p>        <div class="hidden md:flex items-center space-x-8"></p>
+<p>          <.link href={~p"/snippets"} class="text-gray-600 hover:text-gray-900"></p>
+<p>            Browse</p>
+<p>          </.link></p>
+<p>          <.link href={~p"/snippets/new"} class="text-gray-600 hover:text-gray-900"></p>
+<p>            Create</p>
+<p>          </.link></p>
+<p>          <.link href={~p"/about"} class="text-gray-600 hover:text-gray-900"></p>
+<p>            About</p>
+<p>          </.link></p>
+<p>        </div></p>
+
+<p>        <%# User menu %></p>
+<p>        <div class="flex items-center space-x-4"></p>
+<p>          <%= if @current_user do %></p>
+<p>            <span class="text-gray-600"><%= @current_user.email %></span></p>
+<p>            <.link href={~p"/logout"} method="delete" class="text-gray-600 hover:text-gray-900"></p>
+<p>              Log out</p>
+<p>            </.link></p>
+<p>          <% else %></p>
+<p>            <.link href={~p"/login"} class="text-gray-600 hover:text-gray-900"></p>
+<p>              Log in</p>
+<p>            </.link></p>
+<p>            <.link href={~p"/signup"} class="btn btn-primary"></p>
+<p>              Sign up</p>
+<p>            </.link></p>
+<p>          <% end %></p>
+<p>        </div></p>
+
+<p>        <%# Mobile menu button %></p>
+<p>        <button class="md:hidden" aria-label="Menu"></p>
+<p>          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"></p>
+<p>            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></p>
+<p>          </svg></p>
+<p>        </button></p>
+<p>      </div></p>
+<p>    </nav></p>
+<p>  </header></p>
+
+<p>  <main class="flex-grow container mx-auto px-4 py-8"></p>
+<p>    <%# Flash messages %></p>
+<p>    <.flash_group flash={@flash} /></p>
+
+<p>    <%# Page content %></p>
+<p>    <%= @inner_content %></p>
+<p>  </main></p>
+
+<p>  <footer class="bg-white border-t"></p>
+<p>    <div class="container mx-auto px-4 py-6"></p>
+<p>      <div class="flex justify-between items-center"></p>
+<p>        <p class="text-gray-500 text-sm"></p>
+<p>          &copy; <%= DateTime.utc_now().year %> Snippetbox. All rights reserved.</p>
+</p>
+<p>        <div class="space-x-4"></p>
+<p>          <.link href={~p"/privacy"} class="text-gray-500 hover:text-gray-700 text-sm"></p>
+<p>            Privacy</p>
+<p>          </.link></p>
+<p>          <.link href={~p"/terms"} class="text-gray-500 hover:text-gray-700 text-sm"></p>
+<p>            Terms</p>
+<p>          </.link></p>
+<p>        </div></p>
+<p>      </div></p>
+<p>    </div></p>
+<p>  </footer></p>
+</div>
+</code></pre></figure>
+
+<h2>Flash Messages Component</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/components/core_components.ex</figcaption><pre><code class="language-elixir">
+<p>def flash_group(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <div class="flash-container"></p>
+<p>    <.flash kind={:info} flash={@flash} /></p>
+<p>    <.flash kind={:error} flash={@flash} /></p>
+<p>  </div></p>
+<p>  """</p>
+<p>end</p>
+
+<p>attr :kind, :atom, required: true</p>
+<p>attr :flash, :map, required: true</p>
+
+<p>def flash(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <%= if msg = Phoenix.Flash.get(@flash, @kind) do %></p>
+<p>    <div</p>
+<p>      class={[</p>
+<p>        "flash",</p>
+<p>        @kind == :info && "flash-info",</p>
+<p>        @kind == :error && "flash-error"</p>
+<p>      ]}</p>
+<p>      role="alert"</p>
+<p>      phx-click="lv:clear-flash"</p>
+<p>      phx-value-key={@kind}</p>
+<p>    ></p>
+<p>      <p><%= msg %></p></p>
+<p>      <button type="button" class="flash-close" aria-label="Close"></p>
+<p>        &times;</p>
+<p>      </button></p>
+<p>    </div></p>
+<p>  <% end %></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Multiple Layouts</h2>
+
+<h3>Auth Layout</h3>
+
+<p>For login/signup pages:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/auth.html.heex %>
+
+<div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
+<p>  <div class="max-w-md w-full space-y-8"></p>
+<p>    <div class="text-center"></p>
+<p>      <.link href={~p"/"}></p>
+<p>        <h1 class="text-3xl font-bold text-indigo-600">Snippetbox</h1></p>
+<p>      </.link></p>
+<p>    </div></p>
+
+<p>    <.flash_group flash={@flash} /></p>
+
+<p>    <div class="bg-white py-8 px-6 shadow rounded-lg"></p>
+<p>      <%= @inner_content %></p>
+<p>    </div></p>
+
+<p>    <p class="text-center text-gray-500 text-sm"></p>
+<p>      <.link href={~p"/"}>Back to home</.link></p>
+</p>
+<p>  </div></p>
+</div>
+</code></pre></figure>
+
+<h3>Bare Layout</h3>
+
+<p>For pages needing no layout:</p>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/bare.html.heex %>
+
+<%= @inner_content %>
+</code></pre></figure>
+
+<h2>Using Different Layouts</h2>
+
+<h3>In Controller</h3>
+
+<figure class="code"><pre><code>def login(conn, _params) do
+<p>  conn</p>
+<p>  |> put_layout(html: :auth)  # Use auth layout</p>
+<p>  |> render(:login)</p>
+<p>end</p>
+
+<p>def embed(conn, %{"id" => id}) do</p>
+<p>  snippet = Snippets.get_snippet!(id)</p>
+
+<p>  conn</p>
+<p>  |> put_layout(false)  # No layout</p>
+<p>  |> put_root_layout(false)  # No root layout either</p>
+<p>  |> render(:embed, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>In Router</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>pipeline :auth_layout do</p>
+<p>  plug :put_layout, html: :auth</p>
+<p>end</p>
+
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through [:browser, :auth_layout]</p>
+
+<p>  get "/login", SessionController, :new</p>
+<p>  get "/signup", UserController, :new</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Setting Page Titles</h2>
+
+<h3>In Controller</h3>
+
+<figure class="code"><pre><code>def show(conn, %{"id" => id}) do
+<p>  snippet = Snippets.get_snippet!(id)</p>
+
+<p>  conn</p>
+<p>  |> assign(:page_title, snippet.title)</p>
+<p>  |> assign(:page_description, truncate(snippet.content, 160))</p>
+<p>  |> render(:show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>In Template</h3>
+
+<figure class="code"><pre><code><%# At top of template %>
+<.live_title suffix=" - Snippetbox">
+<p>  <%= @page_title || "Home" %></p>
+</.live_title>
+</code></pre></figure>
+
+<h2>Navigation Highlighting</h2>
+
+<h3>Active Link Component</h3>
+
+<figure class="code"><pre><code>attr :href, :string, required: true
+<p>attr :current_path, :string, required: true</p>
+<p>slot :inner_block, required: true</p>
+
+<p>def nav_link(assigns) do</p>
+<p>  active = assigns.current_path == assigns.href</p>
+
+<p>  assigns = assign(assigns, :active, active)</p>
+
+<p>  ~H"""</p>
+<p>  <.link</p>
+<p>    href={@href}</p>
+<p>    class={[</p>
+<p>      "nav-link",</p>
+<p>      @active && "nav-link-active"</p>
+<p>    ]}</p>
+<p>  ></p>
+<p>    <%= render_slot(@inner_block) %></p>
+<p>  </.link></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>In Layout</h3>
+
+<figure class="code"><pre><code><nav>
+<p>  <.nav_link href={~p"/snippets"} current_path={@conn.request_path}></p>
+<p>    Browse</p>
+<p>  </.nav_link></p>
+<p>  <.nav_link href={~p"/snippets/new"} current_path={@conn.request_path}></p>
+<p>    Create</p>
+<p>  </.nav_link></p>
+</nav>
+</code></pre></figure>
+
+<h2>Responsive Navigation</h2>
+
+<figure class="code"><pre><code><header x-data="{ open: false }">
+<p>  <nav class="container mx-auto px-4"></p>
+<p>    <div class="flex items-center justify-between h-16"></p>
+<p>      <.link href={~p"/"} class="text-xl font-bold">Snippetbox</.link></p>
+
+<p>      <%# Desktop navigation %></p>
+<p>      <div class="hidden md:flex space-x-8"></p>
+<p>        <.link href={~p"/snippets"}>Browse</.link></p>
+<p>        <.link href={~p"/snippets/new"}>Create</.link></p>
+<p>      </div></p>
+
+<p>      <%# Mobile menu button %></p>
+<p>      <button @click="open = !open" class="md:hidden"></p>
+<p>        <svg x-show="!open" class="w-6 h-6"><!-- menu icon --></svg></p>
+<p>        <svg x-show="open" class="w-6 h-6"><!-- close icon --></svg></p>
+<p>      </button></p>
+<p>    </div></p>
+
+<p>    <%# Mobile navigation %></p>
+<p>    <div x-show="open" class="md:hidden py-4"></p>
+<p>      <.link href={~p"/snippets"} class="block py-2">Browse</.link></p>
+<p>      <.link href={~p"/snippets/new"} class="block py-2">Create</.link></p>
+<p>    </div></p>
+<p>  </nav></p>
+</header>
+</code></pre></figure>
+
+<h2>Breadcrumbs</h2>
+
+<figure class="code"><pre><code>attr :items, :list, required: true
+
+<p>def breadcrumbs(assigns) do</p>
+<p>  ~H"""</p>
+<p>  <nav aria-label="Breadcrumb" class="breadcrumbs"></p>
+<p>    <ol></p>
+<p>      <%= for {label, path} <- Enum.intersperse(@items, :separator) do %></p>
+<p>        <%= if path == :separator do %></p>
+<p>          <li class="separator">/</li></p>
+<p>        <% else %></p>
+<p>          <li></p>
+<p>            <%= if path do %></p>
+<p>              <.link href={path}><%= label %></.link></p>
+<p>            <% else %></p>
+<p>              <span><%= label %></span></p>
+<p>            <% end %></p>
+<p>          </li></p>
+<p>        <% end %></p>
+<p>      <% end %></p>
+<p>    </ol></p>
+<p>  </nav></p>
+<p>  """</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Usage:</p>
+
+<figure class="code"><pre><code><.breadcrumbs items={[
+<p>  {"Home", ~p"/"},</p>
+<p>  {"Snippets", ~p"/snippets"},</p>
+<p>  {@snippet.title, nil}</p>
+<p>]} /></p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Layout as Higher-Order Function</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Layouts are like higher-order functions - they take content and wrap it:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> layout(content) → wrapped_content
+<p>root_layout(app_layout(page_content))</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This is function composition: each layout transforms its input and passes to the next.</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<strong>Further Reading</strong>:
+<ul>
+<li><a href="https://hexdocs.pm/phoenix/templates.html#layouts">Phoenix Layouts</a></li>
+</ul>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Root and app layout structure</li>
+<li>Flash message handling</li>
+<li>Creating multiple layouts</li>
+<li>Setting page titles and metadata</li>
+<li>Navigation patterns</li>
+<li>Responsive design with layouts</li>
+</ul>
+
+<p>In the next chapter, we'll explore view helpers and formatting functions.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="05.04-components.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="05.06-helpers-and-formatting.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

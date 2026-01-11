@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Login and Logout &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Login and Logout</span>
+            </div>
+            <div>
+                &lsaquo; <a href="11.02-user-registration.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="11.04-remember-me.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 11.3</div>
+        <h1>Chapter 11.3: Login and Logout</h1>
+
+<p>Session management is at the heart of authentication. In this chapter, we'll implement secure login and logout functionality.</p>
+
+<h2>Session Controller</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/controllers/user_session_controller.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserSessionController do</p>
+<p>  use SnippetboxWeb, :controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+<p>  alias SnippetboxWeb.UserAuth</p>
+
+<p>  def new(conn, _params) do</p>
+<p>    render(conn, :new, error_message: nil)</p>
+<p>  end</p>
+
+<p>  def create(conn, %{"user" => user_params}) do</p>
+<p>    %{"email" => email, "password" => password} = user_params</p>
+
+<p>    if user = Accounts.get_user_by_email_and_password(email, password) do</p>
+<p>      conn</p>
+<p>      |> put_flash(:info, "Welcome back!")</p>
+<p>      |> UserAuth.log_in_user(user, user_params)</p>
+<p>    else</p>
+<p>      # Generic error message to prevent email enumeration</p>
+<p>      render(conn, :new, error_message: "Invalid email or password")</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def delete(conn, _params) do</p>
+<p>    conn</p>
+<p>    |> put_flash(:info, "Logged out successfully.")</p>
+<p>    |> UserAuth.log_out_user()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Login Template</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/controllers/user_session_html/new.html.heex %>
+
+<div class="mx-auto max-w-md">
+<p>  <.header class="text-center"></p>
+<p>    Log In</p>
+<p>    <:subtitle></p>
+<p>      Don't have an account?</p>
+<p>      <.link navigate={~p"/register"} class="font-semibold text-brand hover:underline"></p>
+<p>        Sign up</p>
+<p>      </.link></p>
+<p>    </:subtitle></p>
+<p>  </.header></p>
+
+<p>  <.form for={%{}} action={~p"/login"} as={:user} class="mt-8"></p>
+<p>    <.error :if={@error_message}><%= @error_message %></.error></p>
+
+<p>    <div class="space-y-4"></p>
+<p>      <.input name="email" type="email" label="Email" required /></p>
+<p>      <.input name="password" type="password" label="Password" required /></p>
+<p>    </div></p>
+
+<p>    <div class="mt-4 flex items-center justify-between"></p>
+<p>      <label class="flex items-center gap-2"></p>
+<p>        <input type="checkbox" name="remember_me" class="rounded border-gray-300" /></p>
+<p>        <span class="text-sm text-gray-600">Remember me</span></p>
+<p>      </label></p>
+<p>      <.link href={~p"/forgot-password"} class="text-sm text-brand hover:underline"></p>
+<p>        Forgot password?</p>
+<p>      </.link></p>
+<p>    </div></p>
+
+<p>    <div class="mt-6"></p>
+<p>      <.button class="w-full">Log In</.button></p>
+<p>    </div></p>
+<p>  </.form></p>
+</div>
+</code></pre></figure>
+
+<h2>User Auth Module</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/user_auth.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserAuth do</p>
+<p>  use SnippetboxWeb, :verified_routes</p>
+
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  alias Snippetbox.Accounts</p>
+
+<p>  # How long the session token is valid</p>
+<p>  @max_age 60 <em> 60 </em> 24 * 60  # 60 days</p>
+<p>  @remember_me_cookie "_snippetbox_remember_me"</p>
+<p>  @remember_me_options [sign: true, max_age: @max_age, same_site: "Lax"]</p>
+
+<p>  @doc """</p>
+<p>  Logs the user in.</p>
+
+<p>  Renews the session ID and clears the whole session to avoid fixation attacks.</p>
+<p>  """</p>
+<p>  def log_in_user(conn, user, params \\ %{}) do</p>
+<p>    token = Accounts.generate_user_session_token(user)</p>
+<p>    user_return_to = get_session(conn, :user_return_to)</p>
+
+<p>    conn</p>
+<p>    |> renew_session()</p>
+<p>    |> put_token_in_session(token)</p>
+<p>    |> maybe_write_remember_me_cookie(token, params)</p>
+<p>    |> redirect(to: user_return_to || signed_in_path(conn))</p>
+<p>  end</p>
+
+<p>  defp maybe_write_remember_me_cookie(conn, token, %{"remember_me" => "true"}) do</p>
+<p>    put_resp_cookie(conn, @remember_me_cookie, token, @remember_me_options)</p>
+<p>  end</p>
+
+<p>  defp maybe_write_remember_me_cookie(conn, _token, _params) do</p>
+<p>    conn</p>
+<p>  end</p>
+
+<p>  defp renew_session(conn) do</p>
+<p>    conn</p>
+<p>    |> configure_session(renew: true)</p>
+<p>    |> clear_session()</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Logs the user out.</p>
+
+<p>  Clears all session data and deletes the remember me cookie.</p>
+<p>  """</p>
+<p>  def log_out_user(conn) do</p>
+<p>    user_token = get_session(conn, :user_token)</p>
+<p>    user_token && Accounts.delete_user_session_token(user_token)</p>
+
+<p>    if live_socket_id = get_session(conn, :live_socket_id) do</p>
+<p>      SnippetboxWeb.Endpoint.broadcast(live_socket_id, "disconnect", %{})</p>
+<p>    end</p>
+
+<p>    conn</p>
+<p>    |> renew_session()</p>
+<p>    |> delete_resp_cookie(@remember_me_cookie)</p>
+<p>    |> redirect(to: ~p"/")</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Authenticates the user by looking into the session and remember me token.</p>
+<p>  """</p>
+<p>  def fetch_current_user(conn, _opts) do</p>
+<p>    {user_token, conn} = ensure_user_token(conn)</p>
+<p>    user = user_token && Accounts.get_user_by_session_token(user_token)</p>
+<p>    assign(conn, :current_user, user)</p>
+<p>  end</p>
+
+<p>  defp ensure_user_token(conn) do</p>
+<p>    if token = get_session(conn, :user_token) do</p>
+<p>      {token, conn}</p>
+<p>    else</p>
+<p>      conn = fetch_cookies(conn, signed: [@remember_me_cookie])</p>
+
+<p>      if token = conn.cookies[@remember_me_cookie] do</p>
+<p>        {token, put_token_in_session(conn, token)}</p>
+<p>      else</p>
+<p>        {nil, conn}</p>
+<p>      end</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp put_token_in_session(conn, token) do</p>
+<p>    conn</p>
+<p>    |> put_session(:user_token, token)</p>
+<p>    |> put_session(:live_socket_id, "users_sessions:#{Base.url_encode64(token)}")</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Handles mounting and authenticating the current user in LiveViews.</p>
+<p>  """</p>
+<p>  def on_mount(:mount_current_user, _params, session, socket) do</p>
+<p>    {:cont, mount_current_user(socket, session)}</p>
+<p>  end</p>
+
+<p>  def on_mount(:ensure_authenticated, _params, session, socket) do</p>
+<p>    socket = mount_current_user(socket, session)</p>
+
+<p>    if socket.assigns.current_user do</p>
+<p>      {:cont, socket}</p>
+<p>    else</p>
+<p>      socket =</p>
+<p>        socket</p>
+<p>        |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")</p>
+<p>        |> Phoenix.LiveView.redirect(to: ~p"/login")</p>
+
+<p>      {:halt, socket}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  def on_mount(:redirect_if_user_is_authenticated, _params, session, socket) do</p>
+<p>    socket = mount_current_user(socket, session)</p>
+
+<p>    if socket.assigns.current_user do</p>
+<p>      {:halt, Phoenix.LiveView.redirect(socket, to: signed_in_path(socket))}</p>
+<p>    else</p>
+<p>      {:cont, socket}</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp mount_current_user(socket, session) do</p>
+<p>    Phoenix.Component.assign_new(socket, :current_user, fn -></p>
+<p>      if user_token = session["user_token"] do</p>
+<p>        Accounts.get_user_by_session_token(user_token)</p>
+<p>      end</p>
+<p>    end)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Used for routes that require the user to not be authenticated.</p>
+<p>  """</p>
+<p>  def redirect_if_user_is_authenticated(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>      |> redirect(to: signed_in_path(conn))</p>
+<p>      |> halt()</p>
+<p>    else</p>
+<p>      conn</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Used for routes that require the user to be authenticated.</p>
+<p>  """</p>
+<p>  def require_authenticated_user(conn, _opts) do</p>
+<p>    if conn.assigns[:current_user] do</p>
+<p>      conn</p>
+<p>    else</p>
+<p>      conn</p>
+<p>      |> put_flash(:error, "You must log in to access this page.")</p>
+<p>      |> maybe_store_return_to()</p>
+<p>      |> redirect(to: ~p"/login")</p>
+<p>      |> halt()</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp maybe_store_return_to(%{method: "GET"} = conn) do</p>
+<p>    put_session(conn, :user_return_to, current_path(conn))</p>
+<p>  end</p>
+
+<p>  defp maybe_store_return_to(conn), do: conn</p>
+
+<p>  defp signed_in_path(_conn), do: ~p"/"</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Session Token Model</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts/user_token.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts.UserToken do</p>
+<p>  use Ecto.Schema</p>
+<p>  import Ecto.Query</p>
+
+<p>  @hash_algorithm :sha256</p>
+<p>  @rand_size 32</p>
+
+<p>  # Token validity periods</p>
+<p>  @session_validity_in_days 60</p>
+<p>  @confirm_validity_in_days 7</p>
+<p>  @reset_password_validity_in_days 1</p>
+
+<p>  schema "users_tokens" do</p>
+<p>    field :token, :binary</p>
+<p>    field :context, :string</p>
+<p>    field :sent_to, :string</p>
+<p>    belongs_to :user, Snippetbox.Accounts.User</p>
+
+<p>    timestamps(updated_at: false)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Generates a token for session.</p>
+<p>  """</p>
+<p>  def build_session_token(user) do</p>
+<p>    token = :crypto.strong_rand_bytes(@rand_size)</p>
+<p>    {token, %__MODULE__{token: token, context: "session", user_id: user.id}}</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Checks if the token is valid and returns its underlying lookup query.</p>
+<p>  """</p>
+<p>  def verify_session_token_query(token) do</p>
+<p>    query =</p>
+<p>      from token in by_token_and_context_query(token, "session"),</p>
+<p>        join: user in assoc(token, :user),</p>
+<p>        where: token.inserted_at > ago(@session_validity_in_days, "day"),</p>
+<p>        select: user</p>
+
+<p>    {:ok, query}</p>
+<p>  end</p>
+
+<p>  defp by_token_and_context_query(token, context) do</p>
+<p>    from __MODULE__, where: [token: ^token, context: ^context]</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Migration for Tokens</h2>
+
+<figure class="code"><figcaption>File: priv/repo/migrations/YYYYMMDDHHMMSS_create_users_tokens.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Repo.Migrations.CreateUsersTokens do</p>
+<p>  use Ecto.Migration</p>
+
+<p>  def change do</p>
+<p>    create table(:users_tokens) do</p>
+<p>      add :user_id, references(:users, on_delete: :delete_all), null: false</p>
+<p>      add :token, :binary, null: false</p>
+<p>      add :context, :string, null: false</p>
+<p>      add :sent_to, :string</p>
+
+<p>      timestamps(updated_at: false)</p>
+<p>    end</p>
+
+<p>    create index(:users_tokens, [:user_id])</p>
+<p>    create unique_index(:users_tokens, [:context, :token])</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Context Functions</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox/accounts.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule Snippetbox.Accounts do</p>
+<p>  alias Snippetbox.Repo</p>
+<p>  alias Snippetbox.Accounts.{User, UserToken}</p>
+
+<p>  ## Session</p>
+
+<p>  @doc """</p>
+<p>  Generates a session token.</p>
+<p>  """</p>
+<p>  def generate_user_session_token(user) do</p>
+<p>    {token, user_token} = UserToken.build_session_token(user)</p>
+<p>    Repo.insert!(user_token)</p>
+<p>    token</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Gets the user with the given session token.</p>
+<p>  """</p>
+<p>  def get_user_by_session_token(token) do</p>
+<p>    {:ok, query} = UserToken.verify_session_token_query(token)</p>
+<p>    Repo.one(query)</p>
+<p>  end</p>
+
+<p>  @doc """</p>
+<p>  Deletes the session token.</p>
+<p>  """</p>
+<p>  def delete_user_session_token(token) do</p>
+<p>    Repo.delete_all(UserToken.by_token_and_context_query(token, "session"))</p>
+<p>    :ok</p>
+<p>  end</p>
+
+<p>  ## Authentication</p>
+
+<p>  @doc """</p>
+<p>  Gets a user by email and password.</p>
+<p>  """</p>
+<p>  def get_user_by_email_and_password(email, password)</p>
+<p>      when is_binary(email) and is_binary(password) do</p>
+<p>    user = Repo.get_by(User, email: email)</p>
+<p>    if User.valid_password?(user, password), do: user</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Router Setup</h2>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/router.ex</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.Router do</p>
+<p>  use SnippetboxWeb, :router</p>
+
+<p>  import SnippetboxWeb.UserAuth</p>
+
+<p>  pipeline :browser do</p>
+<p>    plug :accepts, ["html"]</p>
+<p>    plug :fetch_session</p>
+<p>    plug :fetch_live_flash</p>
+<p>    plug :put_root_layout, html: {SnippetboxWeb.Layouts, :root}</p>
+<p>    plug :protect_from_forgery</p>
+<p>    plug :put_secure_browser_headers</p>
+<p>    plug :fetch_current_user</p>
+<p>  end</p>
+
+<p>  # Routes for unauthenticated users only</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through [:browser, :redirect_if_user_is_authenticated]</p>
+
+<p>    get "/register", UserRegistrationController, :new</p>
+<p>    post "/register", UserRegistrationController, :create</p>
+<p>    get "/login", UserSessionController, :new</p>
+<p>    post "/login", UserSessionController, :create</p>
+<p>  end</p>
+
+<p>  # Routes for authenticated users</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through [:browser, :require_authenticated_user]</p>
+
+<p>    delete "/logout", UserSessionController, :delete</p>
+<p>    # Protected routes...</p>
+<p>  end</p>
+
+<p>  # Routes for all users</p>
+<p>  scope "/", SnippetboxWeb do</p>
+<p>    pipe_through :browser</p>
+
+<p>    get "/", PageController, :home</p>
+<p>    # Public routes...</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Navigation with Auth State</h2>
+
+<figure class="code"><pre><code><%# File: lib/snippetbox_web/components/layouts/app.html.heex %>
+
+<header class="px-4 py-4 border-b">
+<p>  <nav class="flex items-center justify-between"></p>
+<p>    <.link href={~p"/"} class="text-xl font-bold"></p>
+<p>      Snippetbox</p>
+<p>    </.link></p>
+
+<p>    <div class="flex items-center gap-4"></p>
+<p>      <%= if @current_user do %></p>
+<p>        <span class="text-sm text-gray-600"></p>
+<p>          <%= @current_user.email %></p>
+<p>        </span></p>
+<p>        <.link href={~p"/settings"}>Settings</.link></p>
+<p>        <.link href={~p"/logout"} method="delete">Log out</.link></p>
+<p>      <% else %></p>
+<p>        <.link href={~p"/register"}>Register</.link></p>
+<p>        <.link href={~p"/login"}>Log in</.link></p>
+<p>      <% end %></p>
+<p>    </div></p>
+<p>  </nav></p>
+</header>
+</code></pre></figure>
+
+<h2>Testing Login/Logout</h2>
+
+<figure class="code"><figcaption>File: test/snippetbox_web/controllers/user_session_controller_test.exs</figcaption><pre><code class="language-elixir">
+<p>defmodule SnippetboxWeb.UserSessionControllerTest do</p>
+<p>  use SnippetboxWeb.ConnCase</p>
+
+<p>  setup do</p>
+<p>    %{user: user_fixture()}</p>
+<p>  end</p>
+
+<p>  describe "POST /login" do</p>
+<p>    test "logs the user in", %{conn: conn, user: user} do</p>
+<p>      conn =</p>
+<p>        post(conn, ~p"/login", %{</p>
+<p>          "user" => %{</p>
+<p>            "email" => user.email,</p>
+<p>            "password" => valid_user_password()</p>
+<p>          }</p>
+<p>        })</p>
+
+<p>      assert get_session(conn, :user_token)</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+
+<p>      # Verify logged in</p>
+<p>      conn = get(conn, ~p"/")</p>
+<p>      html = html_response(conn, 200)</p>
+<p>      assert html =~ user.email</p>
+<p>      assert html =~ "Log out"</p>
+<p>    end</p>
+
+<p>    test "logs the user in with remember me", %{conn: conn, user: user} do</p>
+<p>      conn =</p>
+<p>        post(conn, ~p"/login", %{</p>
+<p>          "user" => %{</p>
+<p>            "email" => user.email,</p>
+<p>            "password" => valid_user_password(),</p>
+<p>            "remember_me" => "true"</p>
+<p>          }</p>
+<p>        })</p>
+
+<p>      assert conn.resp_cookies["_snippetbox_remember_me"]</p>
+<p>    end</p>
+
+<p>    test "returns error with invalid credentials", %{conn: conn} do</p>
+<p>      conn =</p>
+<p>        post(conn, ~p"/login", %{</p>
+<p>          "user" => %{"email" => "invalid@email.com", "password" => "wrong"}</p>
+<p>        })</p>
+
+<p>      html = html_response(conn, 200)</p>
+<p>      assert html =~ "Invalid email or password"</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  describe "DELETE /logout" do</p>
+<p>    test "logs the user out", %{conn: conn, user: user} do</p>
+<p>      conn = conn |> log_in_user(user) |> delete(~p"/logout")</p>
+
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>      refute get_session(conn, :user_token)</p>
+<p>    end</p>
+
+<p>    test "succeeds even if not logged in", %{conn: conn} do</p>
+<p>      conn = delete(conn, ~p"/logout")</p>
+<p>      assert redirected_to(conn) == ~p"/"</p>
+<p>    end</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Token-Based Sessions</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Session tokens follow functional principles:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Generate: pure function
+<p>token = generate_token(user)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Verify: query returns user or nil</p>
+<p>user = get_user_by_token(token)</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Delete: removes token, returns :ok</p>
+<p>:ok = delete_token(token)</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Each operation is explicit and predictable.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>Creating session controller</li>
+<li>Login form implementation</li>
+<li>Token-based session management</li>
+<li>Remember me functionality</li>
+<li>Logout and session cleanup</li>
+<li>Router authentication pipelines</li>
+<li>Navigation with auth state</li>
+<li>Testing login/logout flows</li>
+</ul>
+
+<p>In the next chapter, we'll explore remember me functionality in detail.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="11.02-user-registration.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="11.04-remember-me.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

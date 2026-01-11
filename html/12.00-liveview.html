@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Phoenix LiveView &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Phoenix LiveView</span>
+            </div>
+            <div>
+                &lsaquo; <a href="11.07-oauth.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="12.01-liveview-basics.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 12</div>
+        <h1>Chapter 12: Phoenix LiveView</h1>
+
+<p>LiveView enables rich, real-time user experiences without writing JavaScript. In this chapter, we'll explore how to build interactive applications with LiveView.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>LiveView basics and lifecycle</li>
+<li>Interactive forms with real-time validation</li>
+<li>Live components for reusability</li>
+<li>Real-time features (notifications, updates)</li>
+<li>LiveView best practices</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>12.1 LiveView Basics</strong> - Lifecycle, state, and events</li>
+<li><strong>12.2 LiveView Forms</strong> - Real-time form validation</li>
+<li><strong>12.3 Live Components</strong> - Reusable LiveView components</li>
+<li><strong>12.4 Real-Time Features</strong> - PubSub and live updates</li>
+</ul>
+
+<h2>What is LiveView?</h2>
+
+<p>LiveView is server-rendered HTML with real-time updates:</p>
+
+<figure class="code"><pre><code>┌─────────────────────────────────────────────────────────────┐
+<p>│                         Browser                              │</p>
+<p>│  ┌─────────────────────────────────────────────────────────┐ │</p>
+<p>│  │                    LiveView JS                          │ │</p>
+<p>│  │  • WebSocket connection                                 │ │</p>
+<p>│  │  • DOM patching (morphdom)                              │ │</p>
+<p>│  │  • Event handling                                       │ │</p>
+<p>│  └─────────────────────────────────────────────────────────┘ │</p>
+<p>└─────────────────────────────────────────────────────────────┘</p>
+<p>                              ↕ WebSocket</p>
+<p>┌─────────────────────────────────────────────────────────────┐</p>
+<p>│                         Server                               │</p>
+<p>│  ┌─────────────────────────────────────────────────────────┐ │</p>
+<p>│  │                    LiveView Process                     │ │</p>
+<p>│  │  • Stateful Elixir process                              │ │</p>
+<p>│  │  • Handles events                                       │ │</p>
+<p>│  │  • Renders HTML diffs                                   │ │</p>
+<p>│  └─────────────────────────────────────────────────────────┘ │</p>
+<p>└─────────────────────────────────────────────────────────────┘</p>
+</code></pre></figure>
+
+<h2>LiveView vs Traditional</h2>
+
+<p>| Traditional | LiveView |</p>
+<p>|-------------|----------|</p>
+<p>| Full page reload | DOM patching |</p>
+<p>| JavaScript required | Server-rendered |</p>
+<p>| Client state | Server state |</p>
+<p>| REST API | WebSocket |</p>
+<p>| Complex JS frameworks | Simple HEEx templates |</p>
+
+<h2>When to Use LiveView</h2>
+
+<strong>Good Fit:</strong>
+<ul>
+<li>Forms with real-time validation</li>
+<li>Live search/filtering</li>
+<li>Real-time dashboards</li>
+<li>Chat/notifications</li>
+<li>Interactive tables</li>
+<li>Wizards/multi-step flows</li>
+</ul>
+
+<strong>Consider Alternatives:</strong>
+<ul>
+<li>Offline-first apps</li>
+<li>Heavy client-side computation</li>
+<li>Complex animations</li>
+<li>Mobile apps</li>
+</ul>
+
+<h2>LiveView Preview</h2>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.SnippetLive.Index do
+<p>  use SnippetboxWeb, :live_view</p>
+
+<p>  alias Snippetbox.Snippets</p>
+
+<p>  @impl true</p>
+<p>  def mount(_params, _session, socket) do</p>
+<p>    {:ok, stream(socket, :snippets, Snippets.list_snippets())}</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def render(assigns) do</p>
+<p>    ~H"""</p>
+<p>    <.header></p>
+<p>      Snippets</p>
+<p>      <:actions></p>
+<p>        <.link patch={~p"/snippets/new"}></p>
+<p>          <.button>New Snippet</.button></p>
+<p>        </.link></p>
+<p>      </:actions></p>
+<p>    </.header></p>
+
+<p>    <.table id="snippets" rows={@streams.snippets}></p>
+<p>      <:col :let={{_id, snippet}} label="Title"><%= snippet.title %></:col></p>
+<p>      <:col :let={{_id, snippet}} label="Language"><%= snippet.language %></:col></p>
+<p>      <:action :let={{_id, snippet}}></p>
+<p>        <.link patch={~p"/snippets/#{snippet}/edit"}>Edit</.link></p>
+<p>      </:action></p>
+<p>    </.table></p>
+<p>    """</p>
+<p>  end</p>
+
+<p>  @impl true</p>
+<p>  def handle_event("delete", %{"id" => id}, socket) do</p>
+<p>    snippet = Snippets.get_snippet!(id)</p>
+<p>    {:ok, _} = Snippets.delete_snippet(snippet)</p>
+<p>    {:noreply, stream_delete(socket, :snippets, snippet)}</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Architecture</h2>
+
+<figure class="code"><pre><code>LiveView Process
+<p>├── mount/3 - Initialize state</p>
+<p>├── handle_params/3 - URL changes</p>
+<p>├── handle_event/3 - User interactions</p>
+<p>├── handle_info/2 - Server messages</p>
+<p>└── render/1 - Generate HTML</p>
+
+<p>Each user gets their own:</p>
+<p>├── WebSocket connection</p>
+<p>├── LiveView process</p>
+<p>└── Server-side state</p>
+</code></pre></figure>
+
+<h2>Key Concepts</h2>
+
+<h3>Assigns</h3>
+
+<p>Server-side state stored in socket assigns:</p>
+
+<figure class="code"><pre><code>socket
+<p>|> assign(:count, 0)</p>
+<p>|> assign(:user, current_user)</p>
+</code></pre></figure>
+
+<h3>Events</h3>
+
+<p>User interactions sent to server:</p>
+
+<figure class="code"><pre><code><button phx-click="increment">+1</button>
+</code></pre></figure>
+
+<h3>Streams</h3>
+
+<p>Efficient list handling:</p>
+
+<figure class="code"><pre><code>socket
+<p>|> stream(:items, items)</p>
+<p>|> stream_insert(:items, new_item)</p>
+<p>|> stream_delete(:items, item)</p>
+</code></pre></figure>
+
+<p>Let's start with LiveView basics.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="11.07-oauth.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="12.01-liveview-basics.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

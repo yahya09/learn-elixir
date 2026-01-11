@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Security &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Security</span>
+            </div>
+            <div>
+                &lsaquo; <a href="09.04-ets-and-caching.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="10.01-https-and-tls.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 10</div>
+        <h1>Chapter 10: Security</h1>
+
+<p>Security is critical for web applications. In this chapter, we'll explore how Phoenix helps you build secure applications and common vulnerabilities to avoid.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>HTTPS and TLS configuration</li>
+<li>CSRF protection</li>
+<li>SQL injection prevention</li>
+<li>XSS (Cross-Site Scripting) prevention</li>
+<li>Security headers</li>
+<li>Common vulnerabilities and mitigations</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>10.1 HTTPS and TLS</strong> - Encrypted connections</li>
+<li><strong>10.2 CSRF Protection</strong> - Preventing cross-site request forgery</li>
+<li><strong>10.3 SQL Injection Prevention</strong> - Safe database queries</li>
+<li><strong>10.4 XSS Prevention</strong> - Output encoding and sanitization</li>
+<li><strong>10.5 Security Headers</strong> - HTTP security headers</li>
+<li><strong>10.6 Common Vulnerabilities</strong> - OWASP Top 10 and more</li>
+</ul>
+
+<h2>Defense in Depth</h2>
+
+<p>Security is layered:</p>
+
+<figure class="code"><pre><code>┌─────────────────────────────────────────────────────────────┐
+<p>│                        Application                           │</p>
+<p>│  ┌─────────────────────────────────────────────────────────┐ │</p>
+<p>│  │                    Phoenix Layer                         │ │</p>
+<p>│  │  • CSRF tokens        • Input validation                │ │</p>
+<p>│  │  • Output encoding    • Authentication                  │ │</p>
+<p>│  │  • Authorization      • Rate limiting                   │ │</p>
+<p>│  └─────────────────────────────────────────────────────────┘ │</p>
+<p>│  ┌─────────────────────────────────────────────────────────┐ │</p>
+<p>│  │                     Ecto Layer                          │ │</p>
+<p>│  │  • Parameterized queries  • Changesets                  │ │</p>
+<p>│  │  • Type casting           • Validations                 │ │</p>
+<p>│  └─────────────────────────────────────────────────────────┘ │</p>
+<p>│  ┌─────────────────────────────────────────────────────────┐ │</p>
+<p>│  │                   Database Layer                        │ │</p>
+<p>│  │  • Constraints        • Permissions                     │ │</p>
+<p>│  │  • Encryption at rest                                   │ │</p>
+<p>│  └─────────────────────────────────────────────────────────┘ │</p>
+<p>│  ┌─────────────────────────────────────────────────────────┐ │</p>
+<p>│  │                   Network Layer                         │ │</p>
+<p>│  │  • HTTPS/TLS          • Firewalls                       │ │</p>
+<p>│  │  • Security headers   • Load balancers                  │ │</p>
+<p>│  └─────────────────────────────────────────────────────────┘ │</p>
+<p>└─────────────────────────────────────────────────────────────┘</p>
+</code></pre></figure>
+
+<h2>Phoenix Security Features</h2>
+
+<p>Phoenix provides built-in security:</p>
+
+<p>| Feature | Protection Against |</p>
+<p>|---------|-------------------|</p>
+<p>| CSRF tokens | Cross-site request forgery |</p>
+<p>| HEEx escaping | Cross-site scripting (XSS) |</p>
+<p>| Ecto queries | SQL injection |</p>
+<p>| <code>put_secure_browser_headers</code> | Various attacks |</p>
+<p>| Content Security Policy | XSS, data injection |</p>
+<p>| Secret key base | Session tampering |</p>
+
+<h2>Security Checklist</h2>
+
+<p>Before deploying:</p>
+
+<ul>
+<li>[ ] HTTPS enabled</li>
+<li>[ ] CSRF protection active</li>
+<li>[ ] Security headers configured</li>
+<li>[ ] Secrets in environment variables</li>
+<li>[ ] Input validation on all forms</li>
+<li>[ ] Output properly escaped</li>
+<li>[ ] SQL queries parameterized</li>
+<li>[ ] Authentication implemented</li>
+<li>[ ] Authorization checks in place</li>
+<li>[ ] Rate limiting configured</li>
+<li>[ ] Logging sensitive actions</li>
+<li>[ ] Error pages don't leak info</li>
+</ul>
+
+<p>Let's start with HTTPS configuration.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="09.04-ets-and-caching.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="10.01-https-and-tls.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

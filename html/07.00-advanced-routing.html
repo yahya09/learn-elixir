@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Advanced Routing &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Advanced Routing</span>
+            </div>
+            <div>
+                &lsaquo; <a href="06.05-testing-plugs.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="07.01-nested-resources.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 7</div>
+        <h1>Chapter 7: Advanced Routing</h1>
+
+<p>Phoenix's router is powerful and flexible. In this chapter, we'll explore advanced routing patterns including nested resources, scopes, custom routes, and API versioning.</p>
+
+<h2>What You'll Learn</h2>
+
+<ul>
+<li>Nested resources and route nesting</li>
+<li>Scopes and namespaces</li>
+<li>Custom route helpers</li>
+<li>Route constraints and conditions</li>
+<li>API versioning strategies</li>
+<li>Route organization patterns</li>
+</ul>
+
+<h2>Chapter Structure</h2>
+
+<p>This chapter covers:</p>
+
+<ul>
+<li><strong>7.1 Nested Resources</strong> - Parent-child resource relationships</li>
+<li><strong>7.2 Scopes and Namespaces</strong> - Organizing routes logically</li>
+<li><strong>7.3 Custom Routes</strong> - Beyond REST conventions</li>
+</ul>
+
+<h2>The Router as the Application Map</h2>
+
+<p>The router defines your application's public interface:</p>
+
+<figure class="code"><pre><code># Every URL your app responds to is defined here
+<p>scope "/", SnippetboxWeb do</p>
+<p>  pipe_through :browser</p>
+
+<p>  get "/", PageController, :home</p>
+<p>  resources "/snippets", SnippetController</p>
+<p>end</p>
+</code></pre></figure>
+
+<p>Understanding advanced routing helps you:</p>
+
+<ol>
+<li><strong>Design intuitive URLs</strong></li>
+<li><strong>Organize code logically</strong></li>
+<li><strong>Build maintainable APIs</strong></li>
+<li><strong>Handle complex relationships</strong></li>
+</ol>
+
+<p>Let's start with nested resources.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="06.05-testing-plugs.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="07.01-nested-resources.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Common Vulnerabilities &mdash; Let's Build with Elixir and Phoenix</title>
+    <link rel="stylesheet" type="text/css" href="assets/css/main.css">
+</head>
+<body>
+    <header>
+        <div class="wrapper">
+            <div>
+                <a href="index.html">Let's Build with Elixir and Phoenix</a>
+                <span class="crumbs">&rsaquo; Common Vulnerabilities</span>
+            </div>
+            <div>
+                &lsaquo; <a href="10.05-security-headers.html">Previous</a> &middot;
+                <a href="00.01-contents.html">Contents</a>
+                &middot; <a href="11.00-authentication.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </header>
+    <main class="wrapper text">
+        <div class="chapter">Chapter 10.6</div>
+        <h1>Chapter 10.6: Common Vulnerabilities</h1>
+
+<p>Beyond the specific attacks we've covered, there are many other vulnerabilities to be aware of. In this chapter, we'll explore common security issues and how to prevent them.</p>
+
+<h2>OWASP Top 10</h2>
+
+<p>The Open Web Application Security Project maintains a list of critical vulnerabilities:</p>
+
+<p>| Rank | Vulnerability | Phoenix Mitigation |</p>
+<p>|------|--------------|-------------------|</p>
+<p>| 1 | Broken Access Control | Authorization plugs |</p>
+<p>| 2 | Cryptographic Failures | Phoenix secrets, Argon2 |</p>
+<p>| 3 | Injection | Ecto parameterized queries |</p>
+<p>| 4 | Insecure Design | Contexts, proper architecture |</p>
+<p>| 5 | Security Misconfiguration | Config management |</p>
+<p>| 6 | Vulnerable Components | Mix deps audit |</p>
+<p>| 7 | Auth Failures | phx.gen.auth |</p>
+<p>| 8 | Software/Data Integrity | Signed cookies, CSRF |</p>
+<p>| 9 | Logging Failures | Logger, audit trails |</p>
+<p>| 10 | SSRF | URL validation |</p>
+
+<h2>Broken Access Control</h2>
+
+<h3>The Problem</h3>
+
+<p>Users accessing resources they shouldn't:</p>
+
+<figure class="code"><pre><code># VULNERABLE - No authorization check
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  snippet = Repo.get!(Snippet, id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>The Solution</h3>
+
+<figure class="code"><pre><code># SECURE - Check ownership
+<p>def show(conn, %{"id" => id}) do</p>
+<p>  user = conn.assigns.current_user</p>
+<p>  snippet = Snippets.get_user_snippet!(user, id)</p>
+<p>  render(conn, :show, snippet: snippet)</p>
+<p>end</p>
+
+<h1>In context</h1>
+<p>def get_user_snippet!(user, id) do</p>
+<p>  Snippet</p>
+<p>  |> where([s], s.user_id == ^user.id)</p>
+<p>  |> Repo.get!(id)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Authorization Plug</h3>
+
+<figure class="code"><pre><code>defmodule SnippetboxWeb.Plugs.Authorize do
+<p>  import Plug.Conn</p>
+<p>  import Phoenix.Controller</p>
+
+<p>  def authorize_snippet(conn, _opts) do</p>
+<p>    snippet_id = conn.params["id"]</p>
+<p>    user = conn.assigns.current_user</p>
+
+<p>    case Snippets.get_snippet(snippet_id) do</p>
+<p>      nil -></p>
+<p>        not_found(conn)</p>
+
+<p>      %{user_id: user_id} when user_id == user.id -></p>
+<p>        conn</p>
+
+<p>      %{public: true} when conn.method == "GET" -></p>
+<p>        conn</p>
+
+<p>      _snippet -></p>
+<p>        forbidden(conn)</p>
+<p>    end</p>
+<p>  end</p>
+
+<p>  defp not_found(conn) do</p>
+<p>    conn</p>
+<p>    |> put_status(:not_found)</p>
+<p>    |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>    |> render("404.html")</p>
+<p>    |> halt()</p>
+<p>  end</p>
+
+<p>  defp forbidden(conn) do</p>
+<p>    conn</p>
+<p>    |> put_status(:forbidden)</p>
+<p>    |> put_view(SnippetboxWeb.ErrorHTML)</p>
+<p>    |> render("403.html")</p>
+<p>    |> halt()</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Insecure Direct Object References (IDOR)</h2>
+
+<h3>The Problem</h3>
+
+<figure class="code"><pre><code># User can access any user's profile by changing ID
+<h1>GET /users/123/profile</h1>
+<p>def profile(conn, %{"id" => id}) do</p>
+<p>  user = Accounts.get_user!(id)  # No auth check!</p>
+<p>  render(conn, :profile, user: user)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Solutions</h3>
+
+<figure class="code"><pre><code># Option 1: Only allow viewing own profile
+<p>def profile(conn, _params) do</p>
+<p>  user = conn.assigns.current_user</p>
+<p>  render(conn, :profile, user: user)</p>
+<p>end</p>
+
+<h1>Option 2: Check authorization</h1>
+<p>def profile(conn, %{"id" => id}) do</p>
+<p>  current_user = conn.assigns.current_user</p>
+
+<p>  if to_string(current_user.id) == id || current_user.admin? do</p>
+<p>    user = Accounts.get_user!(id)</p>
+<p>    render(conn, :profile, user: user)</p>
+<p>  else</p>
+<p>    forbidden(conn)</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>Option 3: Use UUIDs instead of sequential IDs</h1>
+<h1>Makes enumeration harder (but doesn't replace auth!)</h1>
+</code></pre></figure>
+
+<h2>Mass Assignment</h2>
+
+<h3>The Problem</h3>
+
+<figure class="code"><pre><code># User can set any field
+<p>def update(conn, %{"user" => user_params}) do</p>
+<p>  user = conn.assigns.current_user</p>
+<p>  Accounts.update_user(user, user_params)</p>
+<p>  # User could pass: %{"role" => "admin"}</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>The Solution</h3>
+
+<figure class="code"><pre><code># Changeset only allows specific fields
+<p>def profile_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:name, :email, :bio])  # role not included</p>
+<p>  |> validate_required([:name, :email])</p>
+<p>end</p>
+
+<h1>Different changesets for different contexts</h1>
+<p>def admin_changeset(user, attrs) do</p>
+<p>  user</p>
+<p>  |> cast(attrs, [:name, :email, :role, :active])</p>
+<p>  |> validate_inclusion(:role, [:user, :moderator, :admin])</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Open Redirects</h2>
+
+<h3>The Problem</h3>
+
+<figure class="code"><pre><code># VULNERABLE - Attacker can redirect to phishing site
+<p>def callback(conn, %{"return_to" => return_to}) do</p>
+<p>  redirect(conn, external: return_to)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>The Solution</h3>
+
+<figure class="code"><pre><code>def callback(conn, %{"return_to" => return_to}) do
+<p>  if safe_redirect?(return_to) do</p>
+<p>    redirect(conn, to: return_to)</p>
+<p>  else</p>
+<p>    redirect(conn, to: ~p"/")</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp safe_redirect?(nil), do: false</p>
+<p>defp safe_redirect?(path) do</p>
+<p>  # Only allow relative paths</p>
+<p>  String.starts_with?(path, "/") &&</p>
+<p>    not String.starts_with?(path, "//") &&</p>
+<p>    not String.contains?(path, "://")</p>
+<p>end</p>
+
+<h1>Or use signed tokens</h1>
+<p>def login(conn, _params) do</p>
+<p>  return_to = get_session(conn, :return_to) || ~p"/"</p>
+<p>  token = Phoenix.Token.sign(conn, "return_to", return_to)</p>
+<p>  render(conn, :new, return_token: token)</p>
+<p>end</p>
+
+<p>def create(conn, %{"return_token" => token}) do</p>
+<p>  case Phoenix.Token.verify(conn, "return_to", token, max_age: 3600) do</p>
+<p>    {:ok, return_to} -> redirect(conn, to: return_to)</p>
+<p>    {:error, _} -> redirect(conn, to: ~p"/")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Server-Side Request Forgery (SSRF)</h2>
+
+<h3>The Problem</h3>
+
+<figure class="code"><pre><code># VULNERABLE - User controls URL
+<p>def fetch_url(conn, %{"url" => url}) do</p>
+<p>  {:ok, response} = HTTPoison.get(url)</p>
+<p>  render(conn, :preview, content: response.body)</p>
+<p>end</p>
+<h1>Attacker: url=http://169.254.169.254/latest/meta-data/</h1>
+<h1>Exposes AWS metadata!</h1>
+</code></pre></figure>
+
+<h3>The Solution</h3>
+
+<figure class="code"><pre><code>def fetch_url(conn, %{"url" => url}) do
+<p>  with {:ok, validated_url} <- validate_url(url),</p>
+<p>       {:ok, response} <- HTTPoison.get(validated_url, [], timeout: 5000) do</p>
+<p>    render(conn, :preview, content: response.body)</p>
+<p>  else</p>
+<p>    {:error, reason} -></p>
+<p>      render(conn, :error, message: "Could not fetch URL")</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp validate_url(url) do</p>
+<p>  uri = URI.parse(url)</p>
+
+<p>  cond do</p>
+<p>    uri.scheme not in ["http", "https"] -></p>
+<p>      {:error, :invalid_scheme}</p>
+
+<p>    private_ip?(uri.host) -></p>
+<p>      {:error, :private_ip}</p>
+
+<p>    blocked_host?(uri.host) -></p>
+<p>      {:error, :blocked_host}</p>
+
+<p>    true -></p>
+<p>      {:ok, url}</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp private_ip?(host) do</p>
+<p>  case :inet.parse_address(to_charlist(host)) do</p>
+<p>    {:ok, ip} -> private_ip_address?(ip)</p>
+<p>    _ -> false  # Hostname, could resolve to private IP</p>
+<p>  end</p>
+<p>end</p>
+
+<p>defp private_ip_address?({10, _, _, _}), do: true</p>
+<p>defp private_ip_address?({172, b, _, _}) when b >= 16 and b <= 31, do: true</p>
+<p>defp private_ip_address?({192, 168, _, _}), do: true</p>
+<p>defp private_ip_address?({127, _, _, _}), do: true</p>
+<p>defp private_ip_address?({169, 254, _, _}), do: true  # Link-local</p>
+<p>defp private_ip_address?(_), do: false</p>
+
+<p>defp blocked_host?(host) do</p>
+<p>  host in ["localhost", "metadata.google.internal", "169.254.169.254"]</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Timing Attacks</h2>
+
+<h3>The Problem</h3>
+
+<figure class="code"><pre><code># VULNERABLE - Timing leak in comparison
+<p>def verify_token(submitted, actual) do</p>
+<p>  submitted == actual  # Short-circuits on first difference</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>The Solution</h3>
+
+<figure class="code"><pre><code># Constant-time comparison
+<p>def verify_token(submitted, actual) do</p>
+<p>  Plug.Crypto.secure_compare(submitted, actual)</p>
+<p>end</p>
+
+<h1>For password verification, use library</h1>
+<p>def verify_password(password, hash) do</p>
+<p>  Argon2.verify_pass(password, hash)</p>
+<p>  # or Bcrypt.verify_pass/2</p>
+<p>end</p>
+</code></pre></figure>
+
+<h2>Information Disclosure</h2>
+
+<h3>Error Messages</h3>
+
+<figure class="code"><pre><code># VULNERABLE - Leaks information
+<p>def login(conn, %{"email" => email, "password" => password}) do</p>
+<p>  case Accounts.authenticate(email, password) do</p>
+<p>    {:error, :user_not_found} -></p>
+<p>      put_flash(conn, :error, "No user with that email")</p>
+<p>    {:error, :invalid_password} -></p>
+<p>      put_flash(conn, :error, "Wrong password")</p>
+<p>  end</p>
+<p>end</p>
+
+<h1>SECURE - Generic message</h1>
+<p>def login(conn, %{"email" => email, "password" => password}) do</p>
+<p>  case Accounts.authenticate(email, password) do</p>
+<p>    {:ok, user} -></p>
+<p>      # Success</p>
+<p>    {:error, _reason} -></p>
+<p>      put_flash(conn, :error, "Invalid email or password")</p>
+<p>  end</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Debug Information</h3>
+
+<figure class="code"><pre><code># config/prod.exs
+<p>config :snippetbox, SnippetboxWeb.Endpoint,</p>
+<p>  debug_errors: false  # Don't show stack traces</p>
+
+<p>config :phoenix, :stacktrace_depth, 0</p>
+</code></pre></figure>
+
+<h3>Logs</h3>
+
+<figure class="code"><pre><code># Don't log sensitive data
+<p>Logger.info("User #{user.id} logged in")  # Good</p>
+<p>Logger.info("User logged in with password #{password}")  # BAD!</p>
+
+<h1>Filter sensitive params</h1>
+<h1>config/config.exs</h1>
+<p>config :phoenix, :filter_parameters, [</p>
+<p>  "password",</p>
+<p>  "password_confirmation",</p>
+<p>  "credit_card",</p>
+<p>  "ssn",</p>
+<p>  "token"</p>
+<p>]</p>
+</code></pre></figure>
+
+<h2>Denial of Service</h2>
+
+<h3>Resource Exhaustion</h3>
+
+<figure class="code"><pre><code># VULNERABLE - Unbounded query
+<p>def search(conn, %{"q" => query}) do</p>
+<p>  results = Repo.all(from s in Snippet, where: ilike(s.content, ^"%#{query}%"))</p>
+<p>  render(conn, :results, snippets: results)</p>
+<p>end</p>
+
+<h1>SECURE - Limit results</h1>
+<p>def search(conn, %{"q" => query, "page" => page}) do</p>
+<p>  results =</p>
+<p>    Snippet</p>
+<p>    |> where([s], ilike(s.content, ^"%#{query}%"))</p>
+<p>    |> limit(20)</p>
+<p>    |> offset(^((page - 1) * 20))</p>
+<p>    |> Repo.all()</p>
+
+<p>  render(conn, :results, snippets: results)</p>
+<p>end</p>
+</code></pre></figure>
+
+<h3>Rate Limiting</h3>
+
+<figure class="code"><pre><code># In router
+<p>plug SnippetboxWeb.Plugs.RateLimit, limit: 100, window: 60_000</p>
+
+<h1>For specific actions</h1>
+<p>plug :rate_limit_login when action == :create</p>
+</code></pre></figure>
+
+<h3>Request Size Limits</h3>
+
+<figure class="code"><figcaption>File: lib/snippetbox_web/endpoint.ex</figcaption><pre><code class="language-elixir">
+<p>plug Plug.Parsers,</p>
+<p>  parsers: [:urlencoded, :multipart, :json],</p>
+<p>  pass: ["<em>/</em>"],</p>
+<p>  json_decoder: Phoenix.json_library(),</p>
+<p>  length: 8_000_000,  # 8MB max</p>
+<p>  read_length: 1_000_000,  # 1MB chunks</p>
+<p>  read_timeout: 15_000  # 15 seconds</p>
+</code></pre></figure>
+
+<h2>Dependency Vulnerabilities</h2>
+
+<h3>Audit Dependencies</h3>
+
+<figure class="code"><pre><code># Check for known vulnerabilities
+<p>mix deps.audit</p>
+
+<h1>Update dependencies</h1>
+<p>mix deps.update --all</p>
+
+<h1>Check outdated packages</h1>
+<p>mix hex.outdated</p>
+</code></pre></figure>
+
+<h3>Lock File</h3>
+
+<figure class="code"><pre><code># Always commit mix.lock
+<h1>Ensures consistent versions across environments</h1>
+</code></pre></figure>
+
+<h2>Security Testing</h2>
+
+<h3>Automated Scanning</h3>
+
+<figure class="code"><pre><code># mix.exs
+<p>defp deps do</p>
+<p>  [</p>
+<p>    {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false}</p>
+<p>  ]</p>
+<p>end</p>
+
+<h1>Run security scan</h1>
+<h1>mix sobelow</h1>
+</code></pre></figure>
+
+<h3>Manual Testing Checklist</h3>
+
+<ul>
+<li>[ ] Try accessing resources without authentication</li>
+<li>[ ] Try accessing other users' resources</li>
+<li>[ ] Submit malformed/malicious input</li>
+<li>[ ] Test all input fields for injection</li>
+<li>[ ] Check for sensitive data in responses</li>
+<li>[ ] Verify rate limiting works</li>
+<li>[ ] Test session handling (logout, expiry)</li>
+<li>[ ] Check error messages for info leaks</li>
+</ul>
+
+<blockquote class="fp-concept">
+<strong>FP Concept: Defense Through Types</strong>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>Elixir's type system and pattern matching help prevent vulnerabilities:</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<figure class="code"><pre><code>> # Pattern matching ensures expected structure
+<p>def process(%{"type" => "transfer", "amount" => amount})</p>
+<p>    when is_integer(amount) and amount > 0 do</p>
+<p>  # Only processes valid transfers</p>
+<p>end</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p># Invalid data doesn't match</p>
+<p>def process(_invalid), do: {:error, :invalid_request}</p>
+</code></pre></figure>
+</blockquote>
+<p>></p>
+<blockquote>
+<p>This "parse, don't validate" approach catches issues at the boundary.</p>
+</blockquote>
+
+<h2>Summary</h2>
+
+<p>In this chapter, we learned:</p>
+
+<ul>
+<li>OWASP Top 10 vulnerabilities</li>
+<li>Broken access control prevention</li>
+<li>IDOR and mass assignment</li>
+<li>Open redirect protection</li>
+<li>SSRF prevention</li>
+<li>Timing attack mitigation</li>
+<li>Information disclosure prevention</li>
+<li>DoS protection</li>
+<li>Dependency security</li>
+<li>Security testing approaches</li>
+</ul>
+
+<p>This completes the Security chapter. In the next chapter, we'll explore authentication in Phoenix.</p>
+
+    </main>
+    <footer>
+        <div class="wrapper">
+            <div>
+                &lsaquo; <a href="10.05-security-headers.html">Previous</a>
+            </div>
+            <div>
+                <a href="00.01-contents.html">Contents</a>
+            </div>
+            <div>
+                <a href="11.00-authentication.html">Next</a> &rsaquo;
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
